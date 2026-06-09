@@ -7,14 +7,16 @@ import { Eye, EyeOff, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useI18n } from "@/lib/i18n"
 
-const perks = [
-  "No credit card required to start",
-  "Set up your AI in under 60 minutes",
-  "Cancel or upgrade anytime",
-]
+const perkKeys = [
+  "signupPerk1",
+  "signupPerk2",
+  "signupPerk3",
+] as const
 
 export default function SignupPage() {
+  const { t } = useI18n()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -46,15 +48,15 @@ export default function SignupPage() {
               className="h-40 w-auto object-contain drop-shadow-[0_0_40px_rgba(52,211,153,0.3)] transition-opacity hover:opacity-90"
             />
           </Link>
-          <h2 className="mb-3 text-3xl font-bold text-white">Start for free today</h2>
+          <h2 className="mb-3 text-3xl font-bold text-white">{t("signupHeadline")}</h2>
           <p className="mb-10 max-w-xs text-base text-emerald-200/70">
-            Join hundreds of businesses using Exploro to power their AI workforce.
+            {t("signupTagline")}
           </p>
           <ul className="w-full max-w-xs space-y-3 text-left">
-            {perks.map(p => (
-              <li key={p} className="flex items-center gap-3">
+            {perkKeys.map(k => (
+              <li key={k} className="flex items-center gap-3">
                 <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                <span className="text-sm text-emerald-100/80">{p}</span>
+                <span className="text-sm text-emerald-100/80">{t(k)}</span>
               </li>
             ))}
           </ul>
@@ -65,7 +67,7 @@ export default function SignupPage() {
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
 
         {/* Mobile logo */}
-        <Link href="/" className="mb-8 flex flex-col items-center gap-2 md:hidden">
+        <Link href="/" className="mb-8 flex items-center justify-center md:hidden">
           <Image
             src="/assets/images/exploro-logo.png"
             alt="Exploro"
@@ -73,26 +75,25 @@ export default function SignupPage() {
             height={200}
             className="h-28 w-auto object-contain"
           />
-          <span className="text-xl font-bold tracking-tight text-emerald-400">EXPLORO</span>
         </Link>
 
         <div className="w-full max-w-sm">
           <div className="mb-7 text-center md:text-left">
-            <h1 className="text-3xl font-bold tracking-tight">Create your account</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Get started with Exploro for free</p>
+            <h1 className="text-3xl font-bold tracking-tight">{t("createAccount")}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">{t("getStartedFreeTagline")}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name">{t("fullName")}</Label>
               <Input id="name" type="text" placeholder="John Doe" value={name} onChange={e => setName(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("email")}</Label>
               <Input id="email" type="email" placeholder="name@company.com" value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("password")}</Label>
               <div className="relative">
                 <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••"
                   value={password} onChange={e => setPassword(e.target.value)} className="pr-10" required />
@@ -103,7 +104,7 @@ export default function SignupPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="confirm-password">Confirm Password</Label>
+              <Label htmlFor="confirm-password">{t("confirmPassword")}</Label>
               <div className="relative">
                 <Input id="confirm-password" type={showConfirm ? "text" : "password"} placeholder="••••••••"
                   value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="pr-10" required />
@@ -118,22 +119,22 @@ export default function SignupPage() {
               <input type="checkbox" checked={agreedToTerms} onChange={e => setAgreedToTerms(e.target.checked)}
                 className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500 cursor-pointer" required />
               <span className="text-sm text-muted-foreground leading-snug">
-                I agree to the{" "}
-                <Link href="#" className="text-emerald-400 hover:underline">Terms</Link>
-                {" "}and{" "}
-                <Link href="#" className="text-emerald-400 hover:underline">Privacy Policy</Link>
+                {t("agreeTerms")}{" "}
+                <Link href="#" className="text-emerald-400 hover:underline">{t("termsAnd")}</Link>
+                {" "}{t("and")}{" "}
+                <Link href="#" className="text-emerald-400 hover:underline">{t("privacyPolicy")}</Link>
               </span>
             </label>
 
             <Button type="submit" disabled={!agreedToTerms}
               className="w-full bg-emerald-600 hover:bg-emerald-700 py-5 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
-              Create Account
+              {t("createAccountBtn")}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link href="/login" className="font-medium text-emerald-400 hover:underline">Sign in</Link>
+            {t("alreadyHaveAccount")}{" "}
+            <Link href="/login" className="font-medium text-emerald-400 hover:underline">{t("signInLink")}</Link>
           </p>
         </div>
       </div>

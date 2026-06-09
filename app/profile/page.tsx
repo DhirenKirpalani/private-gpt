@@ -32,10 +32,9 @@ export default function ProfilePage() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* Header */}
-      <header className="flex h-16 shrink-0 items-center gap-4 border-b bg-background/80 backdrop-blur-md px-4">
-        <Link href="/" className="flex items-center gap-2">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-9 w-9 object-contain" />
-          <span className="text-base font-bold tracking-tight">EXPLORO</span>
+      <header className="flex h-16 shrink-0 items-center gap-4 overflow-visible border-b bg-background/80 backdrop-blur-md px-4">
+        <Link href="/" className="flex shrink-0 items-center overflow-visible">
+          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "140px" }} />
         </Link>
         <div className="flex flex-1 justify-center">
           <div className="relative w-full max-w-lg">

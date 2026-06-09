@@ -28,20 +28,20 @@ export function NavRail() {
   const pathname = usePathname()
 
   return (
-    <nav className="flex w-14 shrink-0 flex-col items-center gap-0.5 border-r bg-background py-3 overflow-y-auto">
+    <nav className="flex w-16 shrink-0 flex-col items-center gap-2 border-r bg-background py-3 overflow-y-auto">
       {primary.map(({ href, icon: Icon, label }) => (
         <Link
           key={href}
           href={href}
           title={label}
           className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+            "flex h-11 w-11 items-center justify-center rounded-xl transition-colors",
             pathname === href
               ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
               : "text-muted-foreground hover:bg-muted hover:text-foreground"
           )}
         >
-          <Icon className="h-4 w-4" />
+          <Icon className="h-5 w-5" />
         </Link>
       ))}
 
@@ -53,13 +53,13 @@ export function NavRail() {
           href={href}
           title={label}
           className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+            "flex h-11 w-11 items-center justify-center rounded-xl transition-colors",
             pathname === href
               ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
               : "text-muted-foreground hover:bg-muted hover:text-foreground"
           )}
         >
-          <Icon className="h-4 w-4" />
+          <Icon className="h-5 w-5" />
         </Link>
       ))}
 
@@ -67,9 +67,9 @@ export function NavRail() {
         <Link
           href="/"
           title="Home"
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
-          <Settings className="h-4 w-4" />
+          <Settings className="h-5 w-5" />
         </Link>
       </div>
     </nav>
