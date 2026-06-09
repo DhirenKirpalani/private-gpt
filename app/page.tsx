@@ -1,4 +1,7 @@
+"use client"
+
 import Link from "next/link"
+import { useI18n } from "@/lib/i18n"
 import {
   ArrowRight,
   Play,
@@ -20,20 +23,12 @@ import {
   GraduationCap,
   Stethoscope,
   ShoppingBag,
-  Plus,
-  Minus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-
-const faqs = [
-  { q: "How is Exploro different from ChatGPT?", a: "ChatGPT is a general assistant. Exploro is trained exclusively on your business documents, SOPs, and knowledge — it answers with sources, remembers context, and never exposes your data to public AI models." },
-  { q: "Does Exploro train on my documents?", a: "Never. Your documents are used only to answer your questions inside your private workspace. They are never used to train any public AI model." },
-  { q: "Which file types does Exploro support?", a: "PDFs, Word documents, Excel spreadsheets, PowerPoints, plain text, CSVs, and more. If you can read it, Exploro can learn from it." },
-  { q: "Can I connect Exploro to WhatsApp or Email?", a: "Yes. Exploro integrates with WhatsApp Business, Gmail, Outlook, and website chat so your AI works wherever your team and customers already are." },
-  { q: "How long does setup take?", a: "Most teams are up and running within an hour. Upload your documents, set your AI's tone, connect your channels — done." },
-]
+import { FaqSection } from "@/components/faq-section"
 
 export default function HomePage() {
+  const { t } = useI18n()
   return (
     <div className="flex flex-col">
 
@@ -55,25 +50,22 @@ export default function HomePage() {
         </div>
 
         <div className="animate-fade-in-up mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-400 [animation-delay:0ms]">
-          Private · Secure · Yours
+          {t("heroBadge")}
         </div>
         <h1 className="animate-fade-in-up mb-6 max-w-4xl text-4xl font-extrabold tracking-tight text-white sm:text-6xl md:text-7xl [animation-delay:120ms]">
-          Turn Your Business Knowledge{" "}
-          <span className="bg-gradient-to-r from-emerald-400 to-lime-400 bg-clip-text text-transparent">
-            Into an AI Employee
-          </span>
+          {t("heroTitle")}
         </h1>
         <p className="animate-fade-in-up mb-10 max-w-2xl text-lg text-muted-foreground sm:text-xl [animation-delay:240ms]">
-          Upload your documents, processes, FAQs, and expertise. Exploro creates an AI that answers questions, supports customers, and works like a trained team member.
+          {t("heroSubtitle")}
         </p>
         <div className="animate-fade-in-up flex flex-wrap items-center justify-center gap-4 [animation-delay:360ms]">
           <Link href="/signup">
             <Button size="lg" className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
-              Start Free <ArrowRight className="h-4 w-4" />
+              {t("heroStartFree")} <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
           <Button size="lg" variant="outline" className="gap-2 px-8 transition-all duration-200 hover:scale-105">
-            <Play className="h-4 w-4" /> Watch Demo
+            <Play className="h-4 w-4" /> {t("heroWatchDemo")}
           </Button>
         </div>
       </section>
@@ -87,12 +79,12 @@ export default function HomePage() {
               <span className="h-3 w-3 rounded-full bg-red-500/60" />
               <span className="h-3 w-3 rounded-full bg-yellow-500/60" />
               <span className="h-3 w-3 rounded-full bg-emerald-500/60" />
-              <span className="ml-4 text-xs text-muted-foreground">Exploro AI Workspace</span>
+              <span className="ml-4 text-xs text-muted-foreground">{t("mockupWorkspace")}</span>
             </div>
             <div className="grid md:grid-cols-[240px_1fr]">
               {/* Sidebar */}
               <div className="hidden border-r border-white/10 p-4 md:block">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Knowledge Base</p>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("mockupKnowledgeBase")}</p>
                 {["Employee_Handbook.pdf","SOP_Onboarding.pdf","Product_FAQ.pdf","Sales_Playbook.pdf","Support_Guide.pdf"].map((f) => (
                   <div key={f} className="mb-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-white/5">
                     <FileText className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
@@ -104,7 +96,7 @@ export default function HomePage() {
               <div className="flex flex-col p-5 gap-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">U</div>
-                  <div className="rounded-xl rounded-tl-none bg-muted px-4 py-2.5 text-sm">What's our employee onboarding process?</div>
+                  <div className="rounded-xl rounded-tl-none bg-muted px-4 py-2.5 text-sm">{t("mockupQuestion")}</div>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">
@@ -112,12 +104,12 @@ export default function HomePage() {
                   </div>
                   <div className="flex-1 space-y-3">
                     <div className="rounded-xl rounded-tl-none border border-emerald-500/20 bg-emerald-950/30 px-4 py-3 text-sm text-foreground">
-                      According to <span className="font-semibold text-emerald-400">SOP_Onboarding.pdf</span>, new employees must complete the following steps within their first week:
+                      {t("mockupAnswerPrefix")} <span className="font-semibold text-emerald-400">SOP_Onboarding.pdf</span>, {t("mockupAnswerSuffix")}
                       <ol className="mt-2 space-y-1 list-decimal list-inside text-muted-foreground">
-                        <li>Complete HR documentation (Day 1)</li>
-                        <li>IT setup and system access (Day 1–2)</li>
-                        <li>Department orientation with line manager (Day 2)</li>
-                        <li>Complete mandatory compliance training (Day 3–5)</li>
+                        <li>{t("mockupAnswerItem1")}</li>
+                        <li>{t("mockupAnswerItem2")}</li>
+                        <li>{t("mockupAnswerItem3")}</li>
+                        <li>{t("mockupAnswerItem4")}</li>
                       </ol>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -134,7 +126,7 @@ export default function HomePage() {
                 </div>
                 <div className="mt-2 flex items-center gap-2 rounded-xl border bg-card px-4 py-3">
                   <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Ask your AI anything about your business…</span>
+                  <span className="text-sm text-muted-foreground">{t("mockupInputPlaceholder")}</span>
                 </div>
               </div>
             </div>
@@ -146,27 +138,29 @@ export default function HomePage() {
       <section id="features" className="px-4 py-24">
         <div className="mx-auto max-w-4xl">
           <div className="mb-12 text-center">
-            <h2 className="text-3xl font-bold tracking-tight">Why Teams Choose Exploro</h2>
-            <p className="mt-3 text-muted-foreground">General AI wasn't built for your business. Exploro was.</p>
+            <h2 className="text-3xl font-bold tracking-tight">{t("comparisonTitle")}</h2>
+            <p className="mt-3 text-muted-foreground">{t("comparisonSubtitle")}</p>
           </div>
-          <div className="overflow-hidden rounded-2xl border">
+
+          {/* Desktop: table */}
+          <div className="hidden overflow-hidden rounded-2xl border md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-card/80">
-                  <th className="px-6 py-4 text-left font-semibold text-muted-foreground">Capability</th>
-                  <th className="px-6 py-4 text-center font-semibold text-muted-foreground">ChatGPT</th>
+                  <th className="px-6 py-4 text-left font-semibold text-muted-foreground">{t("comparisonCapability")}</th>
+                  <th className="px-6 py-4 text-center font-semibold text-muted-foreground">{t("comparisonChatGPT")}</th>
                   <th className="px-6 py-4 text-center font-semibold text-emerald-400">Exploro</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {[
-                  ["Knows your business", false, true],
-                  ["Remembers company context", false, true],
-                  ["Source-cited answers", false, true],
-                  ["Private knowledge base", false, true],
-                  ["Speaks in your brand voice", false, true],
-                  ["Never trains on your data", false, true],
-                  ["Works in WhatsApp & Email", false, true],
+                  [t("comparisonItem1"), false, true],
+                  [t("comparisonItem2"), false, true],
+                  [t("comparisonItem3"), false, true],
+                  [t("comparisonItem4"), false, true],
+                  [t("comparisonItem5"), false, true],
+                  [t("comparisonItem6"), false, true],
+                  [t("comparisonItem7"), false, true],
                 ].map(([label, chatgpt, exploro]) => (
                   <tr key={label as string} className="transition-colors hover:bg-muted/20">
                     <td className="px-6 py-4 font-medium">{label as string}</td>
@@ -183,23 +177,50 @@ export default function HomePage() {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile: stacked cards */}
+          <div className="space-y-3 md:hidden">
+            {[
+              t("comparisonItem1"),
+              t("comparisonItem2"),
+              t("comparisonItem3"),
+              t("comparisonItem4"),
+              t("comparisonItem5"),
+              t("comparisonItem6"),
+              t("comparisonItem7"),
+            ].map((label) => (
+              <div key={label} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <span className="text-sm font-medium">{label}</span>
+                <div className="flex shrink-0 items-center gap-4">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("comparisonChatGPT")}</span>
+                    <X className="h-4 w-4 text-red-400" />
+                  </div>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Exploro</span>
+                    <Check className="h-4 w-4 text-emerald-400" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* ── BUILT FOR (Use Cases) ── */}
       <section id="use-cases" className="border-y px-4 py-16">
         <div className="mx-auto max-w-5xl">
-          <p className="mb-8 text-center text-sm font-semibold uppercase tracking-widest text-muted-foreground">Built For Teams That Depend On Knowledge</p>
+          <p className="mb-8 text-center text-sm font-semibold uppercase tracking-widest text-muted-foreground">{t("industriesTitle")}</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              { icon: Briefcase, label: "Consultants", desc: "Client knowledge bases" },
-              { icon: Building2, label: "Agencies", desc: "Brand & process docs" },
-              { icon: Utensils, label: "Restaurants", desc: "SOPs & staff training" },
-              { icon: Stethoscope, label: "Healthcare", desc: "Protocols & compliance" },
-              { icon: Home, label: "Real Estate", desc: "Listings & client FAQs" },
-              { icon: GraduationCap, label: "Education", desc: "Course & policy docs" },
-              { icon: HeartPulse, label: "Wellness", desc: "Programs & guidance" },
-              { icon: ShoppingBag, label: "SMBs", desc: "Operations & support" },
+              { icon: Briefcase, label: t("industryConsultants"), desc: t("industryConsultantsDesc") },
+              { icon: Building2, label: t("industryAgencies"), desc: t("industryAgenciesDesc") },
+              { icon: Utensils, label: t("industryRestaurants"), desc: t("industryRestaurantsDesc") },
+              { icon: Stethoscope, label: t("industryHealthcare"), desc: t("industryHealthcareDesc") },
+              { icon: Home, label: t("industryRealEstate"), desc: t("industryRealEstateDesc") },
+              { icon: GraduationCap, label: t("industryEducation"), desc: t("industryEducationDesc") },
+              { icon: HeartPulse, label: t("industryWellness"), desc: t("industryWellnessDesc") },
+              { icon: ShoppingBag, label: t("industrySMBs"), desc: t("industrySMBsDesc") },
             ].map(({ icon: Icon, label, desc }) => (
               <div key={label} className="rounded-xl border bg-card p-4 transition-colors hover:border-emerald-500/30">
                 <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
@@ -217,16 +238,18 @@ export default function HomePage() {
       <section id="how-it-works" className="bg-card/30 px-4 py-24">
         <div className="mx-auto max-w-4xl">
           <div className="mb-14 text-center">
-            <h2 className="text-3xl font-bold tracking-tight">What Happens After You Sign Up</h2>
-            <p className="mt-3 text-muted-foreground">From zero to a working AI in under an hour</p>
+            <h2 className="text-3xl font-bold tracking-tight">{t("howItWorksTitle")}</h2>
+            <p className="mt-3 text-muted-foreground">{t("howItWorksSubtitle")}</p>
           </div>
-          <div className="relative flex flex-col gap-0">
+
+          {/* Desktop: vertical timeline */}
+          <div className="hidden flex-col md:flex">
             {[
-              { step: "01", icon: Upload, title: "Sign Up & Upload Documents", desc: "Drop in your PDFs, Word files, SOPs, FAQs, and spreadsheets. Any format works." },
-              { step: "02", icon: Bot, title: "Train Your AI", desc: "Exploro reads and indexes your knowledge. No coding. No data science. Just upload and go." },
-              { step: "03", icon: MessageSquare, title: "Ask Questions", desc: "Your team asks questions in plain language via chat, WhatsApp, or email." },
-              { step: "04", icon: FileText, title: "Get Source-Cited Answers", desc: "Every answer links back to the exact document and page it came from — no hallucinations." },
-              { step: "05", icon: Rocket, title: "Deploy to Your Channels", desc: "Go live on your website, WhatsApp, email, or internal tools. Your AI works where you work." },
+              { step: "01", icon: Upload, title: t("step1Title"), desc: t("step1Desc") },
+              { step: "02", icon: Bot, title: t("step2Title"), desc: t("step2Desc") },
+              { step: "03", icon: MessageSquare, title: t("step3Title"), desc: t("step3Desc") },
+              { step: "04", icon: FileText, title: t("step4Title"), desc: t("step4Desc") },
+              { step: "05", icon: Rocket, title: t("step5Title"), desc: t("step5Desc") },
             ].map((item, i) => (
               <div key={item.step} className="flex gap-5">
                 <div className="flex flex-col items-center">
@@ -236,9 +259,33 @@ export default function HomePage() {
                   {i < 4 && <div className="mt-1 h-full w-px bg-emerald-500/20" />}
                 </div>
                 <div className="pb-10">
-                  <div className="mb-1 text-xs font-bold uppercase tracking-widest text-emerald-400">Step {item.step}</div>
+                  <div className="mb-1 text-xs font-bold uppercase tracking-widest text-emerald-400">{t("stepLabel")} {item.step}</div>
                   <h3 className="text-lg font-semibold">{item.title}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Mobile: compact cards */}
+          <div className="grid gap-3 md:hidden">
+            {[
+              { step: "01", icon: Upload, title: t("step1Title"), desc: t("step1Desc") },
+              { step: "02", icon: Bot, title: t("step2Title"), desc: t("step2Desc") },
+              { step: "03", icon: MessageSquare, title: t("step3Title"), desc: t("step3Desc") },
+              { step: "04", icon: FileText, title: t("step4Title"), desc: t("step4Desc") },
+              { step: "05", icon: Rocket, title: t("step5Title"), desc: t("step5Desc") },
+            ].map((item) => (
+              <div key={item.step} className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600/15 text-emerald-400">
+                  <item.icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">{t("stepLabel")} {item.step}</span>
+                  </div>
+                  <h3 className="mt-0.5 text-sm font-semibold">{item.title}</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
                 </div>
               </div>
             ))}
@@ -249,8 +296,8 @@ export default function HomePage() {
       {/* ── INTEGRATIONS ── */}
       <section id="integrations" className="px-4 py-24">
         <div className="mx-auto max-w-5xl text-center">
-          <h2 className="mb-4 text-3xl font-bold tracking-tight">Connect Everything</h2>
-          <p className="mb-12 text-muted-foreground">Your AI works inside the tools your team already uses</p>
+          <h2 className="mb-4 text-3xl font-bold tracking-tight">{t("integrationsTitle")}</h2>
+          <p className="mb-12 text-muted-foreground">{t("integrationsSubtitle")}</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
 
             {/* WhatsApp */}
@@ -325,16 +372,16 @@ export default function HomePage() {
       <section id="security" className="px-4 py-24">
         <div className="mx-auto max-w-5xl rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/30 to-background p-10 sm:p-16">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Your Documents Remain Yours</h2>
+            <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">{t("privacyTitle")}</h2>
             <p className="mb-12 text-muted-foreground text-lg">
-              Your business knowledge is never used to train public AI models. Every AI workspace is isolated and private.
+              {t("privacySubtitle")}
             </p>
           </div>
           <div className="grid gap-8 sm:grid-cols-3">
             {[
-              { icon: Shield, title: "No Public Training", desc: "Your documents are never fed into shared AI models. Ever." },
-              { icon: Lock, title: "Isolated Workspaces", desc: "Each business runs in its own private environment. Zero cross-contamination." },
-              { icon: FileText, title: "You Own Your AI", desc: "Your knowledge, your system, your rules. We're just the platform." },
+              { icon: Shield, title: t("privacyNoTraining"), desc: t("privacyNoTrainingDesc") },
+              { icon: Lock, title: t("privacyIsolated"), desc: t("privacyIsolatedDesc") },
+              { icon: FileText, title: t("privacyOwnAI"), desc: t("privacyOwnAIDesc") },
             ].map(({ icon: Icon, title, desc }) => (
               <div key={title} className="flex flex-col items-center space-y-3 text-center">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
@@ -352,39 +399,39 @@ export default function HomePage() {
       <section className="bg-card/30 px-4 py-24" id="real-use-cases">
         <div className="mx-auto max-w-5xl">
           <div className="mb-12 text-center">
-            <h2 className="text-3xl font-bold tracking-tight">Real Use Cases</h2>
-            <p className="mt-3 text-muted-foreground">See what teams are automating with Exploro</p>
+            <h2 className="text-3xl font-bold tracking-tight">{t("useCasesTitle")}</h2>
+            <p className="mt-3 text-muted-foreground">{t("useCasesSubtitle")}</p>
           </div>
           <div className="grid gap-6 sm:grid-cols-3">
             {[
               {
                 icon: Utensils,
-                title: "Restaurant AI",
+                title: t("useCaseRestaurant"),
                 color: "from-orange-500 to-amber-500",
-                benefits: ["Answers staff questions instantly","Manages SOPs and recipes","Handles new hire onboarding","Reduces manager interruptions"],
+                benefits: [t("useCaseRestaurantBenefit1"),t("useCaseRestaurantBenefit2"),t("useCaseRestaurantBenefit3"),t("useCaseRestaurantBenefit4")],
               },
               {
                 icon: Home,
-                title: "Real Estate AI",
+                title: t("useCaseRealEstate"),
                 color: "from-blue-500 to-cyan-500",
-                benefits: ["Property knowledge on demand","Handles client FAQs 24/7","Sales scripts and objections","Market reports in seconds"],
+                benefits: [t("useCaseRealEstateBenefit1"),t("useCaseRealEstateBenefit2"),t("useCaseRealEstateBenefit3"),t("useCaseRealEstateBenefit4")],
               },
               {
                 icon: HeartPulse,
-                title: "Wellness AI",
+                title: t("useCaseWellness"),
                 color: "from-emerald-500 to-lime-500",
-                benefits: ["Program guidance for clients","Answers policy questions","Document search for staff","Consistent client support"],
+                benefits: [t("useCaseWellnessBenefit1"),t("useCaseWellnessBenefit2"),t("useCaseWellnessBenefit3"),t("useCaseWellnessBenefit4")],
               },
             ].map((uc) => (
-              <div key={uc.title} className="rounded-xl border bg-card p-6 transition-colors hover:border-emerald-500/30">
-                <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${uc.color} text-white`}>
-                  <uc.icon className="h-6 w-6" />
+              <div key={uc.title} className="rounded-xl border bg-card p-4 transition-colors hover:border-emerald-500/30 sm:p-6">
+                <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${uc.color} text-white sm:mb-4 sm:h-12 sm:w-12 sm:rounded-xl`}>
+                  <uc.icon className="h-4 w-4 sm:h-6 sm:w-6" />
                 </div>
-                <h3 className="mb-4 text-lg font-semibold">{uc.title}</h3>
-                <ul className="space-y-2">
+                <h3 className="mb-2 text-base font-semibold sm:mb-4 sm:text-lg">{uc.title}</h3>
+                <ul className="space-y-1 sm:space-y-2">
                   {uc.benefits.map((b) => (
-                    <li key={b} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />{b}
+                    <li key={b} className="flex items-center gap-2 text-xs text-muted-foreground sm:text-sm">
+                      <Check className="h-3 w-3 shrink-0 text-emerald-400 sm:h-3.5 sm:w-3.5" />{b}
                     </li>
                   ))}
                 </ul>
@@ -398,128 +445,49 @@ export default function HomePage() {
       <section className="border-y px-4 py-24">
         <div className="mx-auto max-w-5xl">
           <div className="mb-12 text-center">
-            <h2 className="text-3xl font-bold tracking-tight">Built For Teams That Depend On Knowledge</h2>
-            <p className="mt-3 text-muted-foreground">Every department runs on information. Exploro puts it to work.</p>
+            <h2 className="text-3xl font-bold tracking-tight">{t("departmentsTitle")}</h2>
+            <p className="mt-3 text-muted-foreground">{t("departmentsSubtitle")}</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { icon: Briefcase, title: "Consulting", desc: "Instant access to client frameworks, case studies, and research — without searching through folders." },
-              { icon: MessageSquare, title: "Sales", desc: "Reps get real-time answers about pricing, objections, and product details without pinging a manager." },
-              { icon: Building2, title: "Operations", desc: "SOPs, onboarding docs, and process guides answered instantly — fewer Slack messages, less downtime." },
-              { icon: HeartPulse, title: "Support", desc: "Customer-facing teams resolve tickets faster using a knowledge base that actually understands your product." },
-              { icon: GraduationCap, title: "Training", desc: "New hires get answers from your actual documentation — reducing onboarding time by weeks." },
-              { icon: Shield, title: "Compliance", desc: "Policies, regulations, and audit trails accessible in seconds with source citations your team can trust." },
+              { icon: Briefcase, title: t("deptConsulting"), desc: t("deptConsultingDesc") },
+              { icon: MessageSquare, title: t("deptSales"), desc: t("deptSalesDesc") },
+              { icon: Building2, title: t("deptOperations"), desc: t("deptOperationsDesc") },
+              { icon: HeartPulse, title: t("deptSupport"), desc: t("deptSupportDesc") },
+              { icon: GraduationCap, title: t("deptTraining"), desc: t("deptTrainingDesc") },
+              { icon: Shield, title: t("deptCompliance"), desc: t("deptComplianceDesc") },
             ].map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="rounded-xl border bg-card p-6 transition-colors hover:border-emerald-500/30">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
-                  <Icon className="h-5 w-5 text-emerald-400" />
+              <div key={title} className="rounded-xl border bg-card p-4 transition-colors hover:border-emerald-500/30 sm:p-6">
+                <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/10 sm:mb-4 sm:h-10 sm:w-10 sm:rounded-lg">
+                  <Icon className="h-4 w-4 text-emerald-400 sm:h-5 sm:w-5" />
                 </div>
-                <h3 className="mb-2 font-semibold">{title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+                <h3 className="mb-1 text-sm font-semibold sm:mb-2 sm:text-base">{title}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed sm:text-sm">{desc}</p>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── PRICING ── */}
-      <section id="pricing" className="px-4 py-24">
-        <div className="mx-auto max-w-5xl">
-          <div className="mb-12 text-center">
-            <h2 className="text-3xl font-bold tracking-tight">Simple Pricing</h2>
-            <p className="mt-3 text-muted-foreground">Start free. Scale as your team grows.</p>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-3">
-            {/* Starter */}
-            <div className="rounded-2xl border bg-card p-8">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Starter</p>
-              <p className="mb-6 text-4xl font-extrabold">Free</p>
-              <ul className="mb-8 space-y-3">
-                {["1 AI workspace","Up to 50 documents","Chat interface","Basic integrations"].map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Check className="h-4 w-4 shrink-0 text-emerald-400" />{f}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/signup" className="block rounded-lg border px-4 py-2.5 text-center text-sm font-semibold transition-colors hover:bg-accent">
-                Get Started Free
-              </Link>
-            </div>
-            {/* Professional */}
-            <div className="relative rounded-2xl border-2 border-emerald-500 bg-card p-8">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald-600 px-3 py-0.5 text-xs font-semibold text-white">Most Popular</div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Professional</p>
-              <div className="mb-6">
-                <span className="text-4xl font-extrabold">$49</span>
-                <span className="text-muted-foreground">/mo</span>
-              </div>
-              <ul className="mb-8 space-y-3">
-                {["5 AI workspaces","Unlimited documents","WhatsApp & Email channels","Priority support","Analytics dashboard"].map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Check className="h-4 w-4 shrink-0 text-emerald-400" />{f}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/signup" className="block rounded-lg bg-emerald-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-emerald-700">
-                Start Free Trial
-              </Link>
-            </div>
-            {/* Enterprise */}
-            <div className="rounded-2xl border bg-card p-8">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Enterprise</p>
-              <p className="mb-6 text-4xl font-extrabold">Custom</p>
-              <ul className="mb-8 space-y-3">
-                {["Unlimited workspaces","SSO & SAML","Dedicated infrastructure","SLA guarantee","Custom integrations"].map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Check className="h-4 w-4 shrink-0 text-emerald-400" />{f}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/signup" className="block rounded-lg border px-4 py-2.5 text-center text-sm font-semibold transition-colors hover:bg-accent">
-                Contact Sales
-              </Link>
-            </div>
           </div>
         </div>
       </section>
 
       {/* ── FAQ ── */}
-      <section id="faq" className="px-4 py-24">
-        <div className="mx-auto max-w-3xl">
-          <div className="mb-12 text-center">
-            <h2 className="text-3xl font-bold tracking-tight">Frequently Asked Questions</h2>
-          </div>
-          <div className="divide-y">
-            {faqs.map((faq) => (
-              <details key={faq.q} className="group py-5">
-                <summary className="flex cursor-pointer items-center justify-between gap-4 text-base font-medium list-none">
-                  {faq.q}
-                  <Plus className="h-4 w-4 shrink-0 text-emerald-400 group-open:hidden" />
-                  <Minus className="hidden h-4 w-4 shrink-0 text-emerald-400 group-open:block" />
-                </summary>
-                <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{faq.a}</p>
-              </details>
-            ))}
-          </div>
-        </div>
-      </section>
+      <FaqSection />
 
       {/* ── CTA ── */}
       <section className="px-4 py-24">
         <div className="mx-auto max-w-4xl rounded-2xl bg-gradient-to-br from-emerald-900/40 to-background border p-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold sm:text-5xl">Build Your AI Today</h2>
+          <h2 className="mb-4 text-3xl font-bold sm:text-5xl">{t("ctaTitle")}</h2>
           <p className="mb-8 text-lg text-muted-foreground max-w-xl mx-auto">
-            Join businesses creating private AI systems trained on their own knowledge.
+            {t("ctaSubtitle")}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Link href="/signup">
               <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white px-10">
-                Start Free
+                {t("ctaStartFree")}
               </Button>
             </Link>
             <Link href="/exploro">
               <Button size="lg" variant="outline" className="px-10">
-                Book a Demo
+                {t("ctaBookDemo")}
               </Button>
             </Link>
           </div>

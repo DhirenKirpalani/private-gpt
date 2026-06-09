@@ -3,9 +3,11 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
+import { useI18n } from "@/lib/i18n"
 
 export function Footer() {
   const pathname = usePathname()
+  const { t } = useI18n()
 
   if (pathname === "/chat" || pathname === "/login" || pathname === "/signup") return null
 
@@ -33,14 +35,14 @@ export function Footer() {
             </Link>
 
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
-              Your business. Your knowledge. Your AI.
+              {t("brandTagline")}
             </p>
           </div>
 
           {/* Product */}
           <div>
             <h3 className="mb-4 text-sm font-semibold text-foreground">
-              Product
+              {t("product")}
             </h3>
 
             <div className="space-y-3">
@@ -48,28 +50,21 @@ export function Footer() {
                 href="/#features"
                 className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
-                Features
+                {t("features")}
               </Link>
 
               <Link
                 href="/#integrations"
                 className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
-                Integrations
+                {t("integrations")}
               </Link>
 
               <Link
                 href="/#security"
                 className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
-                Security
-              </Link>
-
-              <Link
-                href="/#pricing"
-                className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Pricing
+                {t("security")}
               </Link>
             </div>
           </div>
@@ -77,7 +72,7 @@ export function Footer() {
           {/* Resources */}
           <div>
             <h3 className="mb-4 text-sm font-semibold text-foreground">
-              Resources
+              {t("resources")}
             </h3>
 
             <div className="space-y-3">
@@ -85,28 +80,28 @@ export function Footer() {
                 href="/#faq"
                 className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
-                FAQ
+                {t("faq")}
               </Link>
 
               <Link
                 href="/login"
                 className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
-                Log In
+                {t("logIn")}
               </Link>
 
               <Link
                 href="/signup"
                 className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
-                Sign Up
+                {t("getStarted")}
               </Link>
 
               <Link
                 href="/"
                 className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
-                Contact
+                {t("contact")}
               </Link>
             </div>
           </div>
@@ -114,18 +109,18 @@ export function Footer() {
           {/* CTA */}
           <div>
             <h3 className="mb-4 text-sm font-semibold text-foreground">
-              Start building your AI today
+              {t("startBuilding")}
             </h3>
 
             <p className="mb-5 text-sm text-muted-foreground">
-              Train an AI on your business knowledge and deploy it across your team.
+              {t("footerTagline")}
             </p>
 
             <Link
               href="/signup"
               className="inline-flex items-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/20"
             >
-              Get Started Free
+              {t("getStartedFree")}
             </Link>
           </div>
         </div>
@@ -133,7 +128,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 sm:flex-row">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Exploro AI. All rights reserved.
+            {t("copyright", { year: new Date().getFullYear() })}
           </p>
 
           <div className="flex items-center gap-6">
@@ -141,14 +136,14 @@ export function Footer() {
               href="/privacy"
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
-              Privacy
+              {t("privacy")}
             </Link>
 
             <Link
               href="/terms"
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
-              Terms
+              {t("terms")}
             </Link>
           </div>
         </div>
