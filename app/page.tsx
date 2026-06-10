@@ -16,7 +16,7 @@ import {
   Bot,
   ChevronDown,
   Building2,
-  Utensils,
+  BarChart3,
   HeartPulse,
   Briefcase,
   Home,
@@ -79,7 +79,7 @@ export default function HomePage() {
               <span className="h-3 w-3 rounded-full bg-red-500/60" />
               <span className="h-3 w-3 rounded-full bg-yellow-500/60" />
               <span className="h-3 w-3 rounded-full bg-emerald-500/60" />
-              <span className="ml-4 text-xs text-muted-foreground">{t("mockupWorkspace")}</span>
+              <span className="ml-4 text-sm font-medium text-muted-foreground">{t("mockupWorkspace")}</span>
             </div>
             <div className="grid md:grid-cols-[240px_1fr]">
               {/* Sidebar */}
@@ -215,7 +215,7 @@ export default function HomePage() {
             {[
               { icon: Briefcase, label: t("industryConsultants"), desc: t("industryConsultantsDesc") },
               { icon: Building2, label: t("industryAgencies"), desc: t("industryAgenciesDesc") },
-              { icon: Utensils, label: t("industryRestaurants"), desc: t("industryRestaurantsDesc") },
+              { icon: BarChart3, label: t("industryRestaurants"), desc: t("industryRestaurantsDesc") },
               { icon: Stethoscope, label: t("industryHealthcare"), desc: t("industryHealthcareDesc") },
               { icon: Home, label: t("industryRealEstate"), desc: t("industryRealEstateDesc") },
               { icon: GraduationCap, label: t("industryEducation"), desc: t("industryEducationDesc") },
@@ -235,7 +235,7 @@ export default function HomePage() {
       </section>
 
       {/* ── HOW IT WORKS ── */}
-      <section id="how-it-works" className="bg-card/30 px-4 py-24">
+      <section id="how-it-works" className="bg-gradient-to-b from-[#202733] to-[#2a3444] px-4 py-24">
         <div className="mx-auto max-w-4xl">
           <div className="mb-14 text-center">
             <h2 className="text-3xl font-bold tracking-tight">{t("howItWorksTitle")}</h2>
@@ -247,16 +247,17 @@ export default function HomePage() {
             {[
               { step: "01", icon: Upload, title: t("step1Title"), desc: t("step1Desc") },
               { step: "02", icon: Bot, title: t("step2Title"), desc: t("step2Desc") },
-              { step: "03", icon: MessageSquare, title: t("step3Title"), desc: t("step3Desc") },
-              { step: "04", icon: FileText, title: t("step4Title"), desc: t("step4Desc") },
-              { step: "05", icon: Rocket, title: t("step5Title"), desc: t("step5Desc") },
+              { step: "03", icon: FileText, title: t("step3Title"), desc: t("step3Desc") },
+              { step: "04", icon: MessageSquare, title: t("step4Title"), desc: t("step4Desc") },
+              { step: "05", icon: Shield, title: t("step5Title"), desc: t("step5Desc") },
+              { step: "06", icon: Rocket, title: t("step6Title"), desc: t("step6Desc") },
             ].map((item, i) => (
               <div key={item.step} className="flex gap-5">
                 <div className="flex flex-col items-center">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
                     <item.icon className="h-5 w-5" />
                   </div>
-                  {i < 4 && <div className="mt-1 h-full w-px bg-emerald-500/20" />}
+                  {i < 5 && <div className="mt-1 h-full w-px bg-emerald-500/20" />}
                 </div>
                 <div className="pb-10">
                   <div className="mb-1 text-xs font-bold uppercase tracking-widest text-emerald-400">{t("stepLabel")} {item.step}</div>
@@ -272,9 +273,10 @@ export default function HomePage() {
             {[
               { step: "01", icon: Upload, title: t("step1Title"), desc: t("step1Desc") },
               { step: "02", icon: Bot, title: t("step2Title"), desc: t("step2Desc") },
-              { step: "03", icon: MessageSquare, title: t("step3Title"), desc: t("step3Desc") },
-              { step: "04", icon: FileText, title: t("step4Title"), desc: t("step4Desc") },
-              { step: "05", icon: Rocket, title: t("step5Title"), desc: t("step5Desc") },
+              { step: "03", icon: FileText, title: t("step3Title"), desc: t("step3Desc") },
+              { step: "04", icon: MessageSquare, title: t("step4Title"), desc: t("step4Desc") },
+              { step: "05", icon: Shield, title: t("step5Title"), desc: t("step5Desc") },
+              { step: "06", icon: Rocket, title: t("step6Title"), desc: t("step6Desc") },
             ].map((item) => (
               <div key={item.step} className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600/15 text-emerald-400">
@@ -364,6 +366,30 @@ export default function HomePage() {
               <span className="text-sm font-medium">Telegram</span>
             </div>
 
+            {/* Other Email */}
+            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-zinc-900 p-4 transition-colors hover:border-emerald-500/40">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
+                <svg className="h-full w-full" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" fill="#555"/></svg>
+              </div>
+              <span className="text-sm font-medium">Other Email</span>
+            </div>
+
+            {/* iCloud */}
+            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-zinc-900 p-4 transition-colors hover:border-emerald-500/40">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
+                <svg className="h-full w-full" viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" fill="#007AFF"/></svg>
+              </div>
+              <span className="text-sm font-medium">iCloud</span>
+            </div>
+
+            {/* Slack */}
+            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-zinc-900 p-4 transition-colors hover:border-emerald-500/40">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
+                <svg className="h-full w-full" viewBox="0 0 24 24"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.024 2.521a2.528 2.528 0 0 1 2.52-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.52V8.834zm-1.27 0a2.528 2.528 0 0 1-2.522 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.166 0a2.528 2.528 0 0 1 2.521 2.522v6.312zm-2.522 10.024a2.528 2.528 0 0 1 2.522 2.52A2.528 2.528 0 0 1 15.166 24a2.528 2.528 0 0 1-2.521-2.522v-2.52h2.521zm0-1.27a2.528 2.528 0 0 1-2.521-2.522 2.527 2.527 0 0 1 2.521-2.52h6.313A2.527 2.527 0 0 1 24 15.166a2.528 2.528 0 0 1-2.522 2.521h-6.313z" fill="#4A154B"/></svg>
+              </div>
+              <span className="text-sm font-medium">Slack</span>
+            </div>
+
           </div>
         </div>
       </section>
@@ -405,26 +431,26 @@ export default function HomePage() {
           <div className="grid gap-6 sm:grid-cols-3">
             {[
               {
-                icon: Utensils,
+                icon: BarChart3,
                 title: t("useCaseRestaurant"),
-                color: "from-orange-500 to-amber-500",
+                color: "bg-emerald-500",
                 benefits: [t("useCaseRestaurantBenefit1"),t("useCaseRestaurantBenefit2"),t("useCaseRestaurantBenefit3"),t("useCaseRestaurantBenefit4")],
               },
               {
                 icon: Home,
                 title: t("useCaseRealEstate"),
-                color: "from-blue-500 to-cyan-500",
+                color: "bg-gradient-to-br from-blue-500 to-cyan-500",
                 benefits: [t("useCaseRealEstateBenefit1"),t("useCaseRealEstateBenefit2"),t("useCaseRealEstateBenefit3"),t("useCaseRealEstateBenefit4")],
               },
               {
                 icon: HeartPulse,
                 title: t("useCaseWellness"),
-                color: "from-emerald-500 to-lime-500",
+                color: "bg-gradient-to-br from-emerald-500 to-lime-500",
                 benefits: [t("useCaseWellnessBenefit1"),t("useCaseWellnessBenefit2"),t("useCaseWellnessBenefit3"),t("useCaseWellnessBenefit4")],
               },
             ].map((uc) => (
               <div key={uc.title} className="rounded-xl border bg-card p-4 transition-colors hover:border-emerald-500/30 sm:p-6">
-                <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${uc.color} text-white sm:mb-4 sm:h-12 sm:w-12 sm:rounded-xl`}>
+                <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${uc.color} text-white sm:mb-4 sm:h-12 sm:w-12 sm:rounded-xl`}>
                   <uc.icon className="h-4 w-4 sm:h-6 sm:w-6" />
                 </div>
                 <h3 className="mb-2 text-base font-semibold sm:mb-4 sm:text-lg">{uc.title}</h3>
@@ -470,11 +496,18 @@ export default function HomePage() {
       </section>
 
       {/* ── FAQ ── */}
-      <FaqSection />
+      <div id="faq">
+        <FaqSection />
+      </div>
 
       {/* ── CTA ── */}
       <section className="px-4 py-24">
-        <div className="mx-auto max-w-4xl rounded-2xl bg-gradient-to-br from-emerald-900/40 to-background border p-12 text-center">
+        <div className="mx-auto max-w-4xl rounded-2xl bg-gradient-to-br from-[#2a3444] to-[#202733] border border-white/10 p-12 text-center">
+          <div className="mb-6 flex items-center justify-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10">
+              <Bot className="h-8 w-8 text-emerald-400" />
+            </div>
+          </div>
           <h2 className="mb-4 text-3xl font-bold sm:text-5xl">{t("ctaTitle")}</h2>
           <p className="mb-8 text-lg text-muted-foreground max-w-xl mx-auto">
             {t("ctaSubtitle")}

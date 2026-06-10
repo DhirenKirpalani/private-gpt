@@ -9,10 +9,11 @@ import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 
 const navLinkKeys = [
-  { href: "/#features",  key: "features"  as const, sectionId: "features"  },
-  { href: "/#use-cases", key: "useCases"  as const, sectionId: "use-cases" },
+  { href: "/about",      key: "whyNow"    as const, sectionId: "_"         },
   { href: "/#security",  key: "security"  as const, sectionId: "security"  },
-  { href: "/about",      key: "aboutUs"   as const, sectionId: "_"         },
+  { href: "/#features",  key: "features"  as const, sectionId: "features"  },
+  { href: "/#faq",       key: "faq"       as const, sectionId: "faq"       },
+  { href: "/#use-cases", key: "useCases"  as const, sectionId: "use-cases" },
 ]
 
 export function Navbar() {
@@ -87,7 +88,7 @@ export function Navbar() {
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-3 sm:gap-5">
           {/* Language toggle — segmented pill */}
           <div className="hidden items-center rounded-lg border border-white/10 bg-white/5 p-0.5 md:inline-flex">
             <button
