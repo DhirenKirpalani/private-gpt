@@ -9,11 +9,11 @@ export function FaqSection() {
   const faqs = (dict as any).faqs as Array<{ q: string; a: string }>
 
   return (
-    <section id="faq" className="relative overflow-hidden px-4 py-16 sm:py-24">
+    <section id="faq" className="perspective-feature relative overflow-hidden border-t border-white/5 px-4 py-16 sm:py-24">
       {/* Subtle background glow */}
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/5 blur-[120px]" />
 
-      <div className="relative mx-auto max-w-3xl">
+      <div className="feature-block-3d relative mx-auto max-w-3xl">
         <div className="mb-10 text-center sm:mb-14">
           <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("faqTitle")}</h2>
         </div>
@@ -22,7 +22,7 @@ export function FaqSection() {
           {faqs.map((faq, i) => (
             <details
               key={i}
-              className="group rounded-xl border border-white/8 bg-white/[0.02] backdrop-blur-sm transition-all open:border-emerald-500/20 open:bg-emerald-950/10 hover:border-white/15"
+              className="faq-3d group rounded-xl border border-white/8 bg-white/[0.02] backdrop-blur-sm transition-all open:border-emerald-500/20 open:bg-emerald-950/10 hover:border-white/15"
             >
               <summary className="flex cursor-pointer items-start gap-3 p-4 list-none sm:items-center sm:gap-4 sm:p-5">
                 {/* Numbered badge */}

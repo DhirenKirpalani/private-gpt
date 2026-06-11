@@ -20,7 +20,7 @@ export const translations = {
     startBuilding: "Start building your Private AI today",
     footerTagline: "Train an AI on your business knowledge and deploy it across your team.",
     getStartedFree: "Unlock Free Trial",
-    copyright: "© {year} Exploro AI. All rights reserved.",
+    copyright: "© {year} Exploro OS. All rights reserved.",
     privacy: "Privacy",
     terms: "Terms",
     brandTagline: "Your business. Your knowledge. Your AI.",
@@ -88,6 +88,7 @@ export const translations = {
     comparisonItem6: "Never trains on your data",
     comparisonItem7: "Works in WhatsApp & Email",
 
+    industriesHeading: "Built For Every Team",
     industriesTitle: "Built For Teams That Depend On Knowledge",
     industryConsultants: "Consultants",
     industryConsultantsDesc: "Client knowledge bases",
@@ -137,8 +138,8 @@ export const translations = {
     privacyOwnAI: "You Own Your AI",
     privacyOwnAIDesc: "Your knowledge, your system, your rules. We're just the platform.",
 
-    useCasesTitle: "Real Use Cases",
-    useCasesSubtitle: "See what teams are automating with Exploro",
+    useCasesTitle: "Adapts to Any Business",
+    useCasesSubtitle: "Exploro molds to your industry, workflows, and goals — no matter your environment.",
     useCaseRestaurant: "Marketing CRM AI",
     useCaseRestaurantBenefit1: "Automates lead responses",
     useCaseRestaurantBenefit2: "Manages campaigns and pipelines",
@@ -237,7 +238,7 @@ export const translations = {
     aboutUsByline: "Exploro OS – by Us+AI Bureau",
 
     // FAQ
-    faqTitle: "Frequently Asked Questions (FAQ) – Exploro OS Private",
+    faqTitle: "FAQ - Exploro OS Private",
     faqs: [
       {
         q: "What makes Exploro OS Private different from ChatGPT or other AI assistants?",
@@ -310,7 +311,7 @@ export const translations = {
     startBuilding: "Empieza a construir tu IA Privada hoy",
     footerTagline: "Entrena una IA con el conocimiento de tu negocio y despliégala en tu equipo.",
     getStartedFree: "Desbloquear Prueba Gratis",
-    copyright: "© {year} Exploro AI. Todos los derechos reservados.",
+    copyright: "© {year} Exploro OS. Todos los derechos reservados.",
     privacy: "Privacidad",
     terms: "Términos",
     brandTagline: "Tu negocio. Tu conocimiento. Tu IA.",
@@ -378,6 +379,7 @@ export const translations = {
     comparisonItem6: "Nunca se entrena con tus datos",
     comparisonItem7: "Funciona en WhatsApp y Email",
 
+    industriesHeading: "Diseñado para Cada Equipo",
     industriesTitle: "Diseñado para Equipos que Dependen del Conocimiento",
     industryConsultants: "Consultores",
     industryConsultantsDesc: "Bases de conocimiento de clientes",
@@ -427,8 +429,8 @@ export const translations = {
     privacyOwnAI: "Tú Eres Dueño de tu IA",
     privacyOwnAIDesc: "Tu conocimiento, tu sistema, tus reglas. Nosotros solo somos la plataforma.",
 
-    useCasesTitle: "Casos de Uso Reales",
-    useCasesSubtitle: "Mira qué equipos están automatizando con Exploro",
+    useCasesTitle: "Se Adapta a Cualquier Negocio",
+    useCasesSubtitle: "Exploro se adapta a tu industria, flujos de trabajo y objetivos — sin importar tu entorno.",
     useCaseRestaurant: "Marketing CRM AI",
     useCaseRestaurantBenefit1: "Automatiza respuestas a clientes potenciales",
     useCaseRestaurantBenefit2: "Gestiona campañas y pipelines",
@@ -527,7 +529,7 @@ export const translations = {
     aboutUsByline: "Exploro OS – por Us+AI Bureau Team",
 
     // FAQ
-    faqTitle: "Preguntas Frecuentes (FAQ) – Exploro OS Private",
+    faqTitle: "FAQ - Exploro OS Private",
     faqs: [
       {
         q: "¿Qué hace diferente a Exploro OS Privado de ChatGPT u otros asistentes de IA?",

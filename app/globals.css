@@ -98,3 +98,197 @@
 .animate-fade-in-up { animation: fade-in-up 0.7s ease-out both; }
 .animate-fade-in   { animation: fade-in 0.6s ease-out both; }
 .animate-pulse-glow { animation: pulse-glow 4s ease-in-out infinite; }
+
+/* ── Cinematic 3D Table ── */
+.perspective-table { perspective: 1200px; }
+.table-3d {
+  transform: rotateX(3deg) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 0.5s ease;
+}
+.perspective-table:hover .table-3d { transform: rotateX(0deg) translateZ(0); }
+
+.cinematic-border {
+  position: relative;
+  background: linear-gradient(180deg, rgba(16,185,129,0.08) 0%, rgba(16,185,129,0.02) 100%);
+}
+.cinematic-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    180deg,
+    rgba(16,185,129,0.5) 0%,
+    rgba(16,185,129,0.1) 25%,
+    rgba(16,185,129,0) 50%,
+    rgba(16,185,129,0.1) 75%,
+    rgba(16,185,129,0.5) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+  .row-3d {
+  transition: transform 0.25s ease, background 0.25s ease;
+}
+.row-3d:hover {
+  transform: translateZ(8px) scale(1.005);
+  background: rgba(16,185,129,0.06) !important;
+}
+
+/* ── Cinematic 3D Card Grid ── */
+.perspective-grid { perspective: 1200px; }
+.grid-3d {
+  transform: rotateX(2deg) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 0.5s ease;
+}
+.perspective-grid:hover .grid-3d { transform: rotateX(0deg) translateZ(0); }
+
+.card-3d {
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  transform-style: preserve-3d;
+}
+.card-3d:hover {
+  transform: translateY(-6px) translateZ(12px) scale(1.02);
+  box-shadow: 0 20px 40px -10px rgba(16,185,129,0.15), 0 0 0 1px rgba(16,185,129,0.15);
+}
+
+/* ── Motion Graphics ── */
+
+/* Animated gradient text sweep */
+.gradient-text-shimmer {
+  background: linear-gradient(90deg, #fff 0%, #fff 40%, #34d399 50%, #fff 60%, #fff 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-text 4s ease-in-out infinite;
+}
+@keyframes shimmer-text {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+/* Floating particles container */
+.particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.particle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  animation: float-particle linear infinite;
+}
+@keyframes float-particle {
+  0%   { transform: translateY(100vh) translateX(0); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(-10vh) translateX(20px); opacity: 0; }
+}
+
+/* Scroll-triggered viewport reveal */
+.reveal {
+  animation: reveal-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-timeline: view();
+  animation-range: entry 10% cover 25%;
+}
+.reveal-delay-1 { animation-delay: 0.1s; }
+.reveal-delay-2 { animation-delay: 0.2s; }
+.reveal-delay-3 { animation-delay: 0.3s; }
+@keyframes reveal-up {
+  0%   { transform: translateY(40px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+/* Pulse ring for CTAs */
+.pulse-ring {
+  position: relative;
+}
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 1px solid rgba(16,185,129,0.4);
+  animation: pulse-ring 2s ease-out infinite;
+}
+@keyframes pulse-ring {
+  0%   { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+/* ── Cinematic 3D FAQ ── */
+.faq-3d {
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  transform-style: preserve-3d;
+}
+.faq-3d:hover {
+  transform: translateZ(10px) translateY(-2px);
+  box-shadow: 0 16px 32px -8px rgba(16,185,129,0.12), 0 0 0 1px rgba(16,185,129,0.1);
+}
+
+/* ── Cinematic 3D Feature Block ── */
+.perspective-feature { perspective: 1200px; }
+.feature-block-3d {
+  transform: rotateX(2deg) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 0.6s ease;
+}
+.perspective-feature:hover .feature-block-3d { transform: rotateX(0deg) translateZ(0); }
+
+.pillar-3d {
+  transition: transform 0.3s ease;
+  transform-style: preserve-3d;
+}
+.pillar-3d:hover {
+  transform: translateZ(20px) scale(1.03);
+}
+
+.pillar-icon-3d {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.pillar-3d:hover .pillar-icon-3d {
+  transform: translateZ(25px) scale(1.15);
+  box-shadow: 0 0 24px rgba(16,185,129,0.35);
+}
+
+/* ── Cinematic 3D Timeline ── */
+.perspective-timeline { perspective: 1200px; }
+.timeline-3d {
+  transform: rotateY(-2deg) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 0.6s ease;
+}
+.perspective-timeline:hover .timeline-3d { transform: rotateY(0deg) translateZ(0); }
+
+.step-3d {
+  transition: transform 0.35s ease, box-shadow 0.35s ease;
+  transform-style: preserve-3d;
+}
+.step-3d:hover {
+  transform: translateX(8px) translateZ(16px) scale(1.01);
+}
+
+.step-icon-3d {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.step-3d:hover .step-icon-3d {
+  transform: translateZ(20px) scale(1.1);
+  box-shadow: 0 0 20px rgba(16,185,129,0.4);
+}
+
+.timeline-line-glow {
+  background: linear-gradient(180deg, rgba(16,185,129,0.4) 0%, rgba(16,185,129,0.1) 100%);
+}

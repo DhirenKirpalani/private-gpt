@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import {
-  Search, Upload, FileText, Trash2, MoreHorizontal,
+  Search, Upload, FileText, Trash2, MoreHorizontal, Info, X,
   Filter, File, CheckCircle2, Clock, AlertCircle, BookOpen,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
@@ -38,6 +38,7 @@ const statusColor = (s: string) =>
 export default function KnowledgePage() {
   const [activeCategory, setActiveCategory] = useState("All Documents")
   const [search, setSearch] = useState("")
+  const [docsTooltipOpen, setDocsTooltipOpen] = useState(false)
 
   const filtered = documents.filter(d =>
     (activeCategory === "All Documents" || d.category === activeCategory) &&
@@ -73,7 +74,7 @@ export default function KnowledgePage() {
         <NavRail />
 
         {/* Sidebar: categories */}
-        <aside className="flex w-56 shrink-0 flex-col border-r bg-card/30 overflow-hidden">
+        <aside className="flex w-56 shrink-0 flex-col border-r border-white/5 bg-[#2a3444] overflow-hidden">
           <div className="p-3">
             <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors">
               <Upload className="h-4 w-4" />
@@ -109,9 +110,16 @@ export default function KnowledgePage() {
         {/* Main content */}
         <main className="flex flex-1 flex-col overflow-hidden">
           <div className="flex shrink-0 items-center justify-between border-b px-6 py-4">
-            <div>
-              <h1 className="text-lg font-semibold">{activeCategory}</h1>
-              <p className="text-sm text-muted-foreground">{filtered.length} documents</p>
+            <div className="flex items-center gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-semibold">{activeCategory}</h1>
+                  <button type="button" onClick={() => setDocsTooltipOpen(true)} className="text-muted-foreground hover:text-emerald-400 transition-colors">
+                    <Info className="h-4 w-4" />
+                  </button>
+                </div>
+                <p className="text-sm text-muted-foreground">{filtered.length} documents</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted">
@@ -125,7 +133,7 @@ export default function KnowledgePage() {
               {filtered.map(doc => (
                 <div
                   key={doc.id}
-                  className="flex items-center gap-4 rounded-xl border bg-card px-4 py-3 transition-colors hover:border-emerald-500/30"
+                  className="card-3d flex items-center gap-4 rounded-xl border border-white/5 bg-[#2a3444] px-4 py-3 shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10"
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
                     <File className="h-5 w-5 text-muted-foreground" />
@@ -165,6 +173,24 @@ export default function KnowledgePage() {
           </div>
         </main>
       </div>
+
+      {/* Document Info Tooltip Modal */}
+      {docsTooltipOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setDocsTooltipOpen(false)}>
+          <div className="relative mx-4 max-w-sm max-h-[80vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#2a3444] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <button type="button" onClick={() => setDocsTooltipOpen(false)} className="absolute right-3 top-3 text-muted-foreground hover:text-white transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="mb-4 text-lg font-semibold text-white">Document Guidelines</h3>
+            <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
+              <p><strong className="text-white">Supported file types:</strong> PDF, DOCX, XLSX, TXT, and CSV. Other formats may not be indexed correctly.</p>
+              <p><strong className="text-white">Retention period:</strong> Documents are retained for <span className="text-emerald-400 font-semibold">15 days</span> before automatic cleanup. Make sure to export or back up critical files.</p>
+              <p><strong className="text-white">Size limit:</strong> Each file must be under 50 MB. Larger files should be split into smaller sections.</p>
+              <p><strong className="text-white">Best practice:</strong> Use clear filenames and organized categories so your AI can retrieve the right document faster.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -3,20 +3,21 @@
 import Link from "next/link"
 import { Check, Zap, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 export default function SubscriberPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-16">
       <div className="mb-12 text-center">
-        <h1 className="text-3xl font-bold tracking-tight">Choose Your Plan</h1>
+        <h1 className="gradient-text-shimmer pb-1 text-3xl font-bold tracking-tight">Choose Your Plan</h1>
         <p className="mt-2 text-muted-foreground">
           Start with Solo and scale as your team grows.
         </p>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="perspective-grid grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {/* Solo */}
-        <div className="relative rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+        <div className="card-3d relative rounded-2xl border border-white/10 bg-[#2a3444] p-6 shadow-xl shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-900/10">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
             <Zap className="h-3.5 w-3.5" />
             Solo
@@ -47,7 +48,8 @@ export default function SubscriberPage() {
         </div>
 
         {/* Team */}
-        <div className="relative rounded-2xl border border-emerald-500/20 bg-gradient-to-b from-emerald-950/20 to-transparent p-6">
+        <div className="card-3d relative rounded-2xl border border-white/10 bg-[#2a3444] p-6 shadow-xl shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-900/10">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400 to-transparent opacity-60" />
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
             Team
           </div>
@@ -76,7 +78,7 @@ export default function SubscriberPage() {
         </div>
 
         {/* Enterprise */}
-        <div className="relative rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+        <div className="card-3d relative rounded-2xl border border-white/10 bg-[#2a3444] p-6 shadow-xl shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-900/10">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-muted-foreground">
             Enterprise
           </div>

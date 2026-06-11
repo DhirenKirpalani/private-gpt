@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Search, Save } from "lucide-react"
+import { Search, Save, Info, X, ChevronDown, Check } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -10,11 +10,15 @@ import { Label } from "@/components/ui/label"
 
 export default function ProfilePage() {
   const [saved, setSaved] = useState(false)
+  const [tooltipOpen, setTooltipOpen] = useState<string | null>(null)
+  const [promptExampleOpen, setPromptExampleOpen] = useState<string | null>(null)
+  const [responseDropdownOpen, setResponseDropdownOpen] = useState(false)
   const [form, setForm] = useState({
     fullName: "Alex Rivera",
     jobTitle: "Founder",
     phone: "+1 (555) 000-0000",
     location: "New York, NY",
+    linkedinUrl: "",
     companyName: "Us+ AI Bureau",
     industry: "Consulting",
     companySize: "1-10",
@@ -32,7 +36,7 @@ export default function ProfilePage() {
     toneExamples: "We say 'let us help you' instead of 'we can help you'. We use active voice and avoid jargon unless necessary.",
     wordsToAvoid: "cheap, guaranteed, miracle, instantly",
     clarificationPrompt: "If the user's request is vague, lacks context, or refers to a past situation without details, ask a concise clarifying question. Example: If they do not share a source or example, ask: 'Do you want to share a source that I can use as an example?' Never guess. Always ask before generating.",
-    responseLength: "Medium",
+    responseLength: "Standard",
     languages: "English, Spanish",
     logoUrl: "",
     brandColors: "#10b981, #202733",
@@ -91,7 +95,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Personal */}
-            <section className="rounded-2xl border bg-card p-6 space-y-5">
+            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Personal</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -110,11 +114,15 @@ export default function ProfilePage() {
                   <Label htmlFor="location">Location</Label>
                   <Input id="location" value={form.location} onChange={e => update("location", e.target.value)} />
                 </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="linkedinUrl">LinkedIn URL</Label>
+                  <Input id="linkedinUrl" type="url" value={form.linkedinUrl} onChange={e => update("linkedinUrl", e.target.value)} placeholder="https://linkedin.com/in/yourprofile" />
+                </div>
               </div>
             </section>
 
             {/* Company */}
-            <section className="rounded-2xl border bg-card p-6 space-y-5">
+            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Company</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -193,7 +201,7 @@ export default function ProfilePage() {
             </section>
 
             {/* AI Configuration */}
-            <section className="rounded-2xl border bg-card p-6 space-y-5">
+            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">AI Configuration</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -214,7 +222,12 @@ export default function ProfilePage() {
                   </select>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="aiRole">AI Role & Job Description</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="aiRole">AI Role & Job Description</Label>
+                    <button type="button" onClick={() => setTooltipOpen("aiRole")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </div>
                   <textarea
                     id="aiRole"
                     rows={3}
@@ -236,7 +249,12 @@ export default function ProfilePage() {
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="toneExamples">Tone Examples</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="toneExamples">Tone Examples</Label>
+                    <button type="button" onClick={() => setTooltipOpen("toneExamples")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </div>
                   <textarea
                     id="toneExamples"
                     rows={2}
@@ -262,18 +280,58 @@ export default function ProfilePage() {
                   />
                   <p className="text-xs text-muted-foreground">This text is injected into the AI system prompt. It tells Nira when to ask follow-up questions instead of guessing.</p>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="responseLength">Preferred Response Length</Label>
-                  <select
-                    id="responseLength"
-                    value={form.responseLength}
-                    onChange={e => update("responseLength", e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  >
-                    {["Short","Medium","Long","Detailed"].map(s => (
-                      <option key={s} value={s}>{s}</option>
+
+                {/* Prompt Use Case Examples */}
+                <div className="space-y-2 sm:col-span-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Prompt Use Case Examples</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { key: "analysis", label: "Analysis" },
+                      { key: "proposal", label: "Proposals" },
+                      { key: "report", label: "Reports" },
+                      { key: "email", label: "Emails" },
+                      { key: "faq", label: "FAQ" },
+                    ].map(tab => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setPromptExampleOpen(tab.key)}
+                        className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-emerald-500/30 hover:text-emerald-400"
+                      >
+                        {tab.label}
+                      </button>
                     ))}
-                  </select>
+                  </div>
+                </div>
+
+                <div className="relative space-y-1.5">
+                  <Label>Preferred Response</Label>
+                  <button
+                    type="button"
+                    onClick={() => setResponseDropdownOpen(o => !o)}
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-white/10 bg-[#2a3444] px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  >
+                    {form.responseLength}
+                    <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", responseDropdownOpen && "rotate-180")} />
+                  </button>
+                  {responseDropdownOpen && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-white/10 bg-[#2a3444] py-1 shadow-xl">
+                      {["Concise","Standard","Detailed","Comprehensive"].map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => { update("responseLength", s); setResponseDropdownOpen(false) }}
+                          className={cn(
+                            "flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-emerald-600/10",
+                            form.responseLength === s ? "text-emerald-400" : "text-white"
+                          )}
+                        >
+                          {s}
+                          {form.responseLength === s && <Check className="h-4 w-4" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="languages">Languages</Label>
@@ -283,15 +341,38 @@ export default function ProfilePage() {
             </section>
 
             {/* Brand Identity */}
-            <section className="rounded-2xl border bg-card p-6 space-y-5">
+            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Brand Identity</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="logoUrl">Logo URL</Label>
-                  <Input id="logoUrl" type="url" value={form.logoUrl} onChange={e => update("logoUrl", e.target.value)} placeholder="https://..." />
+                  <div className="flex items-center gap-2">
+                    <Label>Upload Logo</Label>
+                    <button type="button" onClick={() => setTooltipOpen("logoUpload")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-md border border-white/10 bg-[#2a3444] px-3 py-2.5 text-sm transition-colors hover:border-emerald-500/30">
+                    <div className="flex h-8 items-center justify-center rounded bg-emerald-600/15 px-3 text-xs font-semibold text-emerald-400">
+                      Browse
+                    </div>
+                    <span className="truncate text-muted-foreground">
+                      {form.logoUrl || "PNG, JPEG, or SVG — max 2 MB"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/svg+xml"
+                      className="sr-only"
+                      onChange={e => update("logoUrl", e.target.files?.[0]?.name || "")}
+                    />
+                  </label>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="brandColors">Brand Colors</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="brandColors">Brand Colors</Label>
+                    <button type="button" onClick={() => setTooltipOpen("brandColors")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </div>
                   <Input id="brandColors" value={form.brandColors} onChange={e => update("brandColors", e.target.value)} placeholder="e.g. #10b981, #202733" />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
@@ -302,7 +383,7 @@ export default function ProfilePage() {
             </section>
 
             {/* Knowledge & Content */}
-            <section className="rounded-2xl border bg-card p-6 space-y-5">
+            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Knowledge & Content</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5 sm:col-span-2">
@@ -317,7 +398,7 @@ export default function ProfilePage() {
             </section>
 
             {/* Connected Channels summary */}
-            <section className="rounded-2xl border bg-card p-6 space-y-4">
+            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Connected Channels</h2>
                 <Link href="/channels" className="text-xs text-emerald-400 hover:underline">Manage →</Link>
@@ -350,6 +431,109 @@ export default function ProfilePage() {
           </div>
         </main>
       </div>
+
+      {/* Tooltip Modal */}
+      {tooltipOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setTooltipOpen(null)}>
+          <div className="relative mx-4 max-w-sm max-h-[80vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#2a3444] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <button type="button" onClick={() => setTooltipOpen(null)} className="absolute right-3 top-3 text-muted-foreground hover:text-white transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="mb-2 text-lg font-semibold text-white">
+              {tooltipOpen === "aiRole" ? "AI Role & Job Description" : tooltipOpen === "logoUpload" ? "Logo Upload Requirements" : tooltipOpen === "brandColors" ? "Brand Colors" : "Tone Examples"}
+            </h3>
+            <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
+              {tooltipOpen === "brandColors" ? (
+                <>
+                  <p><strong className="text-white">Primary color:</strong> This is your main brand color used for buttons, highlights, and the AI avatar. Enter a hex code like <span className="text-emerald-400">#10b981</span>.</p>
+                  <p><strong className="text-white">Secondary color:</strong> Used for backgrounds, cards, and subtle accents. Typically a darker complement like <span className="text-emerald-400">#202733</span>.</p>
+                  <p><strong className="text-white">Format:</strong> Enter as comma-separated hex values. Example: <span className="text-emerald-400">#10b981, #202733</span></p>
+                  <p><strong className="text-white">Where it applies:</strong> These colors theme your AI chat interface, dashboard, and customer-facing widgets so everything feels like your brand.</p>
+                </>
+              ) : tooltipOpen === "logoUpload" ? (
+                <>
+                  <p><strong className="text-white">Recommended dimensions:</strong> 512 × 512 px (square) or 1024 × 512 px (wide). Minimum 256 × 256 px.</p>
+                  <p><strong className="text-white">Accepted formats:</strong> PNG, JPEG, or SVG. PNG with transparent background is ideal.</p>
+                  <p><strong className="text-white">Background:</strong> Use a transparent or solid dark background (#202733) so the logo blends with the AI interface.</p>
+                  <p><strong className="text-white">File size:</strong> Keep under 2 MB for fast loading.</p>
+                  <p><strong className="text-white">Best practice:</strong> Use a simple, recognizable icon or wordmark. Avoid fine details that blur at small sizes.</p>
+                </>
+              ) : tooltipOpen === "aiRole" ? (
+                <>
+                  <p><strong className="text-white">Be specific about responsibilities.</strong> Instead of "helps customers," write "answers WhatsApp inquiries about pricing, schedules demos, and escalates technical issues to support@company.com."</p>
+                  <p><strong className="text-white">Define scope & boundaries.</strong> Clarify what the AI should not do — e.g., "does not process payments or access sensitive HR data."</p>
+                  <p><strong className="text-white">Mention channels & tools.</strong> List where it operates: WhatsApp, email, Slack, website chat, internal docs.</p>
+                  <p><strong className="text-white">Example:</strong> "Nira greets website visitors, qualifies leads by asking 3 discovery questions, books Calendly meetings, and sends follow-up summaries to the sales Slack channel."
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p><strong className="text-white">Show, don't just tell.</strong> Include 2–3 real sentences your team actually uses. The AI learns patterns from concrete examples.</p>
+                  <p><strong className="text-white">Include do's and don'ts.</strong> "Do say: 'Let us walk you through this.' Don't say: 'It's easy, anyone can do it.'"</p>
+                  <p><strong className="text-white">Note context shifts.</strong> Specify if tone changes by channel: formal for email, casual for WhatsApp, concise for Slack.</p>
+                  <p><strong className="text-white">Example:</strong> "Greeting: 'Welcome to [Company] — how can we help you today?' Closing: 'Let us know if anything else comes up. We're here.' Avoid: 'Hey buddy', 'ASAP', all caps."
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt Examples Modal */}
+      {promptExampleOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setPromptExampleOpen(null)}>
+          <div className="relative mx-4 max-w-md max-h-[80vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#2a3444] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <button type="button" onClick={() => setPromptExampleOpen(null)} className="absolute right-3 top-3 text-muted-foreground hover:text-white transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="mb-4 text-lg font-semibold text-white">
+              {promptExampleOpen === "analysis" && "Analysis Prompt Example"}
+              {promptExampleOpen === "proposal" && "Proposal Prompt Example"}
+              {promptExampleOpen === "report" && "Report Prompt Example"}
+              {promptExampleOpen === "email" && "Email Prompt Example"}
+              {promptExampleOpen === "faq" && "FAQ Prompt Example"}
+            </h3>
+            <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
+              {promptExampleOpen === "analysis" && (
+                <>
+                  <p><strong className="text-white">User:</strong> "Analyze our Q3 sales data and compare it to Q2. Highlight what changed and why."</p>
+                  <p><strong className="text-white">Clarifying question:</strong> "Do you want the analysis broken down by product line, region, or sales rep?"</p>
+                  <p className="text-xs text-emerald-400">Teaches the AI to ask for structure before generating a vague summary.</p>
+                </>
+              )}
+              {promptExampleOpen === "proposal" && (
+                <>
+                  <p><strong className="text-white">User:</strong> "Create a proposal for the new client interested in our AI consulting package."</p>
+                  <p><strong className="text-white">Clarifying question:</strong> "What is the client's budget range and preferred timeline for implementation?"</p>
+                  <p className="text-xs text-emerald-400">Teaches the AI to scope budget and timeline before writing a generic proposal.</p>
+                </>
+              )}
+              {promptExampleOpen === "report" && (
+                <>
+                  <p><strong className="text-white">User:</strong> "Generate a weekly team performance report."</p>
+                  <p><strong className="text-white">Clarifying question:</strong> "Which metrics matter most — closed deals, response time, or customer satisfaction scores?"</p>
+                  <p className="text-xs text-emerald-400">Teaches the AI to prioritize metrics instead of dumping everything.</p>
+                </>
+              )}
+              {promptExampleOpen === "email" && (
+                <>
+                  <p><strong className="text-white">User:</strong> "Draft a follow-up email to the prospect who went silent after the demo."</p>
+                  <p><strong className="text-white">Clarifying question:</strong> "What was the last topic or objection they raised during the demo?"</p>
+                  <p className="text-xs text-emerald-400">Teaches the AI to reference context before writing a hollow follow-up.</p>
+                </>
+              )}
+              {promptExampleOpen === "faq" && (
+                <>
+                  <p><strong className="text-white">User:</strong> "How do I reset my password?"</p>
+                  <p><strong className="text-white">Clarifying question:</strong> "Are you locked out of your account, or do you still have access and want to change it proactively?"</p>
+                  <p className="text-xs text-emerald-400">Teaches the AI to diagnose the situation before giving a one-size-fits-all answer.</p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

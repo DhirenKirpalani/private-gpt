@@ -74,11 +74,11 @@ export default function LoginPage() {
 
         <div className="w-full max-w-sm">
           <div className="mb-8 text-center md:text-left">
-            <h1 className="text-3xl font-bold tracking-tight">{t("welcomeBack")}</h1>
+            <h1 className="gradient-text-shimmer text-3xl font-bold tracking-tight pb-1">{t("welcomeBack")}</h1>
             <p className="mt-2 text-sm text-muted-foreground">{t("signInAccount")}</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-2xl shadow-emerald-900/10">
             <div className="space-y-1.5">
               <Label htmlFor="email">{t("email")}</Label>
               <Input id="email" type="email" placeholder="name@company.com" value={email} onChange={e => setEmail(e.target.value)} required />
