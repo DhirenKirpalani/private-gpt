@@ -79,11 +79,11 @@ export default function SignupPage() {
 
         <div className="w-full max-w-sm">
           <div className="mb-7 text-center md:text-left">
-            <h1 className="text-3xl font-bold tracking-tight">{t("createAccount")}</h1>
+            <h1 className="gradient-text-shimmer text-3xl font-bold tracking-tight pb-1">{t("createAccount")}</h1>
             <p className="mt-2 text-sm text-muted-foreground">{t("getStartedFreeTagline")}</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-2xl shadow-emerald-900/10">
             <div className="space-y-1.5">
               <Label htmlFor="name">{t("fullName")}</Label>
               <Input id="name" type="text" placeholder="John Doe" value={name} onChange={e => setName(e.target.value)} required />
@@ -119,10 +119,7 @@ export default function SignupPage() {
               <input type="checkbox" checked={agreedToTerms} onChange={e => setAgreedToTerms(e.target.checked)}
                 className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500 cursor-pointer" required />
               <span className="text-sm text-muted-foreground leading-snug">
-                {t("agreeTerms")}{" "}
-                <Link href="#" className="text-emerald-400 hover:underline">{t("termsAnd")}</Link>
-                {" "}{t("and")}{" "}
-                <Link href="#" className="text-emerald-400 hover:underline">{t("privacyPolicy")}</Link>
+                {t("agreeTerms")}
               </span>
             </label>
 

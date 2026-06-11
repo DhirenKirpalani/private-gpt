@@ -14,6 +14,7 @@ const navLinkKeys = [
   { href: "/#features",  key: "features"  as const, sectionId: "features"  },
   { href: "/#faq",       key: "faq"       as const, sectionId: "faq"       },
   { href: "/#use-cases", key: "useCases"  as const, sectionId: "use-cases" },
+  { href: "/pricing",    key: "pricing"   as const, sectionId: "_"         },
 ]
 
 export function Navbar() {
@@ -43,7 +44,15 @@ export function Navbar() {
       observers.push(obs)
     })
 
-    return () => observers.forEach(o => o.disconnect())
+    const handleScroll = () => {
+      if (window.scrollY < 100) setActiveSection("")
+    }
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      observers.forEach(o => o.disconnect())
+      window.removeEventListener("scroll", handleScroll)
+    }
   }, [pathname])
 
   if (pathname === "/chat" || pathname === "/login" || pathname === "/signup") return null
@@ -67,7 +76,7 @@ export function Navbar() {
         </Link>
 
         {/* Desktop nav — hidden on mobile */}
-        <div className="hidden items-center gap-1 md:flex">
+        <div className="hidden items-center gap-2 md:flex">
           {navLinkKeys.map(({ href, key, sectionId }) => {
             const isActive = sectionId === "_" ? pathname === href : activeSection === sectionId
             return (
@@ -75,20 +84,20 @@ export function Navbar() {
                 key={href}
                 href={href}
                 className={cn(
-                  "group relative px-4 py-2 text-sm font-medium transition-colors duration-200",
+                  "group relative px-3 py-2 text-sm font-medium transition-colors duration-200 lg:px-4",
                   isActive ? "text-white" : "text-muted-foreground hover:text-white"
                 )}
               >
                 <span className={cn("absolute inset-0 rounded-md bg-white/8 transition-transform duration-200 ease-out origin-center", isActive ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100")} />
-                <span className={cn("absolute bottom-1 left-4 right-4 h-px rounded-full bg-emerald-400 transition-transform duration-300 ease-out origin-left", isActive ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100")} />
-                <span className="relative z-10">{t(key)}</span>
+                <span className={cn("absolute bottom-1 left-3 right-3 h-px rounded-full bg-emerald-400 transition-transform duration-300 ease-out origin-left lg:left-4 lg:right-4", isActive ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100")} />
+                <span className="relative z-10 whitespace-nowrap">{t(key)}</span>
               </Link>
             )
           })}
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-3 sm:gap-5">
+        <div className="flex items-center gap-5 sm:gap-8">
           {/* Language toggle — segmented pill */}
           <div className="hidden items-center rounded-lg border border-white/10 bg-white/5 p-0.5 md:inline-flex">
             <button

@@ -63,6 +63,77 @@ const channels = [
       </div>
     ),
   },
+  {
+    id: "slack",
+    name: "Slack",
+    desc: "Connect Slack so your AI can respond to DMs and channel mentions.",
+    status: "disconnected",
+    icon: (
+      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="#4A154B">
+        <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.024 2.521a2.528 2.528 0 0 1 2.52-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.52V8.834zM15.165 8.834a2.528 2.528 0 0 1-2.522 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 12.643 0a2.528 2.528 0 0 1 2.522 2.522v6.312zm-2.522 10.024a2.528 2.528 0 0 1 2.522 2.52A2.528 2.528 0 0 1 12.643 24a2.527 2.527 0 0 1-2.52-2.522v-2.52h2.52zM12.643 15.165a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 21.478 12.9a2.528 2.528 0 0 1-2.522 2.265h-6.313z"/>
+      </svg>
+    ),
+  },
+  {
+    id: "teams",
+    name: "Microsoft Teams",
+    desc: "Deploy your AI in Teams channels and group chats.",
+    status: "disconnected",
+    icon: (
+      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="#6264A7">
+        <path d="M20.625 8.25h-4.875a1.125 1.125 0 0 0-1.125 1.125v4.875h5.25a1.875 1.875 0 0 0 1.875-1.875v-3a1.125 1.125 0 0 0-1.125-1.125zM20.625 15.75h-5.25V21h5.25a1.875 1.875 0 0 0 1.875-1.875v-3a1.125 1.125 0 0 0-1.125-1.125h-.75zM10.125 15h-5.25a1.875 1.875 0 0 0-1.875 1.875v3a1.125 1.125 0 0 0 1.125 1.125h6a1.125 1.125 0 0 0 1.125-1.125v-3.75A1.875 1.875 0 0 0 10.125 15zM8.625 0A3.375 3.375 0 0 0 5.25 3.375V9h6.75V3.375A3.375 3.375 0 0 0 8.625 0zM3.75 9A3.375 3.375 0 0 0 .375 12.375v3A1.125 1.125 0 0 0 1.5 16.5h6a1.125 1.125 0 0 0 1.125-1.125v-3A3.375 3.375 0 0 0 5.25 9H3.75z"/>
+      </svg>
+    ),
+  },
+  {
+    id: "instagram",
+    name: "Instagram",
+    desc: "Let your AI respond to DMs and comments on Instagram.",
+    status: "disconnected",
+    icon: (
+      <svg className="h-6 w-6" viewBox="0 0 24 24">
+        <rect width="20" height="20" x="2" y="2" rx="5.5" ry="5.5" fill="none" stroke="#E4405F" strokeWidth="2"/>
+        <circle cx="12" cy="12" r="5" fill="none" stroke="#E4405F" strokeWidth="2"/>
+        <circle cx="17.5" cy="6.5" r="1.5" fill="#E4405F"/>
+      </svg>
+    ),
+  },
+  {
+    id: "messenger",
+    name: "Facebook Messenger",
+    desc: "Connect Messenger so your AI can chat with customers on Facebook.",
+    status: "disconnected",
+    icon: (
+      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="#0084FF">
+        <path d="M12 0C5.373 0 0 4.975 0 11.111c0 3.497 1.744 6.616 4.472 8.652V24l4.086-2.242c1.09.301 2.246.464 3.442.464 6.627 0 12-4.975 12-11.111C24 4.975 18.627 0 12 0zm1.193 14.963l-3.056-3.26-5.955 3.26 6.559-6.963 3.13 3.26 5.892-3.26-6.57 6.963z"/>
+      </svg>
+    ),
+  },
+  {
+    id: "icloud",
+    name: "iCloud Email",
+    desc: "Connect your iCloud email so your AI can manage messages.",
+    status: "disconnected",
+    icon: (
+      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="#3693F3">
+        <path d="M12.015 7.227c-.87-.884-2.224-1.09-3.42-.56-1.587.693-2.388 2.65-1.74 4.336.37.957 1.21 1.676 2.18 1.92.28.072.57.084.855.055-.27.41-.66.77-1.14 1.02-.59.31-1.27.42-1.94.33-1.13-.16-2.11-.87-2.59-1.86-.71-1.43-.37-3.21.83-4.21.83-.69 1.89-1 2.96-.83.44.07.87.23 1.25.46.24.15.46.34.65.56.18-.21.4-.4.64-.55.38-.23.81-.39 1.25-.46 1.07-.17 2.13.14 2.96.83 1.2 1 1.54 2.78.83 4.21-.48.99-1.46 1.7-2.59 1.86-.67.09-1.35-.02-1.94-.33-.48-.25-.87-.61-1.14-1.02.29.03.58.02.86-.06.96-.24 1.81-.96 2.18-1.92.65-1.69-.15-3.64-1.74-4.33-1.2-.53-2.55-.32-3.42.56z"/>
+      </svg>
+    ),
+  },
+  {
+    id: "sms",
+    name: "SMS / Text Messages",
+    desc: "Enable SMS so your AI can send and receive text messages.",
+    status: "disconnected",
+    icon: (
+      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="#34C759">
+        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>
+        <circle cx="9" cy="10" r="1" fill="#fff"/>
+        <circle cx="12" cy="10" r="1" fill="#fff"/>
+        <circle cx="15" cy="10" r="1" fill="#fff"/>
+      </svg>
+    ),
+  },
 ]
 
 export default function ChannelsPage() {
@@ -113,8 +184,8 @@ export default function ChannelsPage() {
                   <div
                     key={channel.id}
                     className={cn(
-                      "flex items-center gap-4 rounded-2xl border p-5 transition-colors",
-                      connected ? "border-emerald-500/30 bg-emerald-950/10" : "bg-card"
+                      "card-3d flex items-center gap-4 rounded-2xl border p-5 shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10",
+                      connected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]"
                     )}
                   >
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white p-2">
@@ -154,9 +225,9 @@ export default function ChannelsPage() {
               })}
             </div>
 
-            <div className="mt-8 rounded-xl border border-dashed p-6 text-center">
+            <div className="card-3d mt-8 rounded-xl border border-white/5 bg-[#2a3444] p-6 text-center shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <p className="text-sm font-medium">More integrations coming soon</p>
-              <p className="mt-1 text-xs text-muted-foreground">Slack, Teams, Instagram, Facebook Messenger, and more.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Google Drive, Notion, HubSpot, Salesforce, and more.</p>
             </div>
           </div>
         </main>

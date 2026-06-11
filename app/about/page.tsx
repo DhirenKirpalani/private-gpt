@@ -27,7 +27,7 @@ export default function AboutPage() {
     <div className="mx-auto max-w-4xl px-4 py-10">
       {/* Header */}
       <div className="mb-12 text-center">
-        <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
+        <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
           {t("aboutUsTitle")}
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
@@ -41,29 +41,30 @@ export default function AboutPage() {
       </p>
 
       {/* Pillars */}
-      <div className="grid gap-6 sm:grid-cols-2">
-        {pillars.map(({ key, icon: Icon }) => (
-          <div
-            key={key}
-            className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-emerald-500/30 hover:bg-white/[0.04]"
-          >
-            <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-emerald-500/10 blur-xl transition-all group-hover:bg-emerald-500/20" />
-            <div className="relative">
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/15 text-emerald-400">
-                <Icon className="h-5 w-5" />
+      <div className="perspective-grid">
+        <div className="grid-3d grid gap-6 sm:grid-cols-2">
+          {pillars.map(({ key, icon: Icon }) => (
+            <div
+              key={key}
+              className="card-3d group relative overflow-hidden rounded-2xl border border-white/5 bg-[#2a3444] p-6"
+            >
+              <div className="relative">
+                <div className="pillar-icon-3d mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/15 text-emerald-400">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h2 className="text-xl font-bold tracking-tight text-white">
+                  {t(`${key}Title` as any)}
+                </h2>
+                <p className="mt-1 text-sm font-semibold text-emerald-400">
+                  {t(`${key}Subtitle` as any)}
+                </p>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  {t(`${key}Desc` as any)}
+                </p>
               </div>
-              <h2 className="text-xl font-bold tracking-tight">
-                {t(`${key}Title` as any)}
-              </h2>
-              <p className="mt-1 text-sm font-semibold text-emerald-400">
-                {t(`${key}Subtitle` as any)}
-              </p>
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                {t(`${key}Desc` as any)}
-              </p>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* Closing */}

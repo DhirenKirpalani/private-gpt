@@ -11,7 +11,7 @@ export function Footer() {
   if (pathname === "/chat" || pathname === "/login" || pathname === "/signup") return null
 
   return (
-    <footer className="border-t border-white/10 bg-background">
+    <footer className="border-t border-white/10 bg-background/90 backdrop-blur-xl">
       <div className="mx-auto max-w-7xl px-6 py-16">
 
         {/* Main Footer */}
@@ -24,7 +24,7 @@ export function Footer() {
                 href="/"
                 className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 transition-transform duration-300 hover:scale-105 overflow-hidden"
               >
-                <img src="/favicon.ico" alt="Exploro" className="h-10 w-10 object-contain" />
+                <img src="/assets/images/exploro-icon.svg" alt="Exploro" className="h-10 w-10 object-contain" />
               </Link>
               <a
                 href="https://www.linkedin.com/company/us-ai-bureau/?viewAsMember=true"

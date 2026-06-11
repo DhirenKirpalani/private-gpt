@@ -11,9 +11,9 @@ export const metadata: Metadata = {
   title: "Exploro",
   description: "Your AI-powered business platform",
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/favicon.ico",
+    icon: "/assets/images/exploro-icon.ico?v=2",
+    shortcut: "/assets/images/exploro-icon.ico?v=2",
+    apple: "/assets/images/exploro-icon.ico?v=2",
   },
 };
 
