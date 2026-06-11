@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { FaWhatsapp, FaTelegram, FaSlack, FaEnvelope, FaMicrosoft, FaApple, FaGoogle } from "react-icons/fa"
+import { SiNotion } from "react-icons/si"
 import {
   ArrowRight,
   Play,
@@ -78,8 +79,11 @@ export default function HomePage() {
         <h1 className="animate-fade-in-up gradient-text-shimmer mb-6 max-w-5xl pb-2 text-4xl font-extrabold tracking-tight sm:text-6xl md:text-7xl [animation-delay:120ms]">
           {t("heroTitle")}
         </h1>
-        <p className="animate-fade-in-up mb-10 max-w-2xl text-lg text-muted-foreground sm:text-xl [animation-delay:240ms]">
+        <p className="animate-fade-in-up mb-2 max-w-2xl text-lg text-muted-foreground sm:text-xl [animation-delay:240ms]">
           {t("heroSubtitle")}
+        </p>
+        <p className="animate-fade-in-up mb-10 text-sm font-medium text-emerald-400 [animation-delay:280ms]">
+          by Us+AI Bureau
         </p>
         <div className="animate-fade-in-up flex flex-wrap items-center justify-center gap-4 [animation-delay:360ms]">
           <Link href="/signup">
@@ -267,7 +271,8 @@ export default function HomePage() {
       <section id="integrations" className="border-t border-white/5 px-4 py-24">
         <div className="mx-auto max-w-5xl text-center">
           <h2 className="reveal mb-4 text-3xl font-bold tracking-tight text-white">{t("integrationsTitle")}</h2>
-          <p className="mb-12 text-muted-foreground">{t("integrationsSubtitle")}</p>
+          <p className="mb-2 text-muted-foreground">{t("integrationsSubtitle")}</p>
+          <p className="mb-12 text-sm font-medium text-emerald-400">by Us+AI Bureau</p>
           <div className="perspective-grid">
             <div className="grid-3d grid grid-cols-2 gap-3 sm:grid-cols-4">
 
@@ -306,7 +311,7 @@ export default function HomePage() {
             {/* Notion */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaApple className="h-6 w-6" style={{ color: "#000000" }} />
+                <SiNotion className="h-6 w-6" style={{ color: "#000000" }} />
               </div>
               <span className="text-sm font-medium">Notion</span>
             </div>
