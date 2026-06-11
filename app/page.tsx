@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { FaWhatsapp, FaTelegram, FaSlack, FaEnvelope, FaMicrosoft, FaApple, FaGoogle } from "react-icons/fa"
 import {
   ArrowRight,
   Play,
@@ -272,88 +273,88 @@ export default function HomePage() {
 
             {/* WhatsApp */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.126 1.528 5.855L.057 23.882l6.197-1.624A11.957 11.957 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.851 0-3.587-.504-5.079-1.379l-.361-.214-3.781.991 1.01-3.688-.235-.375A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaWhatsapp className="h-6 w-6" style={{ color: "#25D366" }} />
               </div>
               <span className="text-sm font-medium">WhatsApp</span>
             </div>
 
             {/* Gmail */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 24 24"><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 010 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L12 9.75l8.073-6.257C21.69 2.28 24 3.434 24 5.457z" fill="#EA4335"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaGoogle className="h-6 w-6" style={{ color: "#EA4335" }} />
               </div>
               <span className="text-sm font-medium">Gmail</span>
             </div>
 
             {/* Outlook */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 24 24"><path d="M24 7.2v9.6c0 .44-.36.8-.8.8H.8A.8.8 0 010 16.8V7.2c0-.44.36-.8.8-.8h22.4c.44 0 .8.36.8.8z" fill="#0078D4"/><path d="M0 7.2l9.6 6.4L0 16.8V7.2z" fill="#106EBE"/><path d="M24 7.2l-9.6 6.4L24 16.8V7.2z" fill="#0078D4"/><path d="M12 10.8l-2.4-1.6L0 16.8l9.6-6.4L12 10.8z" fill="#1490DF"/><path d="M12 10.8l2.4-1.6L24 16.8l-9.6-6.4L12 10.8z" fill="#28A8EA"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaMicrosoft className="h-6 w-6" style={{ color: "#0078D4" }} />
               </div>
               <span className="text-sm font-medium">Outlook</span>
             </div>
 
             {/* Google Drive */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 87.3 78"><path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0a7.3 7.3 0 001.55 4.35z" fill="#0066DA"/><path d="M43.65 25L29.9 1.2a8.1 8.1 0 00-3.3 3.3L1.55 48.55A7.3 7.3 0 000 52.9h27.5z" fill="#00AC47"/><path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25a7.3 7.3 0 001.2-4.35H59.8l5.85 11.65z" fill="#EA4335"/><path d="M43.65 25L57.4 1.2C56.05.43 54.5 0 52.9 0H34.4c-1.6 0-3.15.43-4.5 1.2z" fill="#00832D"/><path d="M59.8 52.9h27.5a7.3 7.3 0 00-1.2-4.35L61.05 8.5a8.1 8.1 0 00-3.65-3.3L43.65 25z" fill="#2684FC"/><path d="M27.45 52.9l-13.7 23.8c1.35.77 2.9 1.2 4.5 1.2h51.4c1.6 0 3.1-.43 4.45-1.2L59.8 52.9z" fill="#FFBA00"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaGoogle className="h-6 w-6" style={{ color: "#4285F4" }} />
               </div>
               <span className="text-sm font-medium">Google Drive</span>
             </div>
 
             {/* Notion */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 24 24"><path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z" fill="#000"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaApple className="h-6 w-6" style={{ color: "#000000" }} />
               </div>
               <span className="text-sm font-medium">Notion</span>
             </div>
 
             {/* Dropbox */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 24 24" fill="#0061FF"><path d="M6 2L0 6l6 4-6 4 6 4 6-4-6-4 6-4L6 2zm12 0l-6 4 6 4-6 4 6 4 6-4-6-4 6-4-6-4zm-6 14l-6 4 6 4 6-4-6-4z"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaEnvelope className="h-6 w-6" style={{ color: "#0061FF" }} />
               </div>
               <span className="text-sm font-medium">Dropbox</span>
             </div>
 
             {/* OneDrive */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 24 24"><path d="M10.318 6.527A6.5 6.5 0 0016.5 4a6.5 6.5 0 016.415 5.402A4.5 4.5 0 0124 13.5a4.5 4.5 0 01-4.5 4.5H5.5A5.5 5.5 0 010 12.5a5.5 5.5 0 015.072-5.484A6.5 6.5 0 0010.318 6.527z" fill="#0078D4"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaMicrosoft className="h-6 w-6" style={{ color: "#0078D4" }} />
               </div>
               <span className="text-sm font-medium">OneDrive</span>
             </div>
 
             {/* Telegram */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 24 24" fill="#26A5E4"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.16 13.837l-2.97-.924c-.644-.203-.658-.644.136-.953l11.578-4.467c.538-.194 1.006.131.99.728z"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaTelegram className="h-6 w-6" style={{ color: "#26A5E4" }} />
               </div>
               <span className="text-sm font-medium">Telegram</span>
             </div>
 
             {/* Other Email */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" fill="#555"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaEnvelope className="h-6 w-6" style={{ color: "#888888" }} />
               </div>
               <span className="text-sm font-medium">Other Email</span>
             </div>
 
             {/* iCloud */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" fill="#007AFF"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaApple className="h-6 w-6" style={{ color: "#3693F3" }} />
               </div>
               <span className="text-sm font-medium">iCloud</span>
             </div>
 
             {/* Slack */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1.5">
-                <svg className="h-full w-full" viewBox="0 0 24 24"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.024 2.521a2.528 2.528 0 0 1 2.52-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.52V8.834zm-1.27 0a2.528 2.528 0 0 1-2.522 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.166 0a2.528 2.528 0 0 1 2.521 2.522v6.312zm-2.522 10.024a2.528 2.528 0 0 1 2.522 2.52A2.528 2.528 0 0 1 15.166 24a2.528 2.528 0 0 1-2.521-2.522v-2.52h2.521zm0-1.27a2.528 2.528 0 0 1-2.521-2.522 2.527 2.527 0 0 1 2.521-2.52h6.313A2.527 2.527 0 0 1 24 15.166a2.528 2.528 0 0 1-2.522 2.521h-6.313z" fill="#4A154B"/></svg>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <FaSlack className="h-6 w-6" style={{ color: "#4A154B" }} />
               </div>
               <span className="text-sm font-medium">Slack</span>
             </div>
