@@ -37,8 +37,8 @@ export function Footer() {
                 <FaLinkedin className="h-8 w-8" style={{ color: "#0077b5" }} />
               </a>
             </div>
-
-            <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
+            <p className="mt-2 text-sm font-medium text-emerald-400">by Us+AI Bureau</p>
+            <p className="mt-2 max-w-xs text-sm leading-relaxed text-muted-foreground">
               {t("brandTagline")}
             </p>
           </div>

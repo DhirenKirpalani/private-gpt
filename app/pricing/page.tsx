@@ -22,7 +22,7 @@ export default function SubscriberPage() {
             <Zap className="h-3.5 w-3.5" />
             Solo
           </div>
-          <h2 className="text-2xl font-bold">Free</h2>
+          <h2 className="text-2xl font-bold">$30<span className="text-sm font-normal text-muted-foreground">/mo</span></h2>
           <p className="mt-1 text-sm text-muted-foreground">Perfect for individuals getting started.</p>
           <ul className="mt-6 space-y-3">
             {[

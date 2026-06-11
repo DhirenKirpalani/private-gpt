@@ -127,7 +127,7 @@ export function Navbar() {
           <Link href="/login" className="hidden text-sm font-medium text-muted-foreground hover:text-foreground transition-colors md:block">
             {t("logIn")}
           </Link>
-          <Link href="/signup" className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 sm:px-4">
+          <Link href="/signup" className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white whitespace-nowrap transition-colors hover:bg-emerald-700 sm:px-4">
             {t("getStarted")}
           </Link>
           {/* Hamburger — mobile only */}
