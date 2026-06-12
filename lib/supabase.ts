@@ -72,10 +72,10 @@ export async function getProfile(userId: string) {
     .from("profiles")
     .select("*")
     .eq("user_id", userId)
-    .single()
+    .maybeSingle()
 
   if (error) throw error
-  return data as Profile
+  return data as Profile | null
 }
 
 export async function upsertProfile(profile: Partial<Profile>) {

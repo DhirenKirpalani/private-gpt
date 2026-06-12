@@ -203,7 +203,7 @@ export const translations = {
     pricingCTASolo: "Unlock Free Trial",
     pricingCTATeam: "Choose Team",
     pricingCTAEnterprise: "Contact Sales",
-    pricingFeaturesSolo: "1 AI workspace,Up to 50 documents,Chat interface,Basic integrations,Community support,Standard security",
+    pricingFeaturesSolo: "1 AI workspace,Up to 50 documents,Chat interface,Email integration,Basic integrations,Community support,Standard security,API access,15 days free trial",
     pricingFeaturesTeam: "5 AI workspaces,Unlimited documents,WhatsApp & Email channels,Priority support,Analytics dashboard,Team collaboration,Custom AI personality,Advanced analytics",
     pricingFeaturesEnterprise: "Unlimited workspaces,Custom integrations,Dedicated support,SSO & audit logs,On-premise option,SLA guarantee,White-label option,API access",
     pricingCompareTitle: "Full Feature Comparison",
@@ -228,7 +228,7 @@ export const translations = {
     pricingComingSoonTitle: "Features on the Roadmap",
     pricingComingSoonSubtitle: "Here is what we are building next for Exploro OS.",
     pricingComingSoonBadge: "Coming Soon",
-    pricingComingSoonFeatures: "Instagram DM Integration,Facebook Messenger Bot,Slack & Microsoft Teams Connect,Advanced AI Agent Workflows,Voice Call AI Assistant,Multi-language Translation Layer,CRM Auto-Sync (HubSpot\, Salesforce),AI Document Generator,Real-time Analytics API,Custom Model Fine-tuning",
+    pricingComingSoonFeatures: "Instagram DM Integration,Facebook Messenger Bot,Slack & Microsoft Teams Connect,Advanced AI Agent Workflows,Voice Call AI Assistant,Multi-language Translation Layer,CRM Auto-Sync (HubSpot\, Salesforce),AI Document Generator,Real-time Analytics API,Custom Model Fine-tuning,AI Agent (Avatar),Prompt to Image Generator,Prompt to Short Video Generator",
 
     ctaTitle: "Build Your Private GPT Today",
     ctaSubtitle: "Join businesses creating its customized AI Agent trained on their own Knowledge base.",
@@ -329,6 +329,12 @@ export const translations = {
         a: "Nira, Exploro Intelligence is embedded inside the platform for operational issues and technical problems. Pop-up windows appear next to potential bottleneck points with brief, concise suggestions. The UI/UX experience remains seamless."
       },
     ],
+
+    // Greetings
+    greetingMorning: "Good morning",
+    greetingAfternoon: "Good afternoon",
+    greetingEvening: "Good evening",
+    greetingNight: "Good night",
   },
   es: {
     // Navbar
@@ -534,7 +540,7 @@ export const translations = {
     pricingCTASolo: "Desbloquear Prueba Gratis",
     pricingCTATeam: "Elegir Team",
     pricingCTAEnterprise: "Contactar Ventas",
-    pricingFeaturesSolo: "1 espacio de trabajo de IA,Hasta 50 documentos,Interfaz de chat,Integraciones básicas,Soporte comunitario,Seguridad estándar",
+    pricingFeaturesSolo: "1 espacio de trabajo de IA,Hasta 50 documentos,Interfaz de chat,Integración con Email,Integraciones básicas,Soporte comunitario,Seguridad estándar,Acceso a API,15 días de prueba gratis",
     pricingFeaturesTeam: "5 espacios de trabajo de IA,Documentos ilimitados,Canales de WhatsApp y Email,Soporte prioritario,Panel de analíticas,Colaboración en equipo,Personalidad de IA personalizada,Analíticas avanzadas",
     pricingFeaturesEnterprise: "Espacios de trabajo ilimitados,Integraciones personalizadas,Soporte dedicado,SSO y registros de auditoría,Opción on-premise,Garantía SLA,Opción white-label,Acceso a API",
     pricingCompareTitle: "Comparación Completa de Funciones",
@@ -559,7 +565,7 @@ export const translations = {
     pricingComingSoonTitle: "Funciones en la Hoja de Ruta",
     pricingComingSoonSubtitle: "Esto es lo que estamos construyendo próximamente para Exploro OS.",
     pricingComingSoonBadge: "Próximamente",
-    pricingComingSoonFeatures: "Integración con Instagram DM,Bot de Facebook Messenger,Conexión con Slack y Microsoft Teams,Flujos de trabajo avanzados de Agentes de IA,Asistente de IA para llamadas de voz,Capa de traducción multiidioma,Sincronización automática de CRM (HubSpot\, Salesforce),Generador de documentos con IA,API de analíticas en tiempo real,Ajuste fino de modelos personalizado",
+    pricingComingSoonFeatures: "Integración con Instagram DM,Bot de Facebook Messenger,Conexión con Slack y Microsoft Teams,Flujos de trabajo avanzados de Agentes de IA,Asistente de IA para llamadas de voz,Capa de traducción multiidioma,Sincronización automática de CRM (HubSpot\, Salesforce),Generador de documentos con IA,API de analíticas en tiempo real,Ajuste fino de modelos personalizado,Agente de IA (Avatar),Generador de Imágenes por Prompt,Generador de Videos Cortos por Prompt",
 
     ctaTitle: "Construye tu GPT Privado Hoy",
     ctaSubtitle: "Únete a negocios creando su agente de IA personalizado entrenado con su propia base de conocimiento.",
@@ -660,6 +666,12 @@ export const translations = {
         a: "Nira, la inteligencia de Exploro está integrada en la plataforma para problemas operativos y técnicos. Aparecerán ventanas emergentes a lo largo de la plataforma junto a posibles puntos de cuello de botella con sugerencias breves y concisas. La experiencia UI/UX se mantiene fluida."
       },
     ],
+
+    // Greetings
+    greetingMorning: "Buenos días",
+    greetingAfternoon: "Buenas tardes",
+    greetingEvening: "Buenas tardes",
+    greetingNight: "Buenas noches",
   },
 } as const;
 

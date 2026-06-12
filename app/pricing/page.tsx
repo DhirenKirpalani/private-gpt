@@ -50,7 +50,7 @@ function usePricingData() {
     { feature: t("pricingCompareFeatureDocuments"), solo: t("pricingPlanEnterprise") === "Enterprise" ? "Up to 50" : "Hasta 50", team: t("pricingPlanEnterprise") === "Enterprise" ? "Unlimited" : "Ilimitado", enterprise: t("pricingPlanEnterprise") === "Enterprise" ? "Unlimited" : "Ilimitado" },
     { feature: t("pricingCompareFeatureChat"), solo: true, team: true, enterprise: true },
     { feature: t("pricingCompareFeatureWhatsApp"), solo: false, team: true, enterprise: true },
-    { feature: t("pricingCompareFeatureEmail"), solo: false, team: true, enterprise: true },
+    { feature: t("pricingCompareFeatureEmail"), solo: true, team: true, enterprise: true },
     { feature: t("pricingCompareFeatureTelegram"), solo: false, team: true, enterprise: true },
     { feature: t("pricingCompareFeatureAnalytics"), solo: false, team: true, enterprise: true },
     { feature: t("pricingCompareFeatureCollaboration"), solo: false, team: true, enterprise: true },
@@ -60,7 +60,7 @@ function usePricingData() {
     { feature: t("pricingCompareFeatureOnPremise"), solo: false, team: false, enterprise: true },
     { feature: t("pricingCompareFeatureSLA"), solo: false, team: false, enterprise: true },
     { feature: t("pricingCompareFeatureWhiteLabel"), solo: false, team: false, enterprise: true },
-    { feature: t("pricingCompareFeatureAPI"), solo: false, team: false, enterprise: true },
+    { feature: t("pricingCompareFeatureAPI"), solo: true, team: true, enterprise: true },
   ]
 
   const comingSoon = t("pricingComingSoonFeatures").split(",")
