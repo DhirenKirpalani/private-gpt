@@ -9,6 +9,7 @@ import {
   useMemo,
 } from "react";
 import { translations, type Language, type TranslationKey } from "./translations";
+import { getTranslations } from "./supabase";
 
 interface I18nContextValue {
   lang: Language;
@@ -17,7 +18,9 @@ interface I18nContextValue {
   toggleLang: () => void;
   dict: (typeof translations)[Language];
   customTrans: Partial<Record<TranslationKey, string>>;
+  supabaseTrans: Partial<Record<TranslationKey, string>>;
   saveCustomTrans: (overrides: Partial<Record<TranslationKey, string>>) => void;
+  reloadSupabaseTranslations: () => Promise<void>;
 }
 
 const STORAGE_KEY = "exploro-lang";
@@ -48,12 +51,30 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Language>("en");
   const [mounted, setMounted] = useState(false);
   const [customTrans, setCustomTransState] = useState<Partial<Record<TranslationKey, string>>>({});
+  const [supabaseTrans, setSupabaseTrans] = useState<Partial<Record<TranslationKey, string>>>({});
 
+  // Load from localStorage on mount
   useEffect(() => {
     setLangState(getInitialLang());
     setCustomTransState(loadCustomTrans());
     setMounted(true);
   }, []);
+
+  const reloadSupabaseTranslations = useCallback(async () => {
+    try {
+      const overrides = await getTranslations(lang);
+      setSupabaseTrans(overrides as Partial<Record<TranslationKey, string>>);
+    } catch {
+      // Supabase not configured or no connection — fall back to hardcoded
+    }
+  }, [lang]);
+
+  // Load translations from Supabase when language changes
+  useEffect(() => {
+    if (mounted) {
+      reloadSupabaseTranslations();
+    }
+  }, [lang, mounted, reloadSupabaseTranslations]);
 
   const setLang = useCallback((newLang: Language) => {
     setLangState(newLang);
@@ -76,7 +97,8 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const t = useCallback(
     (key: TranslationKey, vars?: Record<string, string | number>) => {
-      let text = (customTrans[key] ?? translations[lang][key] ?? translations.en[key] ?? key) as string;
+      // Priority: Supabase > localStorage custom > hardcoded lang > hardcoded en > key
+      let text = (supabaseTrans[key] ?? customTrans[key] ?? translations[lang][key] ?? translations.en[key] ?? key) as string;
       if (vars) {
         Object.entries(vars).forEach(([k, v]) => {
           text = text.replace(new RegExp(`{${k}}`, "g"), String(v));
@@ -84,12 +106,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       }
       return text;
     },
-    [lang, customTrans]
+    [lang, customTrans, supabaseTrans]
   );
 
   const mergedDict = useMemo(() => {
-    return { ...translations[lang], ...customTrans } as (typeof translations)[Language];
-  }, [lang, customTrans]);
+    return { ...translations[lang], ...customTrans, ...supabaseTrans } as (typeof translations)[Language];
+  }, [lang, customTrans, supabaseTrans]);
 
   const value: I18nContextValue = {
     lang,
@@ -98,7 +120,9 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     toggleLang,
     dict: mergedDict,
     customTrans,
+    supabaseTrans,
     saveCustomTrans,
+    reloadSupabaseTranslations,
   };
 
   return (

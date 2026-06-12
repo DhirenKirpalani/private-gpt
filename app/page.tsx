@@ -37,46 +37,10 @@ export default function HomePage() {
 
       {/* ── HERO ── */}
       <section className="relative flex flex-col items-center justify-center overflow-hidden px-4 py-28 text-center sm:py-40">
-        {/* Cinematic background */}
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-background" />
-          {/* Emerald orb — top-left */}
-          <div className="animate-drift-1 absolute -left-40 -top-20 h-[650px] w-[650px] rounded-full bg-emerald-600/18 blur-[130px]" />
-          {/* Violet orb — bottom-right */}
-          <div className="animate-drift-2 absolute -bottom-20 -right-40 h-[550px] w-[550px] rounded-full bg-violet-600/12 blur-[110px]" />
-          {/* Center pulse */}
-          <div className="animate-pulse-glow absolute left-1/2 top-1/2 h-[350px] w-[350px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/10 blur-[90px]" />
-          {/* Dot-grid overlay — fades at bottom */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.035)_1px,_transparent_1px)] [background-size:32px_32px] [mask-image:linear-gradient(to_bottom,black_60%,transparent_100%)]" />
-          {/* Floating particles */}
-          <div className="particles">
-            {[
-              { l: 8, d: 5.2, del: 0 }, { l: 18, d: 7.1, del: 1.3 }, { l: 28, d: 6.4, del: 2.1 },
-              { l: 38, d: 8.3, del: 0.7 }, { l: 48, d: 5.8, del: 3.4 }, { l: 58, d: 7.6, del: 1.8 },
-              { l: 68, d: 6.1, del: 4.2 }, { l: 78, d: 9.0, del: 2.5 }, { l: 88, d: 5.5, del: 0.3 },
-              { l: 12, d: 7.3, del: 3.8 }, { l: 22, d: 6.7, del: 1.1 }, { l: 32, d: 8.5, del: 4.6 },
-              { l: 42, d: 5.0, del: 2.9 }, { l: 52, d: 7.8, del: 0.5 }, { l: 62, d: 6.3, del: 3.1 },
-              { l: 72, d: 8.1, del: 1.6 }, { l: 82, d: 5.7, del: 4.0 }, { l: 92, d: 7.4, del: 2.2 },
-              { l: 5, d: 6.9, del: 3.5 }, { l: 95, d: 8.7, del: 0.9 },
-            ].map((p, i) => (
-              <div
-                key={i}
-                className="particle"
-                style={{
-                  left: `${p.l}%`,
-                  animationDuration: `${p.d}s`,
-                  animationDelay: `${p.del}s`,
-                  opacity: 0.25 + (i % 3) * 0.15,
-                }}
-              />
-            ))}
-          </div>
-        </div>
-
         <div className="animate-fade-in-up mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-400 [animation-delay:0ms]">
           {t("heroBadge")}
         </div>
-        <h1 className="animate-fade-in-up gradient-text-shimmer mb-6 max-w-5xl pb-2 text-4xl font-extrabold tracking-tight sm:text-6xl md:text-7xl [animation-delay:120ms]">
+        <h1 className="animate-fade-in-up mb-6 max-w-5xl pb-2 text-4xl font-extrabold tracking-tight text-white sm:text-6xl md:text-7xl [animation-delay:120ms]">
           {t("heroTitle")}
         </h1>
         <p className="animate-fade-in-up mb-2 max-w-2xl text-lg text-muted-foreground sm:text-xl [animation-delay:240ms]">
@@ -271,8 +235,7 @@ export default function HomePage() {
       <section id="integrations" className="border-t border-white/5 px-4 py-24">
         <div className="mx-auto max-w-5xl text-center">
           <h2 className="reveal mb-4 text-3xl font-bold tracking-tight text-white">{t("integrationsTitle")}</h2>
-          <p className="mb-2 text-muted-foreground">{t("integrationsSubtitle")}</p>
-          <p className="mb-12 text-sm font-medium text-emerald-400">by Us+AI Bureau</p>
+          <p className="mb-12 text-muted-foreground">{t("integrationsSubtitle")}</p>
           <div className="perspective-grid">
             <div className="grid-3d grid grid-cols-2 gap-3 sm:grid-cols-4">
 
@@ -409,19 +372,19 @@ export default function HomePage() {
                 {
                   icon: BarChart3,
                   title: t("useCaseRestaurant"),
-                  color: "bg-emerald-500",
+                  color: "bg-gradient-to-br from-[#022c22] to-[#064e3b]",
                   benefits: [t("useCaseRestaurantBenefit1"),t("useCaseRestaurantBenefit2"),t("useCaseRestaurantBenefit3"),t("useCaseRestaurantBenefit4")],
                 },
                 {
                   icon: Home,
                   title: t("useCaseRealEstate"),
-                  color: "bg-gradient-to-br from-blue-500 to-cyan-500",
+                  color: "bg-gradient-to-br from-[#1a2e05] to-[#365314]",
                   benefits: [t("useCaseRealEstateBenefit1"),t("useCaseRealEstateBenefit2"),t("useCaseRealEstateBenefit3"),t("useCaseRealEstateBenefit4")],
                 },
                 {
                   icon: HeartPulse,
                   title: t("useCaseWellness"),
-                  color: "bg-gradient-to-br from-emerald-500 to-lime-500",
+                  color: "bg-gradient-to-br from-[#14532d] to-[#166534]",
                   benefits: [t("useCaseWellnessBenefit1"),t("useCaseWellnessBenefit2"),t("useCaseWellnessBenefit3"),t("useCaseWellnessBenefit4")],
                 },
               ].map((uc) => (

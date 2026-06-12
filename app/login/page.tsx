@@ -2,12 +2,14 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useState } from "react"
-import { Eye, EyeOff, CheckCircle2 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Eye, EyeOff, CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useI18n } from "@/lib/i18n"
+import { signIn } from "@/lib/supabase"
 
 const featureKeys = [
   "loginFeature1",
@@ -17,13 +19,33 @@ const featureKeys = [
 
 export default function LoginPage() {
   const { t } = useI18n()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [confirmedEmail, setConfirmedEmail] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    // Show welcome banner if user arrives from email confirmation
+    const fromConfirm = searchParams.get("confirmed") === "true"
+    if (fromConfirm) setConfirmedEmail(true)
+  }, [searchParams])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Login:", { email, password })
+    setError("")
+    setLoading(true)
+    try {
+      await signIn(email, password)
+      router.push("/chat")
+    } catch (err: any) {
+      setError(err.message || "Invalid email or password.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -106,8 +128,27 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 py-5 text-base font-semibold">
-              {t("signIn")}
+            {confirmedEmail && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                </div>
+                <p className="text-sm leading-relaxed text-emerald-300">
+                  Email confirmed! Please log in with your password.
+                </p>
+              </div>
+            )}
+            {error && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500/20">
+                  <span className="text-xs font-bold text-red-400">!</span>
+                </div>
+                <p className="text-sm leading-relaxed text-red-300">{error}</p>
+              </div>
+            )}
+            <Button type="submit" disabled={loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 py-5 text-base font-semibold disabled:opacity-50">
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("signIn")}
             </Button>
           </form>
 
