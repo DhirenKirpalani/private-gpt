@@ -1,8 +1,10 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/app/auth-provider"
 import { FaWhatsapp, FaTelegram, FaSlack, FaEnvelope, FaMicrosoft, FaApple, FaGoogle } from "react-icons/fa"
 import { SiNotion } from "react-icons/si"
 import {
@@ -32,6 +34,17 @@ import { FaqSection } from "@/components/faq-section"
 
 export default function HomePage() {
   const { t } = useI18n()
+  const router = useRouter()
+  const { user } = useAuth()
+
+  const handleCTA = () => {
+    if (user) {
+      router.push("/chat")
+    } else {
+      router.push("/signup")
+    }
+  }
+
   return (
     <div className="flex flex-col">
 
@@ -50,11 +63,9 @@ export default function HomePage() {
           by Us+AI Bureau
         </p>
         <div className="animate-fade-in-up flex flex-wrap items-center justify-center gap-4 [animation-delay:360ms]">
-          <Link href="/signup">
-            <Button size="lg" className="pulse-ring gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
-              {t("heroStartFree")} <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
+          <Button size="lg" onClick={handleCTA} className="pulse-ring gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
+            {t("heroStartFree")} <ArrowRight className="h-4 w-4" />
+          </Button>
           <Button size="lg" variant="outline" className="gap-2 px-8 transition-all duration-200 hover:scale-105">
             <Play className="h-4 w-4" /> {t("heroWatchDemo")}
           </Button>
@@ -453,11 +464,9 @@ export default function HomePage() {
             {t("ctaSubtitle")}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <Link href="/signup">
-              <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white px-10">
-                {t("ctaStartFree")}
-              </Button>
-            </Link>
+            <Button size="lg" onClick={handleCTA} className="bg-emerald-600 hover:bg-emerald-700 text-white px-10">
+              {t("ctaStartFree")}
+            </Button>
             <Link href="/exploro">
               <Button size="lg" variant="outline" className="px-10">
                 {t("ctaBookDemo")}

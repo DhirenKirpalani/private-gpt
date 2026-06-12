@@ -12,6 +12,7 @@ import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { getProfile } from "@/lib/supabase"
+import { useI18n } from "@/lib/i18n"
 
 interface Message {
   id: string
@@ -44,6 +45,7 @@ function getInitials(name: string): string {
 
 export default function ChatPage() {
   const { user } = useAuth()
+  const { t } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -55,16 +57,35 @@ export default function ChatPage() {
   const [customGradientFrom, setCustomGradientFrom] = useState("#1a2332")
   const [customGradientTo, setCustomGradientTo] = useState("#202733")
   const [userInitials, setUserInitials] = useState("")
+  const [userName, setUserName] = useState("")
+  const [greeting, setGreeting] = useState("")
+  const [mounted, setMounted] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setMounted(true)
+    // Determine greeting based on user's local time
+    const hour = new Date().getHours()
+    let key: Parameters<typeof t>[0]
+    if (hour >= 5 && hour < 12) key = "greetingMorning"
+    else if (hour >= 12 && hour < 17) key = "greetingAfternoon"
+    else if (hour >= 17 && hour < 21) key = "greetingEvening"
+    else key = "greetingNight"
+    setGreeting(t(key))
+  }, [t])
 
   useEffect(() => {
     async function load() {
       if (!user) return
       try {
         const profile = await getProfile(user.id)
-        setUserInitials(getInitials(profile?.full_name || user.user_metadata?.full_name || ""))
+        const name = profile?.full_name || user.user_metadata?.full_name || ""
+        setUserInitials(getInitials(name))
+        setUserName(name)
       } catch {
-        setUserInitials(getInitials(user.user_metadata?.full_name || ""))
+        const name = user.user_metadata?.full_name || ""
+        setUserInitials(getInitials(name))
+        setUserName(name)
       }
     }
     load()
@@ -232,8 +253,8 @@ export default function ChatPage() {
 
               {/* Greeting */}
               <div className="mb-2 text-center">
-                <p className="text-sm font-medium text-muted-foreground">Good morning</p>
-                <h2 className="pb-1 text-4xl font-extrabold tracking-tight text-white sm:text-5xl">Alex</h2>
+                <p className="text-sm font-medium text-muted-foreground">{greeting}</p>
+                <h2 className="pb-1 text-4xl font-extrabold tracking-tight text-white sm:text-5xl">{mounted ? (userName || user?.user_metadata?.full_name || "") : "\u00A0"}</h2>
               </div>
 
               <p className="mb-8 max-w-md text-center text-base text-muted-foreground">

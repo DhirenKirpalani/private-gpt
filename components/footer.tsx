@@ -1,13 +1,21 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { FaLinkedin } from "react-icons/fa"
 import { useI18n } from "@/lib/i18n"
+import { useAuth } from "@/app/auth-provider"
 
 export function Footer() {
   const pathname = usePathname()
+  const router = useRouter()
   const { t } = useI18n()
+  const { user } = useAuth()
+
+  const handleCTA = () => {
+    if (user) router.push("/chat")
+    else router.push("/signup")
+  }
 
   if (pathname === "/chat" || pathname === "/login" || pathname === "/signup") return null
 
@@ -94,12 +102,12 @@ export function Footer() {
                 {t("logIn")}
               </Link>
 
-              <Link
-                href="/signup"
+              <button
+                onClick={handleCTA}
                 className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
                 {t("getStarted")}
-              </Link>
+              </button>
 
               <Link
                 href="/"
@@ -120,12 +128,12 @@ export function Footer() {
               {t("footerTagline")}
             </p>
 
-            <Link
-              href="/signup"
+            <button
+              onClick={handleCTA}
               className="inline-flex items-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/20"
             >
               {t("getStartedFree")}
-            </Link>
+            </button>
           </div>
         </div>
 

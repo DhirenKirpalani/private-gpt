@@ -1,14 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
-import { Search, Save, Info, X, ChevronDown, Check, Loader2, User } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Search, Save, Info, X, ChevronDown, Check, Loader2, User, LogOut } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/app/auth-provider"
-import { getProfile, upsertProfile, uploadAvatar, type Profile } from "@/lib/supabase"
+import { getProfile, upsertProfile, uploadAvatar, signOut, type Profile } from "@/lib/supabase"
 
 const defaultForm = {
   fullName: "",
@@ -127,6 +128,7 @@ function formToProfile(form: typeof defaultForm): Partial<Profile> {
 
 export default function ProfilePage() {
   const { user } = useAuth()
+  const router = useRouter()
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saveLoading, setSaveLoading] = useState(false)
@@ -134,15 +136,18 @@ export default function ProfilePage() {
   const [promptExampleOpen, setPromptExampleOpen] = useState<string | null>(null)
   const [responseDropdownOpen, setResponseDropdownOpen] = useState(false)
   const [form, setForm] = useState(defaultForm)
+  const [originalForm, setOriginalForm] = useState(defaultForm)
 
   useEffect(() => {
     async function load() {
       if (!user) return
       try {
         const profile = await getProfile(user.id)
-        setForm(profileToForm(profile))
-      } catch {
-        // No profile yet — keep defaults
+        const loaded = profileToForm(profile)
+        // Pre-fill email from auth if profile doesn't have one
+        if (!loaded.email) loaded.email = user.email || ""
+        setForm(loaded)
+        setOriginalForm(loaded)
       } finally {
         setLoading(false)
       }
@@ -152,17 +157,31 @@ export default function ProfilePage() {
 
   const update = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }))
 
+  const hasChanges = useMemo(() => {
+    return JSON.stringify(form) !== JSON.stringify(originalForm)
+  }, [form, originalForm])
+
   const handleSave = async () => {
-    if (!user) return
+    if (!user || !hasChanges) return
     setSaveLoading(true)
     try {
       await upsertProfile({ user_id: user.id, ...formToProfile(form) })
+      setOriginalForm(form)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {
       alert(err.message || "Failed to save profile.")
     } finally {
       setSaveLoading(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await signOut()
+      router.push("/")
+    } catch (err: any) {
+      alert(err.message || "Failed to log out.")
     }
   }
 
@@ -221,18 +240,27 @@ export default function ProfilePage() {
                 <h1 className="text-2xl font-bold tracking-tight">Account Profile</h1>
                 <p className="mt-1 text-sm text-muted-foreground">Manage your personal info, AI settings, and preferences.</p>
               </div>
-              <button
-                onClick={handleSave}
-                disabled={saveLoading}
-                className={cn(
-                  "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
-                  saved ? "bg-emerald-600/20 text-emerald-400" : "bg-emerald-600 text-white hover:bg-emerald-700",
-                  saveLoading && "opacity-70 cursor-not-allowed"
-                )}
-              >
-                {saveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {saved ? "Saved!" : "Save Changes"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-400"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Log Out
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saveLoading || !hasChanges}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
+                    saved ? "bg-emerald-600/20 text-emerald-400" : hasChanges ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-muted text-muted-foreground cursor-not-allowed",
+                    saveLoading && "opacity-70 cursor-not-allowed"
+                  )}
+                >
+                  {saveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {saved ? "Saved!" : "Save Changes"}
+                </button>
+              </div>
             </div>
 
             {/* Account Profile Card */}
@@ -260,7 +288,15 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex-1 text-center sm:text-left">
                   <h2 className="text-xl font-bold text-white">{form.fullName}</h2>
-                  <p className="text-sm text-emerald-400">{form.jobTitle} at {form.companyName}</p>
+                  {form.jobTitle && form.companyName && (
+                    <p className="text-sm text-emerald-400">{form.jobTitle} at {form.companyName}</p>
+                  )}
+                  {form.jobTitle && !form.companyName && (
+                    <p className="text-sm text-emerald-400">{form.jobTitle}</p>
+                  )}
+                  {!form.jobTitle && form.companyName && (
+                    <p className="text-sm text-emerald-400">{form.companyName}</p>
+                  )}
                   <p className="mt-1 text-sm text-muted-foreground">{form.email}</p>
                   <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                     <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400">Solo Plan</span>
@@ -377,7 +413,7 @@ export default function ProfilePage() {
             </section>
 
             {/* AI Configuration */}
-            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
+            <section className="relative z-10 card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">AI Configuration</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">

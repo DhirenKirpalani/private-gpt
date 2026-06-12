@@ -2,11 +2,12 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { Menu, X } from "lucide-react"
+import { Menu, X, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
+import { useAuth } from "@/app/auth-provider"
 
 const navLinkKeys = [
   { href: "/about",      key: "whyNow"    as const, sectionId: "_"         },
@@ -17,11 +18,25 @@ const navLinkKeys = [
   { href: "/pricing",    key: "pricing"   as const, sectionId: "_"         },
 ]
 
+function getInitials(name: string): string {
+  if (!name.trim()) return ""
+  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+}
+
 export function Navbar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [activeSection, setActiveSection] = useState("")
   const [mobileOpen, setMobileOpen] = useState(false)
   const { t, lang, setLang } = useI18n()
+  const { user } = useAuth()
+
+  const handleCTA = () => {
+    if (user) router.push("/chat")
+    else router.push("/signup")
+  }
+  const userName = user?.user_metadata?.full_name || ""
+  const userInitials = getInitials(userName)
 
   useEffect(() => {
     // Clear highlight immediately when leaving the homepage
@@ -124,12 +139,20 @@ export function Navbar() {
             </button>
           </div>
 
-          <Link href="/login" className="hidden text-sm font-medium text-muted-foreground hover:text-foreground transition-colors md:block">
-            {t("logIn")}
-          </Link>
-          <Link href="/signup" className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white whitespace-nowrap transition-colors hover:bg-emerald-700 sm:px-4">
-            {t("getStarted")}
-          </Link>
+          {user ? (
+            <Link href="/profile" className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
+              {userInitials || <User className="h-4 w-4 text-white" />}
+            </Link>
+          ) : (
+            <>
+              <Link href="/login" className="hidden text-sm font-medium text-muted-foreground hover:text-foreground transition-colors md:block">
+                {t("logIn")}
+              </Link>
+              <button onClick={handleCTA} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white whitespace-nowrap transition-colors hover:bg-emerald-700 sm:px-4">
+                {t("getStarted")}
+              </button>
+            </>
+          )}
           {/* Hamburger — mobile only */}
           <button
             onClick={() => setMobileOpen(o => !o)}
@@ -163,9 +186,15 @@ export function Navbar() {
             )
           })}
           <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-3">
-            <Link href="/login" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-white/5 hover:text-white transition-colors">
-              {t("logIn")}
-            </Link>
+            {user ? (
+              <Link href="/profile" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-white/5 hover:text-white transition-colors">
+                Profile
+              </Link>
+            ) : (
+              <Link href="/login" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-white/5 hover:text-white transition-colors">
+                {t("logIn")}
+              </Link>
+            )}
             <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
               <button
                 onClick={() => setLang("en")}
