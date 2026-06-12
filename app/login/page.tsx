@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Eye, EyeOff, CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,7 @@ const featureKeys = [
   "loginFeature3",
 ] as const
 
-export default function LoginPage() {
+function LoginContent() {
   const { t } = useI18n()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -159,5 +159,17 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="-mt-[72px] flex h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }
