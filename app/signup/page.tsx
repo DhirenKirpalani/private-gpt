@@ -3,11 +3,13 @@
 import Link from "next/link"
 import Image from "next/image"
 import { useState } from "react"
-import { Eye, EyeOff, CheckCircle2 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Eye, EyeOff, CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useI18n } from "@/lib/i18n"
+import { signUp, signIn } from "@/lib/supabase"
 
 const perkKeys = [
   "signupPerk1",
@@ -17,6 +19,7 @@ const perkKeys = [
 
 export default function SignupPage() {
   const { t } = useI18n()
+  const router = useRouter()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -24,11 +27,45 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!agreedToTerms) return
-    console.log("Signup:", { name, email, password, confirmPassword })
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
+    setError("")
+    setSuccess("")
+    setLoading(true)
+    try {
+      await signUp(email, password, name)
+      // Try auto-signin — may fail if email confirmation is required
+      try {
+        await signIn(email, password)
+        router.push("/profile")
+      } catch (loginErr: any) {
+        if (loginErr.message?.toLowerCase().includes("email not confirmed") || loginErr.message?.toLowerCase().includes("not confirmed")) {
+          setSuccess("Account created! Please check your email and click the confirmation link. Then come back and log in.")
+        } else {
+          throw loginErr
+        }
+      }
+    } catch (err: any) {
+      const msg = err.message || ""
+      if (msg.toLowerCase().includes("email not confirmed") || msg.toLowerCase().includes("not confirmed")) {
+        setSuccess("Account created! Please check your email and click the confirmation link. Then come back and log in.")
+      } else if (msg.toLowerCase().includes("user already registered")) {
+        setError("This email is already registered. Please log in instead.")
+      } else {
+        setError(msg || "Something went wrong. Please try again.")
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -119,13 +156,32 @@ export default function SignupPage() {
               <input type="checkbox" checked={agreedToTerms} onChange={e => setAgreedToTerms(e.target.checked)}
                 className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500 cursor-pointer" required />
               <span className="text-sm text-muted-foreground leading-snug">
-                {t("agreeTerms")}
+                {t("agreeTerms")}{" "}
+                <Link href="#" className="text-emerald-400 hover:underline">{t("termsAnd")}</Link>{" "}
+                {t("and")}{" "}
+                <Link href="#" className="text-emerald-400 hover:underline">{t("privacyPolicy")}</Link>
               </span>
             </label>
 
-            <Button type="submit" disabled={!agreedToTerms}
+            {error && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500/20">
+                  <span className="text-xs font-bold text-red-400">!</span>
+                </div>
+                <p className="text-sm leading-relaxed text-red-300">{error}</p>
+              </div>
+            )}
+            {success && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                </div>
+                <p className="text-sm leading-relaxed text-emerald-300">{success}</p>
+              </div>
+            )}
+            <Button type="submit" disabled={!agreedToTerms || loading}
               className="w-full bg-emerald-600 hover:bg-emerald-700 py-5 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
-              {t("createAccountBtn")}
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("createAccountBtn")}
             </Button>
           </form>
 

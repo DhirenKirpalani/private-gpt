@@ -1,55 +1,190 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Search, Save, Info, X, ChevronDown, Check } from "lucide-react"
+import { Search, Save, Info, X, ChevronDown, Check, Loader2, User } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useAuth } from "@/app/auth-provider"
+import { getProfile, upsertProfile, uploadAvatar, type Profile } from "@/lib/supabase"
+
+const defaultForm = {
+  fullName: "",
+  jobTitle: "",
+  phone: "",
+  location: "",
+  linkedinUrl: "",
+  companyName: "",
+  industry: "Consulting",
+  companySize: "1-10",
+  yearFounded: "",
+  website: "",
+  email: "",
+  businessDescription: "",
+  targetAudience: "",
+  keyProducts: "",
+  competitors: "",
+  aiName: "",
+  aiRole: "",
+  brandVoice: "",
+  communicationStyle: "Formal",
+  toneExamples: "",
+  wordsToAvoid: "",
+  clarificationPrompt: "",
+  responseLength: "Standard",
+  avatarUrl: "",
+  languages: "",
+  logoUrl: "",
+  brandColors: "",
+  slogan: "",
+  docCategories: "",
+  preferredSources: "",
+}
+
+// JSONB helpers: array ↔ comma-separated string
+function jsonbToString(val: any): string {
+  if (Array.isArray(val)) return val.join(", ")
+  if (typeof val === "string") return val
+  return ""
+}
+function stringToJsonb(val: string): string[] {
+  if (!val.trim()) return []
+  return val.split(",").map(s => s.trim()).filter(Boolean)
+}
+
+function profileToForm(p: Profile | null) {
+  if (!p) return defaultForm
+  return {
+    fullName: p.full_name || "",
+    jobTitle: p.job_title || "",
+    phone: p.phone || "",
+    location: p.location || "",
+    linkedinUrl: p.linkedin_url || "",
+    companyName: p.company_name || "",
+    industry: p.industry || "Consulting",
+    companySize: p.company_size || "1-10",
+    yearFounded: p.year_founded || "",
+    website: p.website || "",
+    email: p.contact_email || "",
+    businessDescription: p.business_description || "",
+    targetAudience: p.target_audience || "",
+    keyProducts: p.key_products || "",
+    competitors: jsonbToString(p.competitors),
+    aiName: p.ai_name || "",
+    aiRole: p.ai_role || "",
+    brandVoice: p.brand_voice || "",
+    communicationStyle: p.communication_style || "Formal",
+    toneExamples: p.tone_examples || "",
+    wordsToAvoid: p.words_to_avoid || "",
+    clarificationPrompt: p.clarification_prompt || "",
+    responseLength: p.response_length || "Standard",
+    languages: jsonbToString(p.languages),
+    avatarUrl: p.avatar_url || "",
+    logoUrl: p.logo_url || "",
+    brandColors: jsonbToString(p.brand_colors),
+    slogan: p.slogan || "",
+    docCategories: jsonbToString(p.doc_categories),
+    preferredSources: jsonbToString(p.preferred_sources),
+  }
+}
+
+function formToProfile(form: typeof defaultForm): Partial<Profile> {
+  return {
+    full_name: form.fullName,
+    job_title: form.jobTitle,
+    phone: form.phone,
+    location: form.location,
+    linkedin_url: form.linkedinUrl,
+    company_name: form.companyName,
+    industry: form.industry,
+    company_size: form.companySize,
+    year_founded: form.yearFounded,
+    website: form.website,
+    contact_email: form.email,
+    business_description: form.businessDescription,
+    target_audience: form.targetAudience,
+    key_products: form.keyProducts,
+    competitors: stringToJsonb(form.competitors),
+    ai_name: form.aiName,
+    ai_role: form.aiRole,
+    brand_voice: form.brandVoice,
+    communication_style: form.communicationStyle,
+    tone_examples: form.toneExamples,
+    words_to_avoid: form.wordsToAvoid,
+    clarification_prompt: form.clarificationPrompt,
+    response_length: form.responseLength,
+    languages: stringToJsonb(form.languages),
+    avatar_url: form.avatarUrl,
+    logo_url: form.logoUrl,
+    brand_colors: stringToJsonb(form.brandColors),
+    slogan: form.slogan,
+    doc_categories: stringToJsonb(form.docCategories),
+    preferred_sources: stringToJsonb(form.preferredSources),
+  }
+}
 
 export default function ProfilePage() {
+  const { user } = useAuth()
   const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saveLoading, setSaveLoading] = useState(false)
   const [tooltipOpen, setTooltipOpen] = useState<string | null>(null)
   const [promptExampleOpen, setPromptExampleOpen] = useState<string | null>(null)
   const [responseDropdownOpen, setResponseDropdownOpen] = useState(false)
-  const [form, setForm] = useState({
-    fullName: "Alex Rivera",
-    jobTitle: "Founder",
-    phone: "+1 (555) 000-0000",
-    location: "New York, NY",
-    linkedinUrl: "",
-    companyName: "Us+ AI Bureau",
-    industry: "Consulting",
-    companySize: "1-10",
-    yearFounded: "2022",
-    website: "https://urbanbureau.net",
-    email: "alex@urbanbureau.net",
-    businessDescription: "We help small and medium businesses implement AI solutions to streamline operations, improve customer support, and scale knowledge management.",
-    targetAudience: "SMBs, agencies, and consultants looking to automate repetitive tasks using private AI.",
-    keyProducts: "AI consulting, custom agent development, knowledge base setup, workflow automation",
-    competitors: "Traditional consulting firms, generic chatbot platforms",
-    aiName: "Exploro Agent",
-    aiRole: "Business assistant that answers questions, drafts documents, and helps onboard new team members using our internal knowledge.",
-    brandVoice: "Professional, concise, and knowledgeable",
-    communicationStyle: "Formal",
-    toneExamples: "We say 'let us help you' instead of 'we can help you'. We use active voice and avoid jargon unless necessary.",
-    wordsToAvoid: "cheap, guaranteed, miracle, instantly",
-    clarificationPrompt: "If the user's request is vague, lacks context, or refers to a past situation without details, ask a concise clarifying question. Example: If they do not share a source or example, ask: 'Do you want to share a source that I can use as an example?' Never guess. Always ask before generating.",
-    responseLength: "Standard",
-    languages: "English, Spanish",
-    logoUrl: "",
-    brandColors: "#10b981, #202733",
-    slogan: "Your business. Your knowledge. Your AI.",
-    docCategories: "SOPs, FAQs, Sales Playbooks, Onboarding Guides, Compliance Docs",
-    preferredSources: "Internal PDFs, Google Drive, Notion, Website pages",
-  })
+  const [form, setForm] = useState(defaultForm)
+
+  useEffect(() => {
+    async function load() {
+      if (!user) return
+      try {
+        const profile = await getProfile(user.id)
+        setForm(profileToForm(profile))
+      } catch {
+        // No profile yet — keep defaults
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [user])
 
   const update = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }))
 
-  const handleSave = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  const handleSave = async () => {
+    if (!user) return
+    setSaveLoading(true)
+    try {
+      await upsertProfile({ user_id: user.id, ...formToProfile(form) })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err: any) {
+      alert(err.message || "Failed to save profile.")
+    } finally {
+      setSaveLoading(false)
+    }
+  }
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    if (!file.type.startsWith("image/")) {
+      alert("Please upload an image file.")
+      return
+    }
+    setSaveLoading(true)
+    try {
+      const publicUrl = await uploadAvatar(user.id, file)
+      setForm(f => ({ ...f, avatarUrl: publicUrl }))
+      await upsertProfile({ user_id: user.id, avatar_url: publicUrl })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err: any) {
+      alert(err.message || "Failed to upload avatar.")
+    } finally {
+      setSaveLoading(false)
+    }
   }
 
   return (
@@ -66,7 +201,11 @@ export default function ProfilePage() {
             <input className="w-full rounded-full border bg-muted/50 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none" placeholder="Search..." />
           </div>
         </div>
-        <div className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">E</div>
+        <Link href="/chat" className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
+          {form.fullName.trim()
+            ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+            : <User className="h-4 w-4 text-white" />}
+        </Link>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -79,24 +218,61 @@ export default function ProfilePage() {
 
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Business Profile</h1>
-                <p className="mt-1 text-sm text-muted-foreground">Configure how your AI understands and represents your business.</p>
+                <h1 className="text-2xl font-bold tracking-tight">Account Profile</h1>
+                <p className="mt-1 text-sm text-muted-foreground">Manage your personal info, AI settings, and preferences.</p>
               </div>
               <button
                 onClick={handleSave}
+                disabled={saveLoading}
                 className={cn(
                   "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
-                  saved ? "bg-emerald-600/20 text-emerald-400" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                  saved ? "bg-emerald-600/20 text-emerald-400" : "bg-emerald-600 text-white hover:bg-emerald-700",
+                  saveLoading && "opacity-70 cursor-not-allowed"
                 )}
               >
-                <Save className="h-4 w-4" />
+                {saveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 {saved ? "Saved!" : "Save Changes"}
               </button>
             </div>
 
+            {/* Account Profile Card */}
+            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+                <div className="relative">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-2xl font-bold text-white overflow-hidden">
+                    {form.avatarUrl ? (
+                      <img src={form.avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                    ) : form.fullName.trim() ? (
+                      form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+                    ) : (
+                      <User className="h-10 w-10 text-white/80" />
+                    )}
+                  </div>
+                  <label className="absolute -bottom-1 -right-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-white/10 text-muted-foreground backdrop-blur-sm border border-white/10 hover:bg-emerald-600 hover:text-white transition-colors">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      className="sr-only"
+                      onChange={handleAvatarUpload}
+                    />
+                  </label>
+                </div>
+                <div className="flex-1 text-center sm:text-left">
+                  <h2 className="text-xl font-bold text-white">{form.fullName}</h2>
+                  <p className="text-sm text-emerald-400">{form.jobTitle} at {form.companyName}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{form.email}</p>
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                    <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400">Solo Plan</span>
+                    <span className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{form.location}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
             {/* Personal */}
             <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Personal</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Personal Information</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="fullName">Full Name</Label>
@@ -460,11 +636,15 @@ export default function ProfilePage() {
                 </>
               ) : tooltipOpen === "aiRole" ? (
                 <>
-                  <p><strong className="text-white">Be specific about responsibilities.</strong> Instead of "helps customers," write "answers WhatsApp inquiries about pricing, schedules demos, and escalates technical issues to support@company.com."</p>
-                  <p><strong className="text-white">Define scope & boundaries.</strong> Clarify what the AI should not do — e.g., "does not process payments or access sensitive HR data."</p>
-                  <p><strong className="text-white">Mention channels & tools.</strong> List where it operates: WhatsApp, email, Slack, website chat, internal docs.</p>
-                  <p><strong className="text-white">Example:</strong> "Nira greets website visitors, qualifies leads by asking 3 discovery questions, books Calendly meetings, and sends follow-up summaries to the sales Slack channel."
-                  </p>
+                  <p><strong className="text-white">Describe Your AI Agent Clearly</strong></p>
+                  <p>Give your AI a specific role and clear responsibilities. Instead of "helps customers," write exactly what it should do, where it works, and what it should avoid.</p>
+                  <p><strong className="text-white">Include:</strong></p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li>Main tasks and responsibilities.</li>
+                    <li>Channels and tools it uses (WhatsApp, email, Slack, website, etc.).</li>
+                    <li>Boundaries and restrictions (what it should never do).</li>
+                  </ul>
+                  <p><strong className="text-white">Example:</strong> Nira answers WhatsApp questions about pricing, asks 3 qualifying questions, books Calendly meetings, sends summaries to the Sales Slack channel, and escalates technical issues to support@company.com. Nira does not process payments or access sensitive customer data.</p>
                 </>
               ) : (
                 <>

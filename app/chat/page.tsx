@@ -6,10 +6,12 @@ import Image from "next/image"
 import {
   Plus, MessageSquare, Search, Send, Paperclip, Mic,
   Bot, Copy, RefreshCw, Share2, Sparkles,
-  PanelLeftClose, Palette, X, Check,
+  PanelLeftClose, Palette, X, Check, User,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/app/auth-provider"
+import { getProfile } from "@/lib/supabase"
 
 interface Message {
   id: string
@@ -35,7 +37,13 @@ const loadingStates = [
   "Generating response...",
 ]
 
+function getInitials(name: string): string {
+  if (!name.trim()) return ""
+  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+}
+
 export default function ChatPage() {
+  const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -46,7 +54,21 @@ export default function ChatPage() {
   const [customSolid, setCustomSolid] = useState("#202733")
   const [customGradientFrom, setCustomGradientFrom] = useState("#1a2332")
   const [customGradientTo, setCustomGradientTo] = useState("#202733")
+  const [userInitials, setUserInitials] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    async function load() {
+      if (!user) return
+      try {
+        const profile = await getProfile(user.id)
+        setUserInitials(getInitials(profile?.full_name || user.user_metadata?.full_name || ""))
+      } catch {
+        setUserInitials(getInitials(user.user_metadata?.full_name || ""))
+      }
+    }
+    load()
+  }, [user])
 
   const solidColors = [
     { label: "Dark", value: "bg-background" },
@@ -146,16 +168,17 @@ export default function ChatPage() {
           <button
             onClick={() => setColorPanelOpen(o => !o)}
             className={cn(
-              "rounded-lg p-2 transition-colors",
+              "flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
               colorPanelOpen ? "bg-emerald-600/15 text-emerald-400" : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
-            title="Chat background"
+            title="Customize chat background"
           >
-            <Palette className="h-4 w-4" />
+            <Palette className="h-5 w-5" />
+            <span className="hidden sm:inline">Theme</span>
           </button>
-          <div className="flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white">
-            E
-          </div>
+          <Link href="/profile" className="flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
+            {userInitials || <User className="h-4 w-4 text-white" />}
+          </Link>
         </div>
       </header>
 
@@ -210,7 +233,7 @@ export default function ChatPage() {
               {/* Greeting */}
               <div className="mb-2 text-center">
                 <p className="text-sm font-medium text-muted-foreground">Good morning</p>
-                <h2 className="gradient-text-shimmer pb-1 text-4xl font-extrabold tracking-tight sm:text-5xl">Alex</h2>
+                <h2 className="pb-1 text-4xl font-extrabold tracking-tight text-white sm:text-5xl">Alex</h2>
               </div>
 
               <p className="mb-8 max-w-md text-center text-base text-muted-foreground">
@@ -250,7 +273,9 @@ export default function ChatPage() {
                     "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold",
                     msg.role === "user" ? "bg-muted text-foreground" : "bg-emerald-600 text-white"
                   )}>
-                    {msg.role === "user" ? "U" : <Bot className="h-4 w-4" />}
+                    {msg.role === "user"
+                      ? (userInitials || <User className="h-4 w-4" />)
+                      : <Bot className="h-4 w-4" />}
                   </div>
                   <div className={cn("max-w-[72%] space-y-2", msg.role === "user" && "flex flex-col items-end")}>
                     <div className={cn(
