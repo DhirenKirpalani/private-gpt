@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/app/auth-provider"
+import { useI18n } from "@/lib/i18n"
 import { getProfile, upsertProfile, uploadAvatar, signOut, type Profile } from "@/lib/supabase"
 
 const defaultForm = {
@@ -128,6 +129,7 @@ function formToProfile(form: typeof defaultForm): Partial<Profile> {
 
 export default function ProfilePage() {
   const { user } = useAuth()
+  const { t, lang, setLang } = useI18n()
   const router = useRouter()
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -170,7 +172,7 @@ export default function ProfilePage() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {
-      alert(err.message || "Failed to save profile.")
+      alert(err.message || t("profileErrorSave"))
     } finally {
       setSaveLoading(false)
     }
@@ -181,7 +183,7 @@ export default function ProfilePage() {
       await signOut()
       router.push("/")
     } catch (err: any) {
-      alert(err.message || "Failed to log out.")
+      alert(err.message || t("profileErrorLogout"))
     }
   }
 
@@ -189,7 +191,7 @@ export default function ProfilePage() {
     const file = e.target.files?.[0]
     if (!file || !user) return
     if (!file.type.startsWith("image/")) {
-      alert("Please upload an image file.")
+      alert(t("profileErrorImage"))
       return
     }
     setSaveLoading(true)
@@ -200,7 +202,7 @@ export default function ProfilePage() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {
-      alert(err.message || "Failed to upload avatar.")
+      alert(err.message || t("profileErrorAvatar"))
     } finally {
       setSaveLoading(false)
     }
@@ -210,21 +212,48 @@ export default function ProfilePage() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* Header */}
-      <header className="flex h-16 shrink-0 items-center gap-4 overflow-visible border-b bg-background/80 backdrop-blur-md px-4">
+      <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-visible border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
         <Link href="/" className="flex shrink-0 items-center overflow-visible">
           <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "140px" }} />
         </Link>
-        <div className="flex flex-1 justify-center">
+        <div className="hidden flex-1 justify-center md:flex">
           <div className="relative w-full max-w-lg">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input className="w-full rounded-full border bg-muted/50 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none" placeholder="Search..." />
+            <input className="w-full rounded-full border bg-muted/50 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30" placeholder={t("profileSearchPlaceholder")} />
           </div>
         </div>
-        <Link href="/chat" className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
-          {form.fullName.trim()
-            ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
-            : <User className="h-4 w-4 text-white" />}
-        </Link>
+        <div className="flex flex-1 justify-end items-center gap-2 md:gap-3 md:flex-none">
+          {/* Language toggle */}
+          <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
+            <button
+              onClick={() => setLang("en")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                lang === "en"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-muted-foreground hover:text-white"
+              )}
+            >
+              EN
+            </button>
+            <button
+              onClick={() => setLang("es")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                lang === "es"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-muted-foreground hover:text-white"
+              )}
+            >
+              ES
+            </button>
+          </div>
+          <Link href="/chat" className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
+            {form.fullName.trim()
+              ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+              : <User className="h-4 w-4 text-white" />}
+          </Link>
+        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -237,8 +266,8 @@ export default function ProfilePage() {
 
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Account Profile</h1>
-                <p className="mt-1 text-sm text-muted-foreground">Manage your personal info, AI settings, and preferences.</p>
+                <h1 className="text-2xl font-bold tracking-tight">{t("profileTitle")}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">{t("profileSubtitle")}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -246,7 +275,7 @@ export default function ProfilePage() {
                   className="flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-400"
                 >
                   <LogOut className="h-4 w-4" />
-                  Log Out
+                  {t("profileLogout")}
                 </button>
                 <button
                   onClick={handleSave}
@@ -258,7 +287,7 @@ export default function ProfilePage() {
                   )}
                 >
                   {saveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {saved ? "Saved!" : "Save Changes"}
+                  {saved ? t("profileSaved") : t("profileSaveChanges")}
                 </button>
               </div>
             </div>
@@ -289,7 +318,7 @@ export default function ProfilePage() {
                 <div className="flex-1 text-center sm:text-left">
                   <h2 className="text-xl font-bold text-white">{form.fullName}</h2>
                   {form.jobTitle && form.companyName && (
-                    <p className="text-sm text-emerald-400">{form.jobTitle} at {form.companyName}</p>
+                    <p className="text-sm text-emerald-400">{form.jobTitle} {t("profileAt")} {form.companyName}</p>
                   )}
                   {form.jobTitle && !form.companyName && (
                     <p className="text-sm text-emerald-400">{form.jobTitle}</p>
@@ -299,7 +328,7 @@ export default function ProfilePage() {
                   )}
                   <p className="mt-1 text-sm text-muted-foreground">{form.email}</p>
                   <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                    <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400">Solo Plan</span>
+                    <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400">{t("profileSoloPlan")}</span>
                     <span className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{form.location}</span>
                   </div>
                 </div>
@@ -308,54 +337,74 @@ export default function ProfilePage() {
 
             {/* Personal */}
             <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Personal Information</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionPersonal")}</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="fullName">Full Name</Label>
+                  <Label htmlFor="fullName">{t("profileLabelFullName")}</Label>
                   <Input id="fullName" value={form.fullName} onChange={e => update("fullName", e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="jobTitle">Job Title</Label>
+                  <Label htmlFor="jobTitle">{t("profileLabelJobTitle")}</Label>
                   <Input id="jobTitle" value={form.jobTitle} onChange={e => update("jobTitle", e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="phone">Phone</Label>
+                  <Label htmlFor="phone">{t("profileLabelPhone")}</Label>
                   <Input id="phone" type="tel" value={form.phone} onChange={e => update("phone", e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="location">Location</Label>
+                  <Label htmlFor="location">{t("profileLabelLocation")}</Label>
                   <Input id="location" value={form.location} onChange={e => update("location", e.target.value)} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="linkedinUrl">LinkedIn URL</Label>
-                  <Input id="linkedinUrl" type="url" value={form.linkedinUrl} onChange={e => update("linkedinUrl", e.target.value)} placeholder="https://linkedin.com/in/yourprofile" />
+                  <Label htmlFor="linkedinUrl">{t("profileLabelLinkedIn")}</Label>
+                  <Input id="linkedinUrl" type="url" value={form.linkedinUrl} onChange={e => update("linkedinUrl", e.target.value)} placeholder={t("profilePlaceholderLinkedIn")} />
                 </div>
               </div>
             </section>
 
             {/* Company */}
             <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Company</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionCompany")}</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="companyName">Company Name</Label>
+                  <Label htmlFor="companyName">{t("profileLabelCompanyName")}</Label>
                   <Input id="companyName" value={form.companyName} onChange={e => update("companyName", e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="industry">Industry</Label>
+                  <Label htmlFor="industry">{t("profileLabelIndustry")}</Label>
                   <select
                     id="industry"
                     value={form.industry}
                     onChange={e => update("industry", e.target.value)}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   >
-                    {["Consulting","Agencies","Real Estate","Healthcare","Education","Wellness","Restaurants","Technology","Legal","Finance","SMB","Marketing","Manufacturing","Hospitality","Other"].map(i => (
-                      <option key={i} value={i}>{i}</option>
-                    ))}
+                    {(() => {
+                      const industries = ["Consulting","Agencies","Real Estate","Healthcare","Education","Wellness","Restaurants","Technology","Legal","Finance","SMB","Marketing","Manufacturing","Hospitality","Other"]
+                      const industryLabels: Record<string, string> = {
+                        Consulting: t("profileIndustryConsulting"),
+                        Agencies: t("profileIndustryAgencies"),
+                        "Real Estate": t("profileIndustryRealEstate"),
+                        Healthcare: t("profileIndustryHealthcare"),
+                        Education: t("profileIndustryEducation"),
+                        Wellness: t("profileIndustryWellness"),
+                        Restaurants: t("profileIndustryRestaurants"),
+                        Technology: t("profileIndustryTechnology"),
+                        Legal: t("profileIndustryLegal"),
+                        Finance: t("profileIndustryFinance"),
+                        SMB: t("profileIndustrySMB"),
+                        Marketing: t("profileIndustryMarketing"),
+                        Manufacturing: t("profileIndustryManufacturing"),
+                        Hospitality: t("profileIndustryHospitality"),
+                        Other: t("profileIndustryOther"),
+                      }
+                      return industries.map(i => (
+                        <option key={i} value={i}>{industryLabels[i] || i}</option>
+                      ))
+                    })()}
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="companySize">Company Size</Label>
+                  <Label htmlFor="companySize">{t("profileLabelCompanySize")}</Label>
                   <select
                     id="companySize"
                     value={form.companySize}
@@ -368,45 +417,45 @@ export default function ProfilePage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="yearFounded">Year Founded</Label>
+                  <Label htmlFor="yearFounded">{t("profileLabelYearFounded")}</Label>
                   <Input id="yearFounded" value={form.yearFounded} onChange={e => update("yearFounded", e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="website">Website</Label>
+                  <Label htmlFor="website">{t("profileLabelWebsite")}</Label>
                   <Input id="website" type="url" value={form.website} onChange={e => update("website", e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email">Contact Email</Label>
+                  <Label htmlFor="email">{t("profileLabelContactEmail")}</Label>
                   <Input id="email" type="email" value={form.email} onChange={e => update("email", e.target.value)} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="businessDescription">Business Description</Label>
+                  <Label htmlFor="businessDescription">{t("profileLabelBusinessDesc")}</Label>
                   <textarea
                     id="businessDescription"
                     rows={3}
                     value={form.businessDescription}
                     onChange={e => update("businessDescription", e.target.value)}
-                    placeholder="Describe what your company does..."
+                    placeholder={t("profilePlaceholderBusinessDesc")}
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="targetAudience">Target Audience</Label>
+                  <Label htmlFor="targetAudience">{t("profileLabelTargetAudience")}</Label>
                   <textarea
                     id="targetAudience"
                     rows={2}
                     value={form.targetAudience}
                     onChange={e => update("targetAudience", e.target.value)}
-                    placeholder="Who are your ideal customers?"
+                    placeholder={t("profilePlaceholderTargetAudience")}
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="keyProducts">Key Products / Services</Label>
+                  <Label htmlFor="keyProducts">{t("profileLabelKeyProducts")}</Label>
                   <Input id="keyProducts" value={form.keyProducts} onChange={e => update("keyProducts", e.target.value)} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="competitors">Main Competitors</Label>
+                  <Label htmlFor="competitors">{t("profileLabelCompetitors")}</Label>
                   <Input id="competitors" value={form.competitors} onChange={e => update("competitors", e.target.value)} />
                 </div>
               </div>
@@ -414,28 +463,38 @@ export default function ProfilePage() {
 
             {/* AI Configuration */}
             <section className="relative z-10 card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">AI Configuration</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionAI")}</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="aiName">AI Agent Name</Label>
-                  <Input id="aiName" value={form.aiName} onChange={e => update("aiName", e.target.value)} placeholder="e.g. Alex, Support Bot, CompanyAI" />
+                  <Label htmlFor="aiName">{t("profileLabelAIName")}</Label>
+                  <Input id="aiName" value={form.aiName} onChange={e => update("aiName", e.target.value)} placeholder={t("profilePlaceholderAIName")} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="communicationStyle">Communication Style</Label>
+                  <Label htmlFor="communicationStyle">{t("profileLabelCommStyle")}</Label>
                   <select
                     id="communicationStyle"
                     value={form.communicationStyle}
                     onChange={e => update("communicationStyle", e.target.value)}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   >
-                    {["Formal","Professional","Friendly","Casual","Concise","Enthusiastic"].map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
+                    {(() => {
+                      const commStyleLabels: Record<string, string> = {
+                        Formal: t("profileCommStyleFormal"),
+                        Professional: t("profileCommStyleProfessional"),
+                        Friendly: t("profileCommStyleFriendly"),
+                        Casual: t("profileCommStyleCasual"),
+                        Concise: t("profileCommStyleConcise"),
+                        Enthusiastic: t("profileCommStyleEnthusiastic"),
+                      }
+                      return ["Formal","Professional","Friendly","Casual","Concise","Enthusiastic"].map(s => (
+                        <option key={s} value={s}>{commStyleLabels[s] || s}</option>
+                      ))
+                    })()}
                   </select>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="aiRole">AI Role & Job Description</Label>
+                    <Label htmlFor="aiRole">{t("profileLabelAIRole")}</Label>
                     <button type="button" onClick={() => setTooltipOpen("aiRole")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
                       <Info className="h-4 w-4" />
                     </button>
@@ -445,24 +504,24 @@ export default function ProfilePage() {
                     rows={3}
                     value={form.aiRole}
                     onChange={e => update("aiRole", e.target.value)}
-                    placeholder="Describe what this AI agent does day-to-day..."
+                    placeholder={t("profilePlaceholderAIRole")}
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="brandVoice">Brand Voice</Label>
+                  <Label htmlFor="brandVoice">{t("profileLabelBrandVoice")}</Label>
                   <textarea
                     id="brandVoice"
                     rows={3}
                     value={form.brandVoice}
                     onChange={e => update("brandVoice", e.target.value)}
-                    placeholder="Describe how your AI should sound and communicate..."
+                    placeholder={t("profilePlaceholderBrandVoice")}
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="toneExamples">Tone Examples</Label>
+                    <Label htmlFor="toneExamples">{t("profileLabelToneExamples")}</Label>
                     <button type="button" onClick={() => setTooltipOpen("toneExamples")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
                       <Info className="h-4 w-4" />
                     </button>
@@ -472,37 +531,37 @@ export default function ProfilePage() {
                     rows={2}
                     value={form.toneExamples}
                     onChange={e => update("toneExamples", e.target.value)}
-                    placeholder="Provide example phrases your AI should use..."
+                    placeholder={t("profilePlaceholderToneExamples")}
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="wordsToAvoid">Words & Phrases to Avoid</Label>
-                  <Input id="wordsToAvoid" value={form.wordsToAvoid} onChange={e => update("wordsToAvoid", e.target.value)} placeholder="cheap, guaranteed, miracle..." />
+                  <Label htmlFor="wordsToAvoid">{t("profileLabelWordsToAvoid")}</Label>
+                  <Input id="wordsToAvoid" value={form.wordsToAvoid} onChange={e => update("wordsToAvoid", e.target.value)} placeholder={t("profilePlaceholderWordsToAvoid")} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="clarificationPrompt">Clarification Prompt</Label>
+                  <Label htmlFor="clarificationPrompt">{t("profileLabelClarificationPrompt")}</Label>
                   <textarea
                     id="clarificationPrompt"
                     rows={4}
                     value={form.clarificationPrompt}
                     onChange={e => update("clarificationPrompt", e.target.value)}
-                    placeholder="Instruct the AI when and how to ask clarifying questions..."
+                    placeholder={t("profilePlaceholderClarification")}
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
-                  <p className="text-xs text-muted-foreground">This text is injected into the AI system prompt. It tells Nira when to ask follow-up questions instead of guessing.</p>
+                  <p className="text-xs text-muted-foreground">{t("profileHelperClarification")}</p>
                 </div>
 
                 {/* Prompt Use Case Examples */}
                 <div className="space-y-2 sm:col-span-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Prompt Use Case Examples</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("profilePromptExamplesTitle")}</p>
                   <div className="flex flex-wrap gap-2">
                     {[
-                      { key: "analysis", label: "Analysis" },
-                      { key: "proposal", label: "Proposals" },
-                      { key: "report", label: "Reports" },
-                      { key: "email", label: "Emails" },
-                      { key: "faq", label: "FAQ" },
+                      { key: "analysis", label: t("profilePromptAnalysis") },
+                      { key: "proposal", label: t("profilePromptProposal") },
+                      { key: "report", label: t("profilePromptReport") },
+                      { key: "email", label: t("profilePromptEmail") },
+                      { key: "faq", label: t("profilePromptFAQ") },
                     ].map(tab => (
                       <button
                         key={tab.key}
@@ -517,18 +576,33 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="relative space-y-1.5">
-                  <Label>Preferred Response</Label>
+                  <Label>{t("profileLabelPreferredResponse")}</Label>
                   <button
                     type="button"
                     onClick={() => setResponseDropdownOpen(o => !o)}
                     className="flex h-10 w-full items-center justify-between rounded-md border border-white/10 bg-[#2a3444] px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   >
-                    {form.responseLength}
+                    {(() => {
+                      const responseLengthLabels: Record<string, string> = {
+                        Concise: t("profileResponseConcise"),
+                        Standard: t("profileResponseStandard"),
+                        Detailed: t("profileResponseDetailed"),
+                        Comprehensive: t("profileResponseComprehensive"),
+                      }
+                      return responseLengthLabels[form.responseLength] || form.responseLength
+                    })()}
                     <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", responseDropdownOpen && "rotate-180")} />
                   </button>
                   {responseDropdownOpen && (
                     <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-white/10 bg-[#2a3444] py-1 shadow-xl">
-                      {["Concise","Standard","Detailed","Comprehensive"].map(s => (
+                      {["Concise","Standard","Detailed","Comprehensive"].map(s => {
+                        const responseLengthLabels: Record<string, string> = {
+                          Concise: t("profileResponseConcise"),
+                          Standard: t("profileResponseStandard"),
+                          Detailed: t("profileResponseDetailed"),
+                          Comprehensive: t("profileResponseComprehensive"),
+                        }
+                        return (
                         <button
                           key={s}
                           type="button"
@@ -538,37 +612,37 @@ export default function ProfilePage() {
                             form.responseLength === s ? "text-emerald-400" : "text-white"
                           )}
                         >
-                          {s}
+                          {responseLengthLabels[s] || s}
                           {form.responseLength === s && <Check className="h-4 w-4" />}
                         </button>
-                      ))}
+                      )})}
                     </div>
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="languages">Languages</Label>
-                  <Input id="languages" value={form.languages} onChange={e => update("languages", e.target.value)} placeholder="e.g. English, Spanish" />
+                  <Label htmlFor="languages">{t("profileLabelLanguages")}</Label>
+                  <Input id="languages" value={form.languages} onChange={e => update("languages", e.target.value)} placeholder={t("profilePlaceholderLanguages")} />
                 </div>
               </div>
             </section>
 
             {/* Brand Identity */}
             <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Brand Identity</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionBrand")}</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
-                    <Label>Upload Logo</Label>
+                    <Label>{t("profileLabelUploadLogo")}</Label>
                     <button type="button" onClick={() => setTooltipOpen("logoUpload")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
                       <Info className="h-4 w-4" />
                     </button>
                   </div>
                   <label className="flex cursor-pointer items-center gap-3 rounded-md border border-white/10 bg-[#2a3444] px-3 py-2.5 text-sm transition-colors hover:border-emerald-500/30">
                     <div className="flex h-8 items-center justify-center rounded bg-emerald-600/15 px-3 text-xs font-semibold text-emerald-400">
-                      Browse
+                      {t("profileBrowse")}
                     </div>
                     <span className="truncate text-muted-foreground">
-                      {form.logoUrl || "PNG, JPEG, or SVG — max 2 MB"}
+                      {form.logoUrl || t("profilePlaceholderLogo")}
                     </span>
                     <input
                       type="file"
@@ -580,15 +654,15 @@ export default function ProfilePage() {
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="brandColors">Brand Colors</Label>
+                    <Label htmlFor="brandColors">{t("profileLabelBrandColors")}</Label>
                     <button type="button" onClick={() => setTooltipOpen("brandColors")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
                       <Info className="h-4 w-4" />
                     </button>
                   </div>
-                  <Input id="brandColors" value={form.brandColors} onChange={e => update("brandColors", e.target.value)} placeholder="e.g. #10b981, #202733" />
+                  <Input id="brandColors" value={form.brandColors} onChange={e => update("brandColors", e.target.value)} placeholder={t("profilePlaceholderBrandColors")} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="slogan">Slogan / Tagline</Label>
+                  <Label htmlFor="slogan">{t("profileLabelSlogan")}</Label>
                   <Input id="slogan" value={form.slogan} onChange={e => update("slogan", e.target.value)} />
                 </div>
               </div>
@@ -596,15 +670,15 @@ export default function ProfilePage() {
 
             {/* Knowledge & Content */}
             <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Knowledge & Content</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionKnowledge")}</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="docCategories">Document Categories</Label>
-                  <Input id="docCategories" value={form.docCategories} onChange={e => update("docCategories", e.target.value)} placeholder="SOPs, FAQs, Playbooks..." />
+                  <Label htmlFor="docCategories">{t("profileLabelDocCategories")}</Label>
+                  <Input id="docCategories" value={form.docCategories} onChange={e => update("docCategories", e.target.value)} placeholder={t("profilePlaceholderDocCategories")} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="preferredSources">Preferred Knowledge Sources</Label>
-                  <Input id="preferredSources" value={form.preferredSources} onChange={e => update("preferredSources", e.target.value)} placeholder="Google Drive, Notion, PDFs..." />
+                  <Label htmlFor="preferredSources">{t("profileLabelPreferredSources")}</Label>
+                  <Input id="preferredSources" value={form.preferredSources} onChange={e => update("preferredSources", e.target.value)} placeholder={t("profilePlaceholderPreferredSources")} />
                 </div>
               </div>
             </section>
@@ -612,8 +686,8 @@ export default function ProfilePage() {
             {/* Connected Channels summary */}
             <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Connected Channels</h2>
-                <Link href="/channels" className="text-xs text-emerald-400 hover:underline">Manage →</Link>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionChannels")}</h2>
+                <Link href="/channels" className="text-xs text-emerald-400 hover:underline">{t("profileManage")}</Link>
               </div>
               <div className="flex flex-wrap gap-2">
                 {[
@@ -652,43 +726,86 @@ export default function ProfilePage() {
               <X className="h-5 w-5" />
             </button>
             <h3 className="mb-2 text-lg font-semibold text-white">
-              {tooltipOpen === "aiRole" ? "AI Role & Job Description" : tooltipOpen === "logoUpload" ? "Logo Upload Requirements" : tooltipOpen === "brandColors" ? "Brand Colors" : "Tone Examples"}
+              {tooltipOpen === "aiRole" ? t("profileTooltipAIRoleTitle") : tooltipOpen === "logoUpload" ? t("profileTooltipLogoTitle") : tooltipOpen === "brandColors" ? t("profileTooltipBrandColorsTitle") : t("profileTooltipToneTitle")}
             </h3>
             <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
               {tooltipOpen === "brandColors" ? (
                 <>
-                  <p><strong className="text-white">Primary color:</strong> This is your main brand color used for buttons, highlights, and the AI avatar. Enter a hex code like <span className="text-emerald-400">#10b981</span>.</p>
-                  <p><strong className="text-white">Secondary color:</strong> Used for backgrounds, cards, and subtle accents. Typically a darker complement like <span className="text-emerald-400">#202733</span>.</p>
-                  <p><strong className="text-white">Format:</strong> Enter as comma-separated hex values. Example: <span className="text-emerald-400">#10b981, #202733</span></p>
-                  <p><strong className="text-white">Where it applies:</strong> These colors theme your AI chat interface, dashboard, and customer-facing widgets so everything feels like your brand.</p>
+                  {(() => {
+                    const renderLabeled = (text: string) => {
+                      const idx = text.indexOf(":")
+                      if (idx === -1) return <p>{text}</p>
+                      return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                    }
+                    return (
+                      <>
+                        {renderLabeled(t("profileTooltipBrandColorsPrimary"))}
+                        {renderLabeled(t("profileTooltipBrandColorsSecondary"))}
+                        {renderLabeled(t("profileTooltipBrandColorsFormat"))}
+                        {renderLabeled(t("profileTooltipBrandColorsApply"))}
+                      </>
+                    )
+                  })()}
                 </>
               ) : tooltipOpen === "logoUpload" ? (
                 <>
-                  <p><strong className="text-white">Recommended dimensions:</strong> 512 × 512 px (square) or 1024 × 512 px (wide). Minimum 256 × 256 px.</p>
-                  <p><strong className="text-white">Accepted formats:</strong> PNG, JPEG, or SVG. PNG with transparent background is ideal.</p>
-                  <p><strong className="text-white">Background:</strong> Use a transparent or solid dark background (#202733) so the logo blends with the AI interface.</p>
-                  <p><strong className="text-white">File size:</strong> Keep under 2 MB for fast loading.</p>
-                  <p><strong className="text-white">Best practice:</strong> Use a simple, recognizable icon or wordmark. Avoid fine details that blur at small sizes.</p>
+                  {(() => {
+                    const renderLabeled = (text: string) => {
+                      const idx = text.indexOf(":")
+                      if (idx === -1) return <p>{text}</p>
+                      return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                    }
+                    return (
+                      <>
+                        {renderLabeled(t("profileTooltipLogoDimensions"))}
+                        {renderLabeled(t("profileTooltipLogoFormats"))}
+                        {renderLabeled(t("profileTooltipLogoBackground"))}
+                        {renderLabeled(t("profileTooltipLogoSize"))}
+                        {renderLabeled(t("profileTooltipLogoBestPractice"))}
+                      </>
+                    )
+                  })()}
                 </>
               ) : tooltipOpen === "aiRole" ? (
                 <>
-                  <p><strong className="text-white">Describe Your AI Agent Clearly</strong></p>
-                  <p>Give your AI a specific role and clear responsibilities. Instead of "helps customers," write exactly what it should do, where it works, and what it should avoid.</p>
-                  <p><strong className="text-white">Include:</strong></p>
+                  <p><strong className="text-white">{t("profileTooltipAIRoleIntro")}</strong></p>
+                  <p>{t("profileTooltipAIRoleDesc")}</p>
+                  <p><strong className="text-white">{t("profileTooltipAIRoleInclude")}</strong></p>
                   <ul className="list-disc pl-4 space-y-1">
-                    <li>Main tasks and responsibilities.</li>
-                    <li>Channels and tools it uses (WhatsApp, email, Slack, website, etc.).</li>
-                    <li>Boundaries and restrictions (what it should never do).</li>
+                    <li>{t("profileTooltipAIRoleTask")}</li>
+                    <li>{t("profileTooltipAIRoleChannels")}</li>
+                    <li>{t("profileTooltipAIRoleBoundaries")}</li>
                   </ul>
-                  <p><strong className="text-white">Example:</strong> Nira answers WhatsApp questions about pricing, asks 3 qualifying questions, books Calendly meetings, sends summaries to the Sales Slack channel, and escalates technical issues to support@company.com. Nira does not process payments or access sensitive customer data.</p>
+                  {(() => {
+                    const text = t("profileTooltipAIRoleExample")
+                    const idx = text.indexOf(":")
+                    if (idx === -1) return <p>{text}</p>
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
                 </>
               ) : (
                 <>
-                  <p><strong className="text-white">Show, don't just tell.</strong> Include 2–3 real sentences your team actually uses. The AI learns patterns from concrete examples.</p>
-                  <p><strong className="text-white">Include do's and don'ts.</strong> "Do say: 'Let us walk you through this.' Don't say: 'It's easy, anyone can do it.'"</p>
-                  <p><strong className="text-white">Note context shifts.</strong> Specify if tone changes by channel: formal for email, casual for WhatsApp, concise for Slack.</p>
-                  <p><strong className="text-white">Example:</strong> "Greeting: 'Welcome to [Company] — how can we help you today?' Closing: 'Let us know if anything else comes up. We're here.' Avoid: 'Hey buddy', 'ASAP', all caps."
-                  </p>
+                  {(() => {
+                    const renderTone = (key: string) => {
+                      const text = t(key as any)
+                      const idx = text.indexOf(".")
+                      if (idx === -1) return <p>{text}</p>
+                      return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                    }
+                    return (
+                      <>
+                        {renderTone("profileTooltipToneShow")}
+                        {renderTone("profileTooltipToneInclude")}
+                        {renderTone("profileTooltipToneContext")}
+                        {(() => {
+                          const text = t("profileTooltipToneExample")
+                          const idx = text.indexOf(":")
+                          if (idx === -1) return <p>{text}</p>
+                          return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                        })()}
+                      </>
+                    )
+                  })()}
                 </>
               )}
             </div>
@@ -704,46 +821,86 @@ export default function ProfilePage() {
               <X className="h-5 w-5" />
             </button>
             <h3 className="mb-4 text-lg font-semibold text-white">
-              {promptExampleOpen === "analysis" && "Analysis Prompt Example"}
-              {promptExampleOpen === "proposal" && "Proposal Prompt Example"}
-              {promptExampleOpen === "report" && "Report Prompt Example"}
-              {promptExampleOpen === "email" && "Email Prompt Example"}
-              {promptExampleOpen === "faq" && "FAQ Prompt Example"}
+              {promptExampleOpen === "analysis" && t("profilePromptAnalysisTitle")}
+              {promptExampleOpen === "proposal" && t("profilePromptProposalTitle")}
+              {promptExampleOpen === "report" && t("profilePromptReportTitle")}
+              {promptExampleOpen === "email" && t("profilePromptEmailTitle")}
+              {promptExampleOpen === "faq" && t("profilePromptFaqTitle")}
             </h3>
             <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
               {promptExampleOpen === "analysis" && (
                 <>
-                  <p><strong className="text-white">User:</strong> "Analyze our Q3 sales data and compare it to Q2. Highlight what changed and why."</p>
-                  <p><strong className="text-white">Clarifying question:</strong> "Do you want the analysis broken down by product line, region, or sales rep?"</p>
-                  <p className="text-xs text-emerald-400">Teaches the AI to ask for structure before generating a vague summary.</p>
+                  {(() => {
+                    const text = t("profilePromptAnalysisUser")
+                    const idx = text.indexOf(":")
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
+                  {(() => {
+                    const text = t("profilePromptAnalysisQuestion")
+                    const idx = text.indexOf(":")
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
+                  <p className="text-xs text-emerald-400">{t("profilePromptAnalysisNote")}</p>
                 </>
               )}
               {promptExampleOpen === "proposal" && (
                 <>
-                  <p><strong className="text-white">User:</strong> "Create a proposal for the new client interested in our AI consulting package."</p>
-                  <p><strong className="text-white">Clarifying question:</strong> "What is the client's budget range and preferred timeline for implementation?"</p>
-                  <p className="text-xs text-emerald-400">Teaches the AI to scope budget and timeline before writing a generic proposal.</p>
+                  {(() => {
+                    const text = t("profilePromptProposalUser")
+                    const idx = text.indexOf(":")
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
+                  {(() => {
+                    const text = t("profilePromptProposalQuestion")
+                    const idx = text.indexOf(":")
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
+                  <p className="text-xs text-emerald-400">{t("profilePromptProposalNote")}</p>
                 </>
               )}
               {promptExampleOpen === "report" && (
                 <>
-                  <p><strong className="text-white">User:</strong> "Generate a weekly team performance report."</p>
-                  <p><strong className="text-white">Clarifying question:</strong> "Which metrics matter most — closed deals, response time, or customer satisfaction scores?"</p>
-                  <p className="text-xs text-emerald-400">Teaches the AI to prioritize metrics instead of dumping everything.</p>
+                  {(() => {
+                    const text = t("profilePromptReportUser")
+                    const idx = text.indexOf(":")
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
+                  {(() => {
+                    const text = t("profilePromptReportQuestion")
+                    const idx = text.indexOf(":")
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
+                  <p className="text-xs text-emerald-400">{t("profilePromptReportNote")}</p>
                 </>
               )}
               {promptExampleOpen === "email" && (
                 <>
-                  <p><strong className="text-white">User:</strong> "Draft a follow-up email to the prospect who went silent after the demo."</p>
-                  <p><strong className="text-white">Clarifying question:</strong> "What was the last topic or objection they raised during the demo?"</p>
-                  <p className="text-xs text-emerald-400">Teaches the AI to reference context before writing a hollow follow-up.</p>
+                  {(() => {
+                    const text = t("profilePromptEmailUser")
+                    const idx = text.indexOf(":")
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
+                  {(() => {
+                    const text = t("profilePromptEmailQuestion")
+                    const idx = text.indexOf(":")
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
+                  <p className="text-xs text-emerald-400">{t("profilePromptEmailNote")}</p>
                 </>
               )}
               {promptExampleOpen === "faq" && (
                 <>
-                  <p><strong className="text-white">User:</strong> "How do I reset my password?"</p>
-                  <p><strong className="text-white">Clarifying question:</strong> "Are you locked out of your account, or do you still have access and want to change it proactively?"</p>
-                  <p className="text-xs text-emerald-400">Teaches the AI to diagnose the situation before giving a one-size-fits-all answer.</p>
+                  {(() => {
+                    const text = t("profilePromptFaqUser")
+                    const idx = text.indexOf(":")
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
+                  {(() => {
+                    const text = t("profilePromptFaqQuestion")
+                    const idx = text.indexOf(":")
+                    return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
+                  })()}
+                  <p className="text-xs text-emerald-400">{t("profilePromptFaqNote")}</p>
                 </>
               )}
             </div>

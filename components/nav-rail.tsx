@@ -7,25 +7,27 @@ import {
   Users, InboxIcon, Mail, BarChart3, Layers, Workflow, Settings,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-const primary = [
-  { href: "/chat",      icon: MessageSquare, label: "Chat" },
-  { href: "/knowledge", icon: BookOpen,      label: "Knowledge" },
-  { href: "/channels",  icon: Plug2,         label: "Channels" },
-  { href: "/profile",   icon: User,          label: "Profile" },
-]
-
-const secondary = [
-  { href: "/crm",         icon: Users,     label: "CRM" },
-  { href: "/inbox",       icon: InboxIcon, label: "Inbox" },
-  { href: "/contacts",    icon: Mail,      label: "Contacts" },
-  { href: "/analytics",   icon: BarChart3, label: "Analytics" },
-  { href: "/agents",      icon: Layers,    label: "AI Agents" },
-  { href: "/automations", icon: Workflow,  label: "Automations" },
-]
+import { useI18n } from "@/lib/i18n"
 
 export function NavRail() {
   const pathname = usePathname()
+  const { t } = useI18n()
+
+  const primary = [
+    { href: "/chat",      icon: MessageSquare, label: t("navChat") },
+    { href: "/knowledge", icon: BookOpen,      label: t("navKnowledge") },
+    { href: "/channels",  icon: Plug2,         label: t("navChannels") },
+    { href: "/profile",   icon: User,          label: t("navProfile") },
+  ]
+
+  const secondary = [
+    { href: "/crm",         icon: Users,     label: t("navCRM") },
+    { href: "/inbox",       icon: InboxIcon, label: t("navInbox") },
+    { href: "/contacts",    icon: Mail,      label: t("navContacts") },
+    { href: "/analytics",   icon: BarChart3, label: t("navAnalytics") },
+    { href: "/agents",      icon: Layers,    label: t("navAgents") },
+    { href: "/automations", icon: Workflow,  label: t("navAutomations") },
+  ]
 
   return (
     <nav className="flex w-16 shrink-0 flex-col items-center gap-2 border-r bg-background py-3 overflow-y-auto">
@@ -66,7 +68,7 @@ export function NavRail() {
       <div className="mt-auto">
         <Link
           href="/"
-          title="Home"
+          title={t("navHome")}
           className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Settings className="h-5 w-5" />

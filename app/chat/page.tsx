@@ -23,20 +23,12 @@ interface Message {
   timestamp: Date
 }
 
-const recentChats = [
-  { id: "1", title: "Sales Proposal Draft", time: "2h ago" },
-  { id: "2", title: "Customer Support SOP", time: "5h ago" },
-  { id: "3", title: "Marketing Strategy Q3", time: "Yesterday" },
-  { id: "4", title: "Restaurant Operations", time: "2d ago" },
-  { id: "5", title: "Contract Review", time: "3d ago" },
-]
-
-const loadingStates = [
-  "Searching knowledge base...",
-  "Analyzing documents...",
-  "Reviewing sources...",
-  "Generating response...",
-]
+const loadingStateKeys = [
+  "chatLoading1",
+  "chatLoading2",
+  "chatLoading3",
+  "chatLoading4",
+] as const
 
 function getInitials(name: string): string {
   if (!name.trim()) return ""
@@ -45,7 +37,8 @@ function getInitials(name: string): string {
 
 export default function ChatPage() {
   const { user } = useAuth()
-  const { t } = useI18n()
+  const { t, lang, setLang } = useI18n()
+  const loadingStates = loadingStateKeys.map(k => t(k))
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -91,20 +84,28 @@ export default function ChatPage() {
     load()
   }, [user])
 
+  const recentChats = [
+    { id: "1", title: t("chatRecent1"), time: t("chatTime2h") },
+    { id: "2", title: t("chatRecent2"), time: t("chatTime5h") },
+    { id: "3", title: t("chatRecent3"), time: t("chatTimeYesterday") },
+    { id: "4", title: t("chatRecent4"), time: t("chatTime2d") },
+    { id: "5", title: t("chatRecent5"), time: t("chatTime3d") },
+  ]
+
   const solidColors = [
-    { label: "Dark", value: "bg-background" },
-    { label: "Navy", value: "bg-[#1a2332]" },
-    { label: "Charcoal", value: "bg-[#252b36]" },
-    { label: "Deep Green", value: "bg-[#0f2417]" },
-    { label: "Midnight", value: "bg-[#141b2d]" },
+    { label: t("chatColorDark"), value: "bg-background" },
+    { label: t("chatColorNavy"), value: "bg-[#1a2332]" },
+    { label: t("chatColorCharcoal"), value: "bg-[#252b36]" },
+    { label: t("chatColorDeepGreen"), value: "bg-[#0f2417]" },
+    { label: t("chatColorMidnight"), value: "bg-[#141b2d]" },
   ]
 
   const gradients = [
-    { label: "Emerald Mist", value: "bg-gradient-to-br from-emerald-950/40 via-background to-background" },
-    { label: "Violet Haze", value: "bg-gradient-to-br from-violet-950/30 via-background to-emerald-950/20" },
-    { label: "Ocean Depth", value: "bg-gradient-to-b from-[#1a2332] via-[#202733] to-background" },
-    { label: "Forest Glow", value: "bg-gradient-to-tr from-emerald-900/20 via-background to-emerald-950/40" },
-    { label: "Soft Dark", value: "bg-gradient-to-b from-[#252b36] to-[#1e2530]" },
+    { label: t("chatColorEmeraldMist"), value: "bg-gradient-to-br from-emerald-950/40 via-background to-background" },
+    { label: t("chatColorVioletHaze"), value: "bg-gradient-to-br from-violet-950/30 via-background to-emerald-950/20" },
+    { label: t("chatColorOceanDepth"), value: "bg-gradient-to-b from-[#1a2332] via-[#202733] to-background" },
+    { label: t("chatColorForestGlow"), value: "bg-gradient-to-tr from-emerald-900/20 via-background to-emerald-950/40" },
+    { label: t("chatColorSoftDark"), value: "bg-gradient-to-b from-[#252b36] to-[#1e2530]" },
   ]
 
   // Close sidebars by default on mobile so they don't overlap
@@ -139,8 +140,8 @@ export default function ChatPage() {
     setMessages(prev => [...prev, {
       id: (Date.now() + 1).toString(),
       role: "assistant",
-      content: `Based on your business knowledge, here is a detailed response to: "${userMsg.content}"\n\nYour indexed documents contain relevant information across multiple sources. Key findings:\n\n1. Your SOPs define a clear process for this scenario\n2. Previous communications align with this approach\n3. Based on your brand guidelines, proceed with the standard workflow\n\nAll information has been verified against your private knowledge base.`,
-      sources: ["Company_SOP.pdf · Page 3", "Brand_Guidelines.docx · Page 7", "Knowledge Base"],
+      content: t("chatDemoResponse", { query: userMsg.content }),
+      sources: [t("chatDemoSource1"), t("chatDemoSource2"), t("chatDemoSource3")],
       confidence: "high",
       timestamp: new Date(),
     }])
@@ -181,21 +182,46 @@ export default function ChatPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               className="w-full rounded-full border bg-muted/50 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-              placeholder="Search chats, documents, knowledge, files..."
+              placeholder={t("chatSearchPlaceholder")}
             />
           </div>
         </div>
         <div className="flex flex-1 justify-end items-center gap-2 md:gap-3 md:flex-none">
+          {/* Language toggle */}
+          <div className="hidden items-center rounded-lg border border-white/10 bg-white/5 p-0.5 md:inline-flex">
+            <button
+              onClick={() => setLang("en")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                lang === "en"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-muted-foreground hover:text-white"
+              )}
+            >
+              EN
+            </button>
+            <button
+              onClick={() => setLang("es")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                lang === "es"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-muted-foreground hover:text-white"
+              )}
+            >
+              ES
+            </button>
+          </div>
           <button
             onClick={() => setColorPanelOpen(o => !o)}
             className={cn(
               "flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
               colorPanelOpen ? "bg-emerald-600/15 text-emerald-400" : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
-            title="Customize chat background"
+            title={t("chatThemeTitle")}
           >
             <Palette className="h-5 w-5" />
-            <span className="hidden sm:inline">Theme</span>
+            <span className="hidden sm:inline">{t("chatTheme")}</span>
           </button>
           <Link href="/profile" className="flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
             {userInitials || <User className="h-4 w-4 text-white" />}
@@ -224,11 +250,11 @@ export default function ChatPage() {
                 onClick={() => setMessages([])}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
               >
-                <Plus className="h-4 w-4" /> New Conversation
+                <Plus className="h-4 w-4" /> {t("chatNewConversation")}
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-3 pb-4">
-              <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent</p>
+              <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("chatRecent")}</p>
               {recentChats.map(chat => (
                 <button
                   key={chat.id}
@@ -258,18 +284,18 @@ export default function ChatPage() {
               </div>
 
               <p className="mb-8 max-w-md text-center text-base text-muted-foreground">
-                What would you like to know about your business today?
+                {t("chatEmptyPrompt")}
               </p>
 
               {/* Suggestion cards */}
               <div className="w-full max-w-2xl">
-                <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Try asking</p>
+                <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("chatTryAsking")}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {[
-                    "Summarize my latest sales report",
-                    "Draft a follow-up email to a lead",
-                    "What does our refund policy say?",
-                    "Create a Q&A from my SOPs",
+                    t("chatSuggestion1"),
+                    t("chatSuggestion2"),
+                    t("chatSuggestion3"),
+                    t("chatSuggestion4"),
                   ].map((suggestion, i) => (
                     <button
                       key={i}
@@ -348,13 +374,13 @@ export default function ChatPage() {
           {colorPanelOpen && (
             <div className="absolute right-3 top-3 z-30 w-64 rounded-2xl border border-white/10 bg-[#2a3444] p-4 shadow-2xl">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white">Chat Background</h3>
+                <h3 className="text-sm font-semibold text-white">{t("chatBgTitle")}</h3>
                 <button onClick={() => setColorPanelOpen(false)} className="text-muted-foreground hover:text-white transition-colors">
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Solid</p>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("chatBgSolid")}</p>
               <div className="mb-4 grid grid-cols-5 gap-2">
                 {solidColors.map(c => (
                   <button
@@ -373,7 +399,7 @@ export default function ChatPage() {
                 ))}
               </div>
 
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Gradients</p>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("chatBgGradients")}</p>
               <div className="space-y-1.5">
                 {gradients.map(g => (
                   <button
@@ -391,7 +417,7 @@ export default function ChatPage() {
                 ))}
               </div>
 
-              <p className="mb-2 mt-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">Custom Solid</p>
+              <p className="mb-2 mt-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("chatBgCustomSolid")}</p>
               <div className="mb-4 flex items-center gap-2">
                 <input
                   type="color"
@@ -408,7 +434,7 @@ export default function ChatPage() {
                 />
               </div>
 
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Custom Gradient</p>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("chatBgCustomGradient")}</p>
               <div className="mb-2 flex items-center gap-2">
                 <input
                   type="color"
@@ -451,12 +477,12 @@ export default function ChatPage() {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKey}
                   rows={1}
-                  placeholder="Ask your AI about your business..."
+                  placeholder={t("chatInputPlaceholder")}
                   className="w-full resize-none bg-transparent px-4 pb-12 pt-4 text-sm placeholder:text-muted-foreground focus:outline-none"
                 />
                 <div className="absolute bottom-3 flex w-full items-center justify-between px-3">
                   <div className="flex gap-0.5">
-                    {[{ icon: Paperclip, label: "Attach" }, { icon: Mic, label: "Voice" }].map(a => (
+                    {[{ icon: Paperclip, label: t("chatAttach") }, { icon: Mic, label: t("chatVoice") }].map(a => (
                       <button key={a.label} title={a.label} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                         <a.icon className="h-4 w-4" />
                       </button>
@@ -472,7 +498,7 @@ export default function ChatPage() {
                 </div>
               </div>
               <p className="mt-2 text-center text-xs text-muted-foreground">
-                Exploro AI answers from your private business knowledge only.
+                {t("chatFooter")}
               </p>
             </div>
           </div>
