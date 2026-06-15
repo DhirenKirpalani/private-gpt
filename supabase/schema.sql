@@ -51,6 +51,11 @@ create table profiles (
   avatar_url text,
   logo_url text,
   brand_colors jsonb default '[]'::jsonb,
+  brand_style text default 'cinematic'
+    check (brand_style in ('minimal','editorial','cinematic')),
+  brand_mood text default 'futuristic'
+    check (brand_mood in ('calm','bold','luxury','futuristic')),
+  token_cap integer default 20000,
   slogan text,
   doc_categories jsonb default '[]'::jsonb,
   preferred_sources jsonb default '[]'::jsonb,

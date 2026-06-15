@@ -1,18 +1,20 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import {
   Plus, MessageSquare, Search, Send, Paperclip, Mic,
   Bot, Copy, RefreshCw, Share2, Sparkles,
-  PanelLeftClose, Palette, X, Check, User,
+  PanelLeftClose, X, User,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
-import { getProfile } from "@/lib/supabase"
+import { getProfile, updateProfile } from "@/lib/supabase"
 import { useI18n } from "@/lib/i18n"
+import { CinematicBackground } from "@/components/cinematic-background"
+import { compileTheme, type ThemeStyle, type ThemeMood } from "@/lib/theme-engine"
+import { AnimatedPlaceholder } from "@/components/animated-placeholder"
 
 interface Message {
   id: string
@@ -44,13 +46,33 @@ export default function ChatPage() {
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [loadingText, setLoadingText] = useState("")
-  const [colorPanelOpen, setColorPanelOpen] = useState(false)
-  const [chatBg, setChatBg] = useState("bg-background")
-  const [customSolid, setCustomSolid] = useState("#202733")
-  const [customGradientFrom, setCustomGradientFrom] = useState("#1a2332")
-  const [customGradientTo, setCustomGradientTo] = useState("#202733")
+  const [themePanelOpen, setThemePanelOpen] = useState(false)
+  const [themePrimary, setThemePrimary] = useState("#05060A")
+  const [themeSecondary, setThemeSecondary] = useState("")
+  const [themeStyle, setThemeStyle] = useState<ThemeStyle>("cinematic")
+  const [themeMood, setThemeMood] = useState<ThemeMood>("futuristic")
+  const themeInitRef = useRef(false)
+
+  // Load theme from localStorage on client mount (avoids SSR hydration mismatch)
+  useEffect(() => {
+    const savedPrimary = localStorage.getItem("exploro_theme_primary")
+    const savedSecondary = localStorage.getItem("exploro_theme_secondary")
+    const savedStyle = localStorage.getItem("exploro_theme_style")
+    const savedMood = localStorage.getItem("exploro_theme_mood")
+    if (savedPrimary) setThemePrimary(savedPrimary)
+    if (savedSecondary) setThemeSecondary(savedSecondary)
+    if (savedStyle) setThemeStyle(savedStyle as ThemeStyle)
+    if (savedMood) setThemeMood(savedMood as ThemeMood)
+  }, [])
+
+  const theme = useMemo(
+    () => compileTheme({ primaryColor: themePrimary, secondaryColor: themeSecondary, style: themeStyle, mood: themeMood }),
+    [themePrimary, themeSecondary, themeStyle, themeMood]
+  )
   const [userInitials, setUserInitials] = useState("")
   const [userName, setUserName] = useState("")
+  const [logoUrl, setLogoUrl] = useState("")
+  const [avatarUrl, setAvatarUrl] = useState("")
   const [greeting, setGreeting] = useState("")
   const [mounted, setMounted] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -72,9 +94,42 @@ export default function ChatPage() {
       if (!user) return
       try {
         const profile = await getProfile(user.id)
+        console.log("[CHAT DEBUG] Raw profile:", profile)
+        console.log("[CHAT DEBUG] logo_url:", profile?.logo_url)
         const name = profile?.full_name || user.user_metadata?.full_name || ""
         setUserInitials(getInitials(name))
         setUserName(name)
+        localStorage.setItem("exploro_user_name", name)
+        setLogoUrl(profile?.logo_url || "")
+        if (profile?.avatar_url) {
+          setAvatarUrl(profile.avatar_url)
+          localStorage.setItem("exploro_avatar_url", profile.avatar_url)
+        }
+        console.log("[CHAT DEBUG] logoUrl state set to:", profile?.logo_url || "")
+        // Only load theme from profile if localStorage doesn't have values yet
+        // (prevents stale DB values from overwriting recent local changes before debounced save completes)
+        const hasLocalTheme = !!localStorage.getItem("exploro_theme_primary")
+        if (!hasLocalTheme) {
+          const colors = profile?.brand_colors
+          const savedStyle = profile?.brand_style as ThemeStyle
+          const savedMood = profile?.brand_mood as ThemeMood
+          if (Array.isArray(colors) && colors.length >= 1 && colors[0]) {
+            setThemePrimary(colors[0])
+            localStorage.setItem("exploro_theme_primary", colors[0])
+            if (colors.length >= 2 && colors[1]) {
+              setThemeSecondary(colors[1])
+              localStorage.setItem("exploro_theme_secondary", colors[1])
+            }
+          }
+          if (savedStyle) {
+            setThemeStyle(savedStyle)
+            localStorage.setItem("exploro_theme_style", savedStyle)
+          }
+          if (savedMood) {
+            setThemeMood(savedMood)
+            localStorage.setItem("exploro_theme_mood", savedMood)
+          }
+        }
       } catch {
         const name = user.user_metadata?.full_name || ""
         setUserInitials(getInitials(name))
@@ -84,28 +139,34 @@ export default function ChatPage() {
     load()
   }, [user])
 
+  // Persist theme changes to localStorage + DB (debounced)
+  useEffect(() => {
+    if (!themeInitRef.current) {
+      themeInitRef.current = true
+      return
+    }
+    localStorage.setItem("exploro_theme_primary", themePrimary)
+    localStorage.setItem("exploro_theme_secondary", themeSecondary)
+    localStorage.setItem("exploro_theme_style", themeStyle)
+    localStorage.setItem("exploro_theme_mood", themeMood)
+
+    if (!user) return
+    const timer = setTimeout(() => {
+      updateProfile(user.id, {
+        brand_colors: [themePrimary, themeSecondary].filter(Boolean),
+        brand_style: themeStyle,
+        brand_mood: themeMood,
+      }).catch(() => {})
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [themePrimary, themeSecondary, themeStyle, themeMood, user])
+
   const recentChats = [
     { id: "1", title: t("chatRecent1"), time: t("chatTime2h") },
     { id: "2", title: t("chatRecent2"), time: t("chatTime5h") },
     { id: "3", title: t("chatRecent3"), time: t("chatTimeYesterday") },
     { id: "4", title: t("chatRecent4"), time: t("chatTime2d") },
     { id: "5", title: t("chatRecent5"), time: t("chatTime3d") },
-  ]
-
-  const solidColors = [
-    { label: t("chatColorDark"), value: "bg-background" },
-    { label: t("chatColorNavy"), value: "bg-[#1a2332]" },
-    { label: t("chatColorCharcoal"), value: "bg-[#252b36]" },
-    { label: t("chatColorDeepGreen"), value: "bg-[#0f2417]" },
-    { label: t("chatColorMidnight"), value: "bg-[#141b2d]" },
-  ]
-
-  const gradients = [
-    { label: t("chatColorEmeraldMist"), value: "bg-gradient-to-br from-emerald-950/40 via-background to-background" },
-    { label: t("chatColorVioletHaze"), value: "bg-gradient-to-br from-violet-950/30 via-background to-emerald-950/20" },
-    { label: t("chatColorOceanDepth"), value: "bg-gradient-to-b from-[#1a2332] via-[#202733] to-background" },
-    { label: t("chatColorForestGlow"), value: "bg-gradient-to-tr from-emerald-900/20 via-background to-emerald-950/40" },
-    { label: t("chatColorSoftDark"), value: "bg-gradient-to-b from-[#252b36] to-[#1e2530]" },
   ]
 
   // Close sidebars by default on mobile so they don't overlap
@@ -154,10 +215,16 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-background">
+    <div className="fixed inset-0 z-[60] flex flex-col">
 
       {/* ── HEADER ── */}
-      <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-visible border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
+      <header
+        className="relative z-10 flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b border-white/5 px-3 md:px-4"
+        style={{
+          backgroundColor: theme.ui.surfaceBg,
+          backdropFilter: `blur(${theme.ui.glassBlur}px)`,
+        }}
+      >
         <div className="flex items-center gap-2">
           <button
             onClick={toggleSidebar}
@@ -165,15 +232,12 @@ export default function ChatPage() {
           >
             <PanelLeftClose className="h-5 w-5" />
           </button>
-          <Link href="/" className="flex shrink-0 items-center gap-2 overflow-visible">
-            <Image
+          <Link href="/" className="flex shrink-0 items-center gap-2 overflow-hidden">
+            <img
               src="/assets/images/exploro-logo.png"
               alt="Exploro"
-              width={280}
-              height={70}
-              priority
               className="w-auto object-contain"
-              style={{ height: "140px" }}
+              style={{ height: "40px" }}
             />
           </Link>
         </div>
@@ -212,28 +276,32 @@ export default function ChatPage() {
               ES
             </button>
           </div>
-          <button
-            onClick={() => setColorPanelOpen(o => !o)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
-              colorPanelOpen ? "bg-emerald-600/15 text-emerald-400" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          <Link href="/profile" className="relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
+            <span className={avatarUrl ? "hidden" : ""}>{userInitials || <User className="h-4 w-4 text-white" />}</span>
+            {avatarUrl && (
+              <img
+                src={avatarUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+                onError={e => { (e.target as HTMLImageElement).style.display = "none" }}
+              />
             )}
-            title={t("chatThemeTitle")}
-          >
-            <Palette className="h-5 w-5" />
-            <span className="hidden sm:inline">{t("chatTheme")}</span>
-          </button>
-          <Link href="/profile" className="flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
-            {userInitials || <User className="h-4 w-4 text-white" />}
           </Link>
         </div>
       </header>
 
       {/* ── BODY ── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Cinematic background layers */}
+        <CinematicBackground
+          primaryColor={themePrimary}
+          secondaryColor={themeSecondary}
+          style={themeStyle}
+          mood={themeMood}
+        />
 
         {/* ── NAV RAIL (desktop only) ── */}
-        <div className="hidden md:block">
+        <div className="relative z-10 hidden md:block">
           <NavRail />
         </div>
 
@@ -244,7 +312,13 @@ export default function ChatPage() {
 
         {/* ── LEFT SIDEBAR ── */}
         {sidebarOpen && (
-          <aside className="absolute inset-y-0 left-0 z-20 flex w-72 flex-col border-r border-white/5 bg-[#2a3444] overflow-hidden md:static md:shrink-0">
+          <aside
+            className="absolute inset-y-0 left-0 z-20 flex w-72 flex-col border-r border-white/5 overflow-hidden md:static md:shrink-0"
+            style={{
+              backgroundColor: theme.ui.surfaceBg,
+              backdropFilter: `blur(${theme.ui.glassBlur}px)`,
+            }}
+          >
             <div className="p-3 pb-2">
               <button
                 onClick={() => setMessages([])}
@@ -273,11 +347,23 @@ export default function ChatPage() {
         )}
 
         {/* ── MAIN WORKSPACE ── */}
-        <main className={cn("relative flex flex-1 flex-col overflow-hidden", chatBg)}>
+        <main className="relative flex flex-1 flex-col overflow-hidden">
           {messages.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-6 sm:p-10">
+            <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-6 pb-10 sm:p-10 sm:pb-12">
 
-              {/* Greeting */}
+              {/* Logo & Greeting */}
+              {(() => { console.log("[CHAT DEBUG] Rendering logo. logoUrl:", logoUrl); return null })()}
+              {logoUrl && (
+                <img
+                  src={logoUrl}
+                  alt=""
+                  className="mb-6 h-20 w-auto object-contain"
+                  onError={e => {
+                    console.error("[CHAT DEBUG] Logo image failed to load:", logoUrl)
+                    ;(e.target as HTMLImageElement).style.display = "none"
+                  }}
+                />
+              )}
               <div className="mb-2 text-center">
                 <p className="text-sm font-medium text-muted-foreground">{greeting}</p>
                 <h2 className="pb-1 text-4xl font-extrabold tracking-tight text-white sm:text-5xl">{mounted ? (userName || user?.user_metadata?.full_name || "") : "\u00A0"}</h2>
@@ -301,7 +387,8 @@ export default function ChatPage() {
                       key={i}
                       type="button"
                       onClick={() => { setInput(suggestion); }}
-                      className="card-3d flex items-start gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4 text-left shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10"
+                      className="card-3d flex items-start gap-3 rounded-xl border border-white/5 p-4 text-left shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10"
+                      style={{ backgroundColor: theme.ui.surfaceBg }}
                     >
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600/15 text-emerald-400">
                         <Sparkles className="h-4 w-4" />
@@ -329,8 +416,9 @@ export default function ChatPage() {
                       "rounded-2xl px-4 py-3 text-sm leading-relaxed",
                       msg.role === "user"
                         ? "rounded-tr-sm bg-emerald-600 text-white"
-                        : "rounded-tl-sm border border-white/5 bg-[#2a3444] shadow-lg shadow-emerald-900/5"
-                    )}>
+                        : "rounded-tl-sm border border-white/5 shadow-lg shadow-emerald-900/5"
+                    )}
+                    style={msg.role === "assistant" ? { backgroundColor: theme.ui.surfaceBg } : undefined}>
                       {msg.content.split('\n').map((line, i) => (
                         <p key={i} className={cn("mt-0.5", line.startsWith('1.') || line.startsWith('2.') || line.startsWith('3.') ? "ml-2" : "")}>
                           {line}
@@ -354,7 +442,7 @@ export default function ChatPage() {
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-600">
                     <Bot className="h-4 w-4 text-white" />
                   </div>
-                  <div className="rounded-2xl rounded-tl-sm border border-white/5 bg-[#2a3444] px-4 py-3 shadow-lg shadow-emerald-900/5">
+                  <div className="rounded-2xl rounded-tl-sm border border-white/5 px-4 py-3 shadow-lg shadow-emerald-900/5" style={{ backgroundColor: theme.ui.surfaceBg }}>
                     <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
                       <div className="flex gap-1">
                         {[0, 1, 2].map(i => (
@@ -370,120 +458,36 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* Color Config Panel */}
-          {colorPanelOpen && (
-            <div className="absolute right-3 top-3 z-30 w-64 rounded-2xl border border-white/10 bg-[#2a3444] p-4 shadow-2xl">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white">{t("chatBgTitle")}</h3>
-                <button onClick={() => setColorPanelOpen(false)} className="text-muted-foreground hover:text-white transition-colors">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("chatBgSolid")}</p>
-              <div className="mb-4 grid grid-cols-5 gap-2">
-                {solidColors.map(c => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => setChatBg(c.value)}
-                    title={c.label}
-                    className={cn(
-                      "flex h-8 w-full items-center justify-center rounded-lg border transition-all",
-                      c.value === chatBg ? "border-emerald-400 ring-1 ring-emerald-400" : "border-white/10 hover:border-white/30"
-                    )}
-                  >
-                    <div className={cn("h-5 w-5 rounded", c.value)} />
-                    {c.value === chatBg && <Check className="absolute h-3 w-3 text-emerald-400" />}
-                  </button>
-                ))}
-              </div>
-
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("chatBgGradients")}</p>
-              <div className="space-y-1.5">
-                {gradients.map(g => (
-                  <button
-                    key={g.value}
-                    type="button"
-                    onClick={() => setChatBg(g.value)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-all",
-                      g.value === chatBg ? "border-emerald-400/50 bg-emerald-600/10 text-emerald-400" : "border-white/5 text-muted-foreground hover:border-white/20 hover:text-white"
-                    )}
-                  >
-                    <div className={cn("h-4 w-4 rounded-full", g.value)} />
-                    {g.label}
-                  </button>
-                ))}
-              </div>
-
-              <p className="mb-2 mt-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("chatBgCustomSolid")}</p>
-              <div className="mb-4 flex items-center gap-2">
-                <input
-                  type="color"
-                  value={customSolid}
-                  onChange={e => { setCustomSolid(e.target.value); setChatBg(`bg-[${e.target.value}]`) }}
-                  className="h-8 w-8 cursor-pointer rounded border-0 bg-transparent p-0"
-                />
-                <input
-                  type="text"
-                  value={customSolid}
-                  onChange={e => { setCustomSolid(e.target.value); setChatBg(`bg-[${e.target.value}]`) }}
-                  className="h-8 flex-1 rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
-                  placeholder="#202733"
-                />
-              </div>
-
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("chatBgCustomGradient")}</p>
-              <div className="mb-2 flex items-center gap-2">
-                <input
-                  type="color"
-                  value={customGradientFrom}
-                  onChange={e => { setCustomGradientFrom(e.target.value); setChatBg(`bg-gradient-to-b from-[${e.target.value}] to-[${customGradientTo}]`) }}
-                  className="h-8 w-8 cursor-pointer rounded border-0 bg-transparent p-0"
-                />
-                <input
-                  type="text"
-                  value={customGradientFrom}
-                  onChange={e => { setCustomGradientFrom(e.target.value); setChatBg(`bg-gradient-to-b from-[${e.target.value}] to-[${customGradientTo}]`) }}
-                  className="h-8 flex-1 rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
-                  placeholder="#1a2332"
-                />
-              </div>
-              <div className="mb-1 flex items-center gap-2">
-                <input
-                  type="color"
-                  value={customGradientTo}
-                  onChange={e => { setCustomGradientTo(e.target.value); setChatBg(`bg-gradient-to-b from-[${customGradientFrom}] to-[${e.target.value}]`) }}
-                  className="h-8 w-8 cursor-pointer rounded border-0 bg-transparent p-0"
-                />
-                <input
-                  type="text"
-                  value={customGradientTo}
-                  onChange={e => { setCustomGradientTo(e.target.value); setChatBg(`bg-gradient-to-b from-[${customGradientFrom}] to-[${e.target.value}]`) }}
-                  className="h-8 flex-1 rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
-                  placeholder="#202733"
-                />
-              </div>
-            </div>
-          )}
 
           {/* ── INPUT ── */}
-          <div className="shrink-0 border-t bg-background/80 backdrop-blur-md px-3 py-3 sm:px-4 sm:py-4">
+          <div className="relative z-10 shrink-0 border-t border-white/5 px-3 py-3 sm:px-4 sm:py-4">
             <div className="mx-auto max-w-3xl">
-              <div className="relative rounded-2xl border border-white/5 bg-[#2a3444] shadow-lg shadow-emerald-900/5 focus-within:ring-2 focus-within:ring-emerald-500/25 transition-all">
+              <div className="relative rounded-2xl border border-slate-200 bg-white focus-within:ring-2 focus-within:ring-emerald-500/30 transition-all">
+                {!input.trim() && (
+                  <div className="pointer-events-none absolute left-4 top-4 text-sm text-slate-400">
+                    <AnimatedPlaceholder
+                      messages={[
+                        t("chatInputPlaceholder"),
+                        t("chatSuggestion1"),
+                        t("chatSuggestion2"),
+                        t("chatSuggestion3"),
+                        t("chatSuggestion4"),
+                      ]}
+                      interval={3500}
+                    />
+                  </div>
+                )}
                 <textarea
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKey}
                   rows={1}
-                  placeholder={t("chatInputPlaceholder")}
-                  className="w-full resize-none bg-transparent px-4 pb-12 pt-4 text-sm placeholder:text-muted-foreground focus:outline-none"
+                  className="w-full resize-none bg-transparent px-4 pb-12 pt-4 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
                 />
                 <div className="absolute bottom-3 flex w-full items-center justify-between px-3">
                   <div className="flex gap-0.5">
                     {[{ icon: Paperclip, label: t("chatAttach") }, { icon: Mic, label: t("chatVoice") }].map(a => (
-                      <button key={a.label} title={a.label} className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                      <button key={a.label} title={a.label} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700">
                         <a.icon className="h-4 w-4" />
                       </button>
                     ))}

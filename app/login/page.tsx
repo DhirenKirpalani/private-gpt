@@ -40,7 +40,7 @@ function LoginContent() {
     setLoading(true)
     try {
       await signIn(email, password)
-      router.push("/chat")
+      router.push("/profile")
     } catch (err: any) {
       setError(err.message || "Invalid email or password.")
     } finally {

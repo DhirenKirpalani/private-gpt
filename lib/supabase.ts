@@ -60,6 +60,9 @@ export type Profile = {
   avatar_url: string
   logo_url: string
   brand_colors: any
+  brand_style: string
+  brand_mood: string
+  token_cap: number
   slogan: string
   doc_categories: any
   preferred_sources: any
@@ -192,6 +195,20 @@ export async function publishTranslations(entries: { key: string; lang: string; 
 }
 
 // Avatars
+export async function uploadLogo(userId: string, file: File) {
+  const fileExt = file.name.split(".").pop()
+  const filePath = `${userId}/logo.${fileExt}`
+
+  const { error: uploadError } = await supabase.storage
+    .from("logos")
+    .upload(filePath, file, { upsert: true, contentType: file.type })
+
+  if (uploadError) throw uploadError
+
+  const { data } = supabase.storage.from("logos").getPublicUrl(filePath)
+  return data.publicUrl
+}
+
 export async function uploadAvatar(userId: string, file: File) {
   const fileExt = file.name.split(".").pop()
   const filePath = `${userId}/avatar.${fileExt}`
@@ -203,5 +220,101 @@ export async function uploadAvatar(userId: string, file: File) {
   if (uploadError) throw uploadError
 
   const { data } = supabase.storage.from("avatars").getPublicUrl(filePath)
+  return data.publicUrl
+}
+
+// Knowledge Base
+export async function uploadDocument(
+  userId: string,
+  file: File,
+  category: string,
+  pageCount: number = 0
+) {
+  const documentId = crypto.randomUUID()
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+  const filePath = `${userId}/${documentId}_${safeName}`
+
+  // 1. Upload to Supabase Storage
+  const { error: uploadError } = await supabase.storage
+    .from("knowledge-base")
+    .upload(filePath, file, { upsert: false, contentType: file.type })
+
+  if (uploadError) throw uploadError
+
+  // 2. Insert documents row
+  const { data, error: dbError } = await supabase
+    .from("documents")
+    .insert({
+      id: documentId,
+      user_id: userId,
+      category,
+      filename: `${documentId}_${safeName}`,
+      original_filename: file.name,
+      mime_type: file.type,
+      file_size_bytes: file.size,
+      status: "INDEXED",
+      page_count: pageCount,
+    })
+    .select()
+    .single()
+
+  if (dbError) throw dbError
+  return data
+}
+
+export async function fetchUserDocuments(userId: string) {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
+// Categories
+export async function fetchUserCategories(userId: string) {
+  const { data, error } = await supabase
+    .from("knowledge_categories")
+    .select("id, name")
+    .eq("user_id", userId)
+    .order("sort_order", { ascending: true })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function insertCategory(userId: string, name: string) {
+  const { data, error } = await supabase
+    .from("knowledge_categories")
+    .insert({ user_id: userId, name })
+    .select("id, name")
+    .single()
+
+  if (error) throw error
+  return data as { id: string; name: string }
+}
+
+export async function deleteCategory(categoryId: string) {
+  const { error } = await supabase
+    .from("knowledge_categories")
+    .delete()
+    .eq("id", categoryId)
+
+  if (error) throw error
+}
+
+export async function deleteDocument(documentId: string) {
+  const { error } = await supabase
+    .from("documents")
+    .delete()
+    .eq("id", documentId)
+
+  if (error) throw error
+}
+
+export function getDocumentPublicUrl(userId: string, filename: string) {
+  const { data } = supabase.storage.from("knowledge-base").getPublicUrl(`${userId}/${filename}`)
   return data.publicUrl
 }
