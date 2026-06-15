@@ -30,6 +30,12 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { t, lang, setLang } = useI18n()
   const { user } = useAuth()
+  const [avatarUrl, setAvatarUrl] = useState("")
+
+  useEffect(() => {
+    const av = localStorage.getItem("exploro_avatar_url")
+    if (av) setAvatarUrl(av)
+  }, [])
 
   const handleCTA = () => {
     if (user) router.push("/chat")
@@ -79,14 +85,11 @@ export function Navbar() {
 
         {/* Brand */}
         <Link href="/" className="flex shrink-0 items-center overflow-visible" onClick={() => { setMobileOpen(false); setActiveSection("") }}>
-          <Image
+          <img
             src="/assets/images/exploro-logo.png"
             alt="Exploro"
-            width={280}
-            height={70}
-            priority
             className="w-auto object-contain transition-transform duration-300 hover:scale-105"
-            style={{ height: "140px", transformOrigin: "left center" }}
+            style={{ height: "44px", transformOrigin: "left center" }}
           />
         </Link>
 
@@ -140,8 +143,11 @@ export function Navbar() {
           </div>
 
           {user ? (
-            <Link href="/profile" className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
-              {userInitials || <User className="h-4 w-4 text-white" />}
+            <Link href="/profile" className="relative flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
+              <span className={avatarUrl ? "hidden" : ""}>{userInitials || <User className="h-4 w-4 text-white" />}</span>
+              {avatarUrl && (
+                <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+              )}
             </Link>
           ) : (
             <>

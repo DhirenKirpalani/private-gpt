@@ -30,7 +30,7 @@ export function NavRail() {
   ]
 
   return (
-    <nav className="flex w-16 shrink-0 flex-col items-center gap-2 border-r bg-background py-3 overflow-y-auto">
+    <nav className="flex h-full w-16 shrink-0 flex-col items-center gap-2 border-r bg-background py-3 overflow-y-auto">
       {primary.map(({ href, icon: Icon, label }) => (
         <Link
           key={href}

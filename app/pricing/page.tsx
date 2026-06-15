@@ -17,6 +17,7 @@ function usePricingData() {
       period: "/mo",
       desc: t("pricingDescSolo"),
       features: t("pricingFeaturesSolo").split(","),
+      trialNote: t("pricingTrialNoteSolo"),
       cta: t("pricingCTASolo"),
       ctaStyle: "primary" as const,
       href: "/signup",
@@ -137,6 +138,11 @@ export default function PricingPage() {
                     {plan.cta}
                   </Button>
                 </a>
+              )}
+              {plan.trialNote && (
+                <p className="mt-3 text-center text-sm text-muted-foreground">
+                  {plan.trialNote}
+                </p>
               )}
             </div>
           </div>

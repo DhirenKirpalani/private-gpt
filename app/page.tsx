@@ -5,8 +5,28 @@ import { useRouter } from "next/navigation"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
-import { FaWhatsapp, FaTelegram, FaSlack, FaEnvelope, FaMicrosoft, FaApple, FaGoogle } from "react-icons/fa"
-import { SiNotion } from "react-icons/si"
+import { FaWhatsapp, FaTelegram, FaSlack, FaEnvelope, FaApple, FaGoogle } from "react-icons/fa"
+import { SiNotion, SiDropbox, SiGooglecalendar } from "react-icons/si"
+
+function OutlookIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none">
+      <rect width="24" height="24" rx="5" fill="#0078D4"/>
+      <path d="M5 8h14v8c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V8z" fill="white"/>
+      <path d="M5 8l7 5 7-5" stroke="#0078D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      <path d="M5 8l7 5" stroke="#0078D4" strokeWidth="1" strokeLinecap="round" fill="none"/>
+      <path d="M19 8l-7 5" stroke="#0078D4" strokeWidth="1" strokeLinecap="round" fill="none"/>
+    </svg>
+  )
+}
+
+function OneDriveIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+    </svg>
+  )
+}
 import {
   ArrowRight,
   Play,
@@ -269,7 +289,7 @@ export default function HomePage() {
             {/* Outlook */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaMicrosoft className="h-6 w-6" style={{ color: "#0078D4" }} />
+                <OutlookIcon className="h-6 w-6" style={{ color: "#0078D4" }} />
               </div>
               <span className="text-sm font-medium">Outlook</span>
             </div>
@@ -280,6 +300,14 @@ export default function HomePage() {
                 <FaGoogle className="h-6 w-6" style={{ color: "#4285F4" }} />
               </div>
               <span className="text-sm font-medium">Google Drive</span>
+            </div>
+
+            {/* Google Calendar */}
+            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
+                <SiGooglecalendar className="h-6 w-6" style={{ color: "#4285F4" }} />
+              </div>
+              <span className="text-sm font-medium">Google Calendar</span>
             </div>
 
             {/* Notion */}
@@ -293,7 +321,7 @@ export default function HomePage() {
             {/* Dropbox */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaEnvelope className="h-6 w-6" style={{ color: "#0061FF" }} />
+                <SiDropbox className="h-6 w-6" style={{ color: "#0061FF" }} />
               </div>
               <span className="text-sm font-medium">Dropbox</span>
             </div>
@@ -301,7 +329,7 @@ export default function HomePage() {
             {/* OneDrive */}
             <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaMicrosoft className="h-6 w-6" style={{ color: "#0078D4" }} />
+                <OneDriveIcon className="h-6 w-6" style={{ color: "#0078D4" }} />
               </div>
               <span className="text-sm font-medium">OneDrive</span>
             </div>

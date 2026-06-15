@@ -1,16 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import {
   Search, Plus, Phone, Mail, MapPin, Building2,
   Filter, CircleDollarSign, ChevronDown, X,
   ClipboardList, FileText, Send,
-  Star, StarOff,
+  Star, StarOff, Shield, User,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/app/auth-provider"
+import { getProfile } from "@/lib/supabase"
 
 /* ─── demo data ─── */
 const contacts = [
@@ -54,7 +56,13 @@ const channels = [
   { id: "call",     label: "Call",     color: "bg-orange-600", connected: true },
 ]
 
+function getInitials(name: string): string {
+  if (!name.trim()) return ""
+  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+}
+
 export default function CRMPage() {
+  const { user } = useAuth()
   const [selectedId, setSelectedId] = useState("1")
   const [activeTab, setActiveTab] = useState("Overview")
   const [search, setSearch] = useState("")
@@ -63,6 +71,9 @@ export default function CRMPage() {
   const [showChannelMenu, setShowChannelMenu] = useState(false)
   const [composerOpen, setComposerOpen] = useState(false)
   const [messageText, setMessageText] = useState("")
+  const [privacyOpen, setPrivacyOpen] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState("")
+  const [userName, setUserName] = useState("")
   const contact = contacts.find(c => c.id === selectedId)!
   const activeCh = channels.find(c => c.id === activeChannel)!
 
@@ -71,11 +82,27 @@ export default function CRMPage() {
     c.company.toLowerCase().includes(search.toLowerCase())
   )
 
+  useEffect(() => {
+    async function load() {
+      if (!user) return
+      try {
+        const profile = await getProfile(user.id)
+        const name = profile?.full_name || user.user_metadata?.full_name || ""
+        setUserName(name)
+        if (profile?.avatar_url) setAvatarUrl(profile.avatar_url)
+      } catch {
+        const name = user.user_metadata?.full_name || ""
+        setUserName(name)
+      }
+    }
+    load()
+  }, [user])
+
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* ── HEADER ── */}
-      <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-visible border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
+      <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
         <div className="flex items-center gap-2">
           <Link href="/" className="flex shrink-0 items-center gap-2 overflow-visible">
             <Image
@@ -85,7 +112,7 @@ export default function CRMPage() {
               height={70}
               priority
               className="w-auto object-contain"
-              style={{ height: "140px" }}
+              style={{ height: "40px" }}
             />
           </Link>
         </div>
@@ -99,9 +126,18 @@ export default function CRMPage() {
           </div>
         </div>
         <div className="flex flex-1 justify-end items-center gap-2 md:gap-3 md:flex-none">
-          <button className="flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white">
-            E
+          <button
+            onClick={() => setPrivacyOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title="Privacy Notice"
+          >
+            <Shield className="h-4 w-4" />
+            <span className="hidden sm:inline">Privacy</span>
           </button>
+          <Link href="/profile" className="relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
+            <span className={avatarUrl ? "hidden" : ""}>{getInitials(userName) || <User className="h-4 w-4 text-white" />}</span>
+            {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
+          </Link>
         </div>
       </header>
 
@@ -568,6 +604,81 @@ export default function CRMPage() {
           )}
         </main>
       </div>
+
+      {/* ── PRIVACY MODAL ── */}
+      {privacyOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setPrivacyOpen(false)}>
+          <div className="relative mx-4 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#1e2330] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setPrivacyOpen(false)} className="absolute right-3 top-3 text-muted-foreground hover:text-white transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+            <div className="mb-4 flex items-center gap-3">
+              <Shield className="h-6 w-6 text-emerald-400" />
+              <h3 className="text-lg font-semibold text-white">Private Data Legal Notice</h3>
+            </div>
+            <p className="mb-4 text-sm text-muted-foreground">Your customer data is protected under the following applicable laws:</p>
+            <div className="mb-4 grid gap-2">
+              {[
+                { j: "Mexico", l: "LFPDPPP" },
+                { j: "European Union", l: "GDPR (Regulation EU 2016/679)" },
+                { j: "California, USA", l: "CCPA/CPRA" },
+                { j: "Canada", l: "PIPEDA" },
+                { j: "Brazil", l: "LGPD" },
+              ].map((row, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+                  <span className="text-muted-foreground">{row.j}: <span className="text-white">{row.l}</span></span>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <h4 className="mb-1.5 text-sm font-semibold text-white">Your rights (GDPR Art. 17 & 20 / LFPDPPP Art. 22-26):</h4>
+                <ul className="space-y-1">
+                  {["Full ownership of your data", "Export your data at any time", "Request permanent deletion within 30 days of cancellation"].map((r, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />{r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="mb-1.5 text-sm font-semibold text-white">Platform obligations:</h4>
+                <ul className="space-y-1">
+                  {["We act exclusively as Data Processor", "You remain the Data Controller", "Your data never trains public AI models"].map((o, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />{o}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="mb-1.5 text-sm font-semibold text-white">Source transparency:</h4>
+                <ul className="space-y-1">
+                  {["Every response cites internal vs external sources", "External web research includes citations", "Minimum hallucinated data — you verify before use"].map((t, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />{t}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h4 className="mb-1.5 text-sm font-semibold text-white">Limitation of liability:</h4>
+                <ul className="space-y-1">
+                  {["We are not liable for decisions you make based on AI-generated outputs", "We are not liable for third-party platform interruptions"].map((l, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />{l}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-600/5 p-4">
+              <p className="text-sm text-emerald-400">By continuing to use this CRM dashboard, you confirm acceptance of these legal terms.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

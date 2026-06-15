@@ -5,9 +5,9 @@ import { NavRail } from "@/components/nav-rail"
 export default function AutomationsPage() {
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
-      <header className="flex h-16 shrink-0 items-center gap-4 overflow-visible border-b bg-background/80 backdrop-blur-md px-4">
-        <Link href="/" className="flex shrink-0 items-center overflow-visible">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "140px" }} />
+      <header className="flex h-16 shrink-0 items-center gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-4">
+        <Link href="/" className="flex shrink-0 items-center overflow-hidden">
+          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "40px" }} />
         </Link>
         <div className="flex-1" />
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">E</div>

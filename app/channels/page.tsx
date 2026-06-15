@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Search, Check, RefreshCw, MessageSquare, User } from "lucide-react"
 import { FaWhatsapp, FaTelegram, FaSlack, FaInstagram, FaFacebookMessenger, FaSms, FaMicrosoft } from "react-icons/fa"
-import { SiGmail, SiIcloud } from "react-icons/si"
+import { SiGmail, SiIcloud, SiGooglecalendar } from "react-icons/si"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
@@ -89,6 +89,13 @@ const channels = [
     status: "disconnected",
     icon: <FaSms className="h-6 w-6" style={{ color: "#34C759" }} />,
   },
+  {
+    id: "googlecalendar",
+    name: "Google Calendar",
+    desc: "Connect Google Calendar so your AI can schedule meetings and manage events.",
+    status: "disconnected",
+    icon: <SiGooglecalendar className="h-6 w-6" style={{ color: "#4285F4" }} />,
+  },
 ]
 
 function getInitials(name: string): string {
@@ -103,6 +110,7 @@ export default function ChannelsPage() {
     Object.fromEntries(channels.map(c => [c.id, c.status]))
   )
   const [userInitials, setUserInitials] = useState("")
+  const [avatarUrl, setAvatarUrl] = useState("")
 
   const channelDescriptions: Record<string, string> = {
     whatsapp: t("channelDescWhatsapp"),
@@ -116,6 +124,7 @@ export default function ChannelsPage() {
     messenger: t("channelDescMessenger"),
     icloud: t("channelDescIcloud"),
     sms: t("channelDescSms"),
+    googlecalendar: t("channelDescGoogleCalendar"),
   }
 
   useEffect(() => {
@@ -125,6 +134,7 @@ export default function ChannelsPage() {
         const profile = await getProfile(user.id)
         const name = profile?.full_name || user.user_metadata?.full_name || ""
         setUserInitials(getInitials(name))
+        if (profile?.avatar_url) setAvatarUrl(profile.avatar_url)
       } catch {
         const name = user.user_metadata?.full_name || ""
         setUserInitials(getInitials(name))
@@ -144,9 +154,9 @@ export default function ChannelsPage() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* Header */}
-      <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-visible border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
-        <Link href="/" className="flex shrink-0 items-center overflow-visible">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "140px" }} />
+      <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
+        <Link href="/" className="flex shrink-0 items-center overflow-hidden">
+          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "40px" }} />
         </Link>
         <div className="hidden flex-1 justify-center md:flex">
           <div className="relative w-full max-w-lg">
@@ -180,8 +190,9 @@ export default function ChannelsPage() {
               ES
             </button>
           </div>
-          <Link href="/profile" className="flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
-            {userInitials || <User className="h-4 w-4 text-white" />}
+          <Link href="/profile" className="relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
+            <span className={avatarUrl ? "hidden" : ""}>{userInitials || <User className="h-4 w-4 text-white" />}</span>
+            {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
           </Link>
         </div>
       </header>
