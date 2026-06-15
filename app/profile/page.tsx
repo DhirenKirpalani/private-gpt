@@ -445,20 +445,32 @@ export default function ProfilePage() {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !user) return
+    console.log("[DEBUG handleAvatarUpload] file selected:", file?.name, "type:", file?.type, "user:", user?.id)
+    if (!file || !user) {
+      console.log("[DEBUG handleAvatarUpload] ABORT - no file or no user")
+      return
+    }
     if (!allowedImageTypes.has(file.type)) {
       toast({ title: t("profileErrorImageTitle") || "Invalid file", description: t("profileErrorImage"), variant: "error" })
       return
     }
     setSaveLoading(true)
     try {
+      console.log("[DEBUG handleAvatarUpload] Calling uploadAvatar...")
       const publicUrl = await uploadAvatar(user.id, file)
+      console.log("[DEBUG handleAvatarUpload] uploadAvatar returned:", publicUrl)
       setForm(f => ({ ...f, avatarUrl: publicUrl }))
       localStorage.setItem("exploro_avatar_url", publicUrl)
+      console.log("[DEBUG handleAvatarUpload] Calling upsertProfile with:", { user_id: user.id, avatar_url: publicUrl })
       await upsertProfile({ user_id: user.id, avatar_url: publicUrl })
+      console.log("[DEBUG handleAvatarUpload] upsertProfile SUCCESS")
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {
+      console.error("[DEBUG handleAvatarUpload] CATCH error:", err)
+      console.error("[DEBUG handleAvatarUpload] CATCH error.message:", err?.message)
+      console.error("[DEBUG handleAvatarUpload] CATCH error.code:", err?.code)
+      console.error("[DEBUG handleAvatarUpload] CATCH error.details:", err?.details)
       toast({ title: t("profileErrorAvatarTitle") || "Upload failed", description: err.message || t("profileErrorAvatar"), variant: "error" })
     } finally {
       setSaveLoading(false)

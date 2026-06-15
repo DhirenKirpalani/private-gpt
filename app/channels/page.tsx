@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Search, Check, RefreshCw, MessageSquare, User } from "lucide-react"
+import { Search, Check, RefreshCw, MessageSquare, User, Globe } from "lucide-react"
 import { FaWhatsapp, FaTelegram, FaSlack, FaInstagram, FaFacebookMessenger, FaSms, FaMicrosoft } from "react-icons/fa"
 import { SiGmail, SiIcloud, SiGooglecalendar } from "react-icons/si"
 import { NavRail } from "@/components/nav-rail"
@@ -96,6 +96,13 @@ const channels = [
     status: "disconnected",
     icon: <SiGooglecalendar className="h-6 w-6" style={{ color: "#4285F4" }} />,
   },
+  {
+    id: "hostinger",
+    name: "Hostinger",
+    desc: "Deploy your AI on your Hostinger website to engage visitors in real-time.",
+    status: "disconnected",
+    icon: <Globe className="h-6 w-6" style={{ color: "#673DE6" }} />,
+  },
 ]
 
 function getInitials(name: string): string {
@@ -125,6 +132,7 @@ export default function ChannelsPage() {
     icloud: t("channelDescIcloud"),
     sms: t("channelDescSms"),
     googlecalendar: t("channelDescGoogleCalendar"),
+    hostinger: t("channelDescHostinger"),
   }
 
   useEffect(() => {
