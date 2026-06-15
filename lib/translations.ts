@@ -471,6 +471,7 @@ export const translations = {
     channelDescIcloud: "Connect your iCloud email so your AI can manage messages.",
     channelDescSms: "Enable SMS so your AI can send and receive text messages.",
     channelDescGoogleCalendar: "Connect Google Calendar so your AI can schedule meetings and manage events.",
+    channelDescHostinger: "Deploy your AI on your Hostinger website to engage visitors in real-time.",
 
     // Profile page
     profileSearchPlaceholder: "Search...",
@@ -1083,6 +1084,7 @@ export const translations = {
     channelDescIcloud: "Conecta tu email de iCloud para que tu IA gestione mensajes.",
     channelDescSms: "Habilita SMS para que tu IA envíe y reciba mensajes de texto.",
     channelDescGoogleCalendar: "Conecta Google Calendar para que tu IA programe reuniones y gestione eventos.",
+    channelDescHostinger: "Despliega tu IA en tu sitio web de Hostinger para interactuar con visitantes en tiempo real.",
 
     // Profile page
     profileSearchPlaceholder: "Buscar...",

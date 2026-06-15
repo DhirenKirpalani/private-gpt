@@ -82,13 +82,21 @@ export async function getProfile(userId: string) {
 }
 
 export async function upsertProfile(profile: Partial<Profile>) {
+  console.log("[DEBUG upsertProfile] payload:", JSON.stringify(profile))
   const { data, error } = await supabase
     .from("profiles")
     .upsert(profile, { onConflict: "user_id" })
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error("[DEBUG upsertProfile] ERROR:", error)
+    console.error("[DEBUG upsertProfile] ERROR message:", error.message)
+    console.error("[DEBUG upsertProfile] ERROR code:", error.code)
+    console.error("[DEBUG upsertProfile] ERROR details:", error.details)
+    throw error
+  }
+  console.log("[DEBUG upsertProfile] SUCCESS:", data)
   return data as Profile
 }
 
@@ -196,6 +204,9 @@ export async function publishTranslations(entries: { key: string; lang: string; 
 
 // Avatars
 export async function uploadLogo(userId: string, file: File) {
+  const { data: sessionData } = await supabase.auth.getSession()
+  if (!sessionData.session) throw new Error("No active session. Please sign in again.")
+
   const fileExt = file.name.split(".").pop()
   const filePath = `${userId}/logo.${fileExt}`
 
@@ -206,21 +217,43 @@ export async function uploadLogo(userId: string, file: File) {
   if (uploadError) throw uploadError
 
   const { data } = supabase.storage.from("logos").getPublicUrl(filePath)
-  return data.publicUrl
+  return `${data.publicUrl}?t=${Date.now()}`
 }
 
 export async function uploadAvatar(userId: string, file: File) {
+  console.log("[DEBUG uploadAvatar] START userId:", userId, "file:", file.name, "type:", file.type, "size:", file.size)
+
+  // Verify session is active before upload
+  const { data: sessionData } = await supabase.auth.getSession()
+  console.log("[DEBUG uploadAvatar] session:", sessionData.session ? "present" : "MISSING")
+  if (!sessionData.session) {
+    throw new Error("No active session. Please sign in again.")
+  }
+  console.log("[DEBUG uploadAvatar] auth.uid from session:", sessionData.session.user.id)
+  if (sessionData.session.user.id !== userId) {
+    console.warn("[DEBUG uploadAvatar] WARNING: session userId != passed userId")
+  }
+
   const fileExt = file.name.split(".").pop()
   const filePath = `${userId}/avatar.${fileExt}`
+  console.log("[DEBUG uploadAvatar] filePath:", filePath)
 
   const { error: uploadError } = await supabase.storage
     .from("avatars")
     .upload(filePath, file, { upsert: true, contentType: file.type })
 
-  if (uploadError) throw uploadError
+  if (uploadError) {
+    console.error("[DEBUG uploadAvatar] STORAGE UPLOAD FAILED:", uploadError)
+    console.error("[DEBUG uploadAvatar] error.name:", (uploadError as any).name)
+    console.error("[DEBUG uploadAvatar] error.statusCode:", (uploadError as any).statusCode)
+    throw uploadError
+  }
+  console.log("[DEBUG uploadAvatar] Storage upload OK")
 
   const { data } = supabase.storage.from("avatars").getPublicUrl(filePath)
-  return data.publicUrl
+  const publicUrl = `${data.publicUrl}?t=${Date.now()}`
+  console.log("[DEBUG uploadAvatar] publicUrl:", publicUrl)
+  return publicUrl
 }
 
 // Knowledge Base
