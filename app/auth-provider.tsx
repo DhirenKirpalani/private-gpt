@@ -1,7 +1,7 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
-import { supabase, getUser, getSession, onAuthStateChange, signOut } from "@/lib/supabase"
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react"
+import { supabase, getUser, getSession, signOut, getProfile, type Profile } from "@/lib/supabase"
 import type { User, Session } from "@supabase/supabase-js"
 
 type AuthContextType = {
@@ -9,6 +9,9 @@ type AuthContextType = {
   session: Session | null
   loading: boolean
   logout: () => Promise<void>
+  avatarUrl: string
+  profile: Profile | null
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -16,12 +19,41 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   loading: true,
   logout: async () => {},
+  avatarUrl: "",
+  profile: null,
+  refreshProfile: async () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [avatarUrl, setAvatarUrl] = useState("")
+  const [profile, setProfile] = useState<Profile | null>(null)
+
+  const loadProfile = useCallback(async (userId: string) => {
+    try {
+      const p = await getProfile(userId)
+      setProfile(p)
+      const url = p?.avatar_url || ""
+      setAvatarUrl(url)
+      if (url) localStorage.setItem("exploro_avatar_url", url)
+      else localStorage.removeItem("exploro_avatar_url")
+    } catch {
+      // ignore — avatar stays empty
+    }
+  }, [])
+
+  const refreshProfile = useCallback(async () => {
+    if (!user) return
+    await loadProfile(user.id)
+  }, [user, loadProfile])
+
+  // Pre-populate avatarUrl from cache so children don't flash before async load
+  useEffect(() => {
+    const cached = localStorage.getItem("exploro_avatar_url")
+    if (cached) setAvatarUrl(cached)
+  }, [])
 
   useEffect(() => {
     async function initAuth() {
@@ -31,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (currentSession) {
           const currentUser = await getUser()
           setUser(currentUser)
+          if (currentUser) await loadProfile(currentUser.id)
         }
       } catch {
         // No session = not logged in
@@ -41,25 +74,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initAuth()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       setSession(newSession)
-      setUser(newSession?.user ?? null)
+      const newUser = newSession?.user ?? null
+      setUser(newUser)
+      if (newUser) {
+        await loadProfile(newUser.id)
+      } else {
+        setProfile(null)
+        setAvatarUrl("")
+      }
       setLoading(false)
     })
 
     return () => {
       subscription.unsubscribe()
     }
-  }, [])
+  }, [loadProfile])
 
   const logout = async () => {
     await signOut()
     setUser(null)
     setSession(null)
+    setProfile(null)
+    setAvatarUrl("")
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, logout }}>
+    <AuthContext.Provider value={{ user, session, loading, logout, avatarUrl, profile, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   )

@@ -219,7 +219,7 @@ function formToProfile(form: typeof defaultForm): Partial<Profile> {
 }
 
 export default function ProfilePage() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading, refreshProfile } = useAuth()
   const { t, lang, setLang } = useI18n()
   const router = useRouter()
   const [saved, setSaved] = useState(false)
@@ -258,7 +258,6 @@ export default function ProfilePage() {
         const loaded = profileToForm(profile)
         if (!loaded.email) loaded.email = user.email || ""
         console.log("[AVATAR DEBUG] Form avatarUrl after mapping:", loaded.avatarUrl)
-        if (loaded.avatarUrl) localStorage.setItem("exploro_avatar_url", loaded.avatarUrl)
         if (loaded.fullName) localStorage.setItem("exploro_user_name", loaded.fullName)
         setForm(loaded)
         setOriginalForm(loaded)
@@ -460,10 +459,10 @@ export default function ProfilePage() {
       const publicUrl = await uploadAvatar(user.id, file)
       console.log("[DEBUG handleAvatarUpload] uploadAvatar returned:", publicUrl)
       setForm(f => ({ ...f, avatarUrl: publicUrl }))
-      localStorage.setItem("exploro_avatar_url", publicUrl)
       console.log("[DEBUG handleAvatarUpload] Calling upsertProfile with:", { user_id: user.id, avatar_url: publicUrl })
       await upsertProfile({ user_id: user.id, avatar_url: publicUrl })
       console.log("[DEBUG handleAvatarUpload] upsertProfile SUCCESS")
+      await refreshProfile()
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {
@@ -511,12 +510,10 @@ export default function ProfilePage() {
               ES
             </button>
           </div>
-          <Link href="/chat" className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
-            <span className={form.avatarUrl ? "hidden" : ""}>
-              {form.fullName.trim()
-                ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
-                : <User className="h-4 w-4 text-white" />}
-            </span>
+          <Link href="/chat" className={cn("relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-xs font-bold text-white transition-colors overflow-hidden", form.avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
+            {!form.avatarUrl && (form.fullName.trim()
+              ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+              : <User className="h-4 w-4 text-white" />)}
             {form.avatarUrl && (
               <img
                 src={form.avatarUrl}
@@ -587,10 +584,10 @@ export default function ProfilePage() {
                     console.log("[AVATAR DEBUG] Rendering avatar. avatarUrl:", form.avatarUrl, "| fullName:", form.fullName)
                     return null
                   })()}
-                  <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 text-2xl font-bold text-white overflow-hidden">
-                    {form.fullName.trim()
+                  <div className={`relative flex h-20 w-20 items-center justify-center rounded-full text-2xl font-bold text-white overflow-hidden ${form.avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600"}`}>
+                    {!form.avatarUrl && (form.fullName.trim()
                       ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
-                      : <User className="h-10 w-10 text-white/80" />}
+                      : <User className="h-10 w-10 text-white/80" />)}
                     {form.avatarUrl && (
                       <img
                         src={form.avatarUrl}
