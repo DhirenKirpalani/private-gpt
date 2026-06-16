@@ -83,12 +83,20 @@ export default function HomePage() {
           by Us+AI Bureau
         </p>
         <div className="animate-fade-in-up flex flex-wrap items-center justify-center gap-4 [animation-delay:360ms]">
-          <Button size="lg" onClick={handleCTA} className="pulse-ring gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
-            {t("heroStartFree")} <ArrowRight className="h-4 w-4" />
-          </Button>
-          <Button size="lg" variant="outline" className="gap-2 px-8 transition-all duration-200 hover:scale-105">
-            <Play className="h-4 w-4" /> {t("heroWatchDemo")}
-          </Button>
+          {user ? (
+            <Button size="lg" onClick={() => router.push("/chat")} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
+              Go to Chat <ArrowRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            <>
+              <Button size="lg" onClick={handleCTA} className="pulse-ring gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
+                {t("heroStartFree")} <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button size="lg" variant="outline" className="gap-2 px-8 transition-all duration-200 hover:scale-105">
+                <Play className="h-4 w-4" /> {t("heroWatchDemo")}
+              </Button>
+            </>
+          )}
         </div>
       </section>
 
@@ -493,13 +501,15 @@ export default function HomePage() {
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Button size="lg" onClick={handleCTA} className="bg-emerald-600 hover:bg-emerald-700 text-white px-10">
-              {t("ctaStartFree")}
+              {user ? "Go to Chat" : t("ctaStartFree")}
             </Button>
-            <Link href="/exploro">
-              <Button size="lg" variant="outline" className="px-10">
-                {t("ctaBookDemo")}
-              </Button>
-            </Link>
+            {!user && (
+              <Link href="/exploro">
+                <Button size="lg" variant="outline" className="px-10">
+                  {t("ctaBookDemo")}
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </section>

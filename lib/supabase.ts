@@ -352,3 +352,14 @@ export function getDocumentPublicUrl(userId: string, filename: string) {
   const { data } = supabase.storage.from("knowledge-base").getPublicUrl(`${userId}/${filename}`)
   return data.publicUrl
 }
+
+// Support screenshots
+export async function uploadSupportScreenshot(userId: string, file: File) {
+  const filePath = `${userId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`
+  const { error } = await supabase.storage
+    .from("support-screenshots")
+    .upload(filePath, file, { upsert: false, contentType: file.type })
+  if (error) throw error
+  const { data } = supabase.storage.from("support-screenshots").getPublicUrl(filePath)
+  return data.publicUrl
+}

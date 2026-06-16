@@ -110,10 +110,10 @@ export function Footer() {
               </button>
 
               <Link
-                href="/"
+                href="/support"
                 className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
-                {t("contact")}
+                {t("support")}
               </Link>
             </div>
           </div>
@@ -132,7 +132,7 @@ export function Footer() {
               onClick={handleCTA}
               className="inline-flex items-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/20"
             >
-              {t("getStartedFree")}
+              {user ? "Go to Chat" : t("getStartedFree")}
             </button>
           </div>
         </div>
