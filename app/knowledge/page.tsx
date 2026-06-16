@@ -521,13 +521,18 @@ export default function KnowledgePage() {
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
                 </div>
               )}
-              {!docsLoading && filtered.map(doc => (
-                <div
+              {!docsLoading && filtered.map(doc => {
+                const docIndex = docList.findIndex(d => d.id === doc.id) + 1
+                return (
+                  <div
                   key={doc.id}
                   className="card-3d flex items-center gap-4 rounded-xl border border-white/5 bg-[#2a3444] px-4 py-3 shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                  <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
                     <File className="h-5 w-5 text-muted-foreground" />
+                    <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-bold text-white leading-none">
+                      {docIndex}
+                    </span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <button
@@ -588,8 +593,9 @@ export default function KnowledgePage() {
                       </div>
                     )}
                   </div>
-                </div>
-              ))}
+                  </div>
+                )
+              })}
 
               {!docsLoading && filtered.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
