@@ -353,6 +353,53 @@ export function getDocumentPublicUrl(userId: string, filename: string) {
   return data.publicUrl
 }
 
+// Email connections
+export type EmailConnection = {
+  id: string
+  user_id: string
+  provider: string
+  email_address: string | null
+  smtp_host: string | null
+  smtp_port: number | null
+  smtp_secure: boolean
+  smtp_user: string | null
+  smtp_pass: string | null
+  imap_host: string | null
+  imap_port: number | null
+  status: string
+  last_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function getEmailConnections(userId: string): Promise<EmailConnection[]> {
+  const { data, error } = await supabase
+    .from("email_connections")
+    .select("*")
+    .eq("user_id", userId)
+  if (error) throw error
+  return (data ?? []) as EmailConnection[]
+}
+
+export async function saveEmailConnection(conn: Partial<EmailConnection>): Promise<EmailConnection> {
+  const { data, error } = await supabase
+    .from("email_connections")
+    .upsert(conn, { onConflict: "user_id,provider" })
+    .select()
+    .single()
+  if (error) throw error
+  return data as EmailConnection
+}
+
+export async function deleteEmailConnection(userId: string, provider: string): Promise<void> {
+  const { error } = await supabase
+    .from("email_connections")
+    .delete()
+    .eq("user_id", userId)
+    .eq("provider", provider)
+  if (error) throw error
+}
+
 // Support screenshots
 export async function uploadSupportScreenshot(userId: string, file: File) {
   const filePath = `${userId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`

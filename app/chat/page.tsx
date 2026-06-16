@@ -10,7 +10,7 @@ import {
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
-import { getProfile, fetchUserDocuments } from "@/lib/supabase"
+import { getProfile, fetchUserDocuments, type Profile } from "@/lib/supabase"
 import { useI18n } from "@/lib/i18n"
 import { CinematicBackground } from "@/components/cinematic-background"
 import { compileTheme, type ThemeStyle, type ThemeMood, getBrandInputColors } from "@/lib/theme-engine"
@@ -71,9 +71,15 @@ export default function ChatPage() {
   const [logoUrl, setLogoUrl] = useState("")
   const [greeting, setGreeting] = useState("")
   const [mounted, setMounted] = useState(false)
-  const [activeInputTab, setActiveInputTab] = useState<"knowledge" | "channels" | "websearch" | null>(null)
+  const [aiProfile, setAiProfile] = useState<Profile | null>(null)
+  const [kbEnabled, setKbEnabled] = useState(false)
+  const [channelsEnabled, setChannelsEnabled] = useState(false)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [showKbPanel, setShowKbPanel] = useState(false)
   const [kbDocs, setKbDocs] = useState<{ id: string; index: number; name: string; category: string }[]>([])
   const [kbLoading, setKbLoading] = useState(false)
+  const [chatError, setChatError] = useState("")
+  const [websiteContent, setWebsiteContent] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const kbPanelRef = useRef<HTMLDivElement>(null)
 
@@ -82,6 +88,12 @@ export default function ChatPage() {
     setGreeting("Hi")
     const stored = localStorage.getItem("exploro_input_dark")
     if (stored !== null) setInputDark(stored !== "false")
+    const kb = localStorage.getItem("exploro_kb_enabled") === "true"
+    const ch = localStorage.getItem("exploro_channels_enabled") === "true"
+    const ws = localStorage.getItem("exploro_websearch_enabled") === "true"
+    setKbEnabled(kb)
+    setChannelsEnabled(ch)
+    setWebSearchEnabled(ws)
   }, [])
 
   useEffect(() => {
@@ -91,12 +103,20 @@ export default function ChatPage() {
         const profile = await getProfile(user.id)
         console.log("[CHAT DEBUG] Raw profile:", profile)
         console.log("[CHAT DEBUG] logo_url:", profile?.logo_url)
+        setAiProfile(profile)
         const name = profile?.full_name || user.user_metadata?.full_name || ""
         setUserInitials(getInitials(name))
         setUserName(name)
         localStorage.setItem("exploro_user_name", name)
         setLogoUrl(profile?.logo_url || "")
         console.log("[CHAT DEBUG] logoUrl state set to:", profile?.logo_url || "")
+        if (profile?.website) {
+          fetch("/api/context", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: profile.website }),
+          }).then(r => r.json()).then(d => { if (d.content) setWebsiteContent(d.content) }).catch(() => {})
+        }
         // Input style from profile
         const inputStyle = profile?.input_style
         if (inputStyle) {
@@ -168,35 +188,100 @@ export default function ChatPage() {
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return
-    const docRefs = input.match(/#(\d+)/g)
-    let docContext = ""
-    if (docRefs && kbDocs.length > 0) {
-      const refDocs = docRefs
-        .map(ref => kbDocs.find(d => d.index === parseInt(ref.slice(1))))
-        .filter(Boolean)
-      if (refDocs.length > 0) {
-        docContext = `\n\n📚 Referenced from your Knowledge Base: ${refDocs.map(d => `#${d!.index} "${d!.name}"`).join(", ")}`
-      }
-    }
+    setChatError("")
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: input, timestamp: new Date() }
-    setMessages(prev => [...prev, userMsg])
+    const nextMessages = [...messages, userMsg]
+    setMessages(nextMessages)
     setInput("")
-    setActiveInputTab(null)
+    setShowKbPanel(false)
     setLoading(true)
     let i = 0
     const iv = setInterval(() => { setLoadingText(loadingStates[i++ % loadingStates.length]) }, 900)
-    await new Promise(r => setTimeout(r, 3600))
-    clearInterval(iv)
-    setMessages(prev => [...prev, {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: t("chatDemoResponse", { query: userMsg.content }) + docContext,
-      sources: [t("chatDemoSource1"), t("chatDemoSource2"), t("chatDemoSource3")],
-      confidence: "high",
-      timestamp: new Date(),
-    }])
-    setLoading(false)
-    setLoadingText("")
+    try {
+      const kbContext = kbEnabled && kbDocs.length > 0
+        ? `\nKnowledge Base documents available:\n${kbDocs.map(d => `#${d.index} "${d.name}" (${d.category})`).join("\n")}`
+        : ""
+      const p = aiProfile
+      const arr = (v: any) => Array.isArray(v) ? v.join(", ") : (v ? String(v) : "")
+      const systemPrompt = [
+        `# Identity`,
+        `You are ${p?.ai_name || "Nira"}, an AI business operations assistant. You have been fully briefed on the user's profile, business, and goals before this conversation began. Treat this as context you already know — do not ask the user to re-explain it.`,
+        ``,
+        `# Role`,
+        p?.ai_role || "",
+        ``,
+        `# User Profile`,
+        p?.full_name ? `Name: ${p.full_name}` : "",
+        p?.job_title ? `Job Title: ${p.job_title}` : "",
+        p?.location ? `Location: ${p.location}` : "",
+        p?.linkedin_url ? `LinkedIn: ${p.linkedin_url} (this is the user's professional profile — treat it as a reference for their background)` : "",
+        p?.contact_email ? `Contact Email: ${p.contact_email}` : "",
+        ``,
+        `# Business Profile`,
+        p?.company_name ? `Company: ${p.company_name}` : "",
+        p?.industry ? `Industry: ${p.industry}` : "",
+        p?.company_size ? `Company Size: ${p.company_size}` : "",
+        p?.year_founded ? `Founded: ${p.year_founded}` : "",
+        p?.website ? `Website: ${p.website}` : "",
+        p?.contact_email ? `Business Email: ${p.contact_email}` : "",
+        p?.slogan ? `Slogan: "${p.slogan}"` : "",
+        ``,
+        p?.business_description ? `# Business Description\n${p.business_description}` : "",
+        ``,
+        p?.target_audience ? `# Target Audience\n${p.target_audience}` : "",
+        ``,
+        p?.key_products ? `# Key Products & Services\n${p.key_products}` : "",
+        ``,
+        p?.competitors ? `# Competitors\n${typeof p.competitors === "string" ? p.competitors : JSON.stringify(p.competitors)}` : "",
+        ``,
+        `# Communication Guidelines`,
+        p?.brand_voice ? `Voice: ${p.brand_voice}` : "",
+        p?.communication_style ? `Style: ${p.communication_style}` : "",
+        p?.tone_examples ? `Tone examples:\n${p.tone_examples}` : "",
+        p?.words_to_avoid ? `Words/phrases to avoid: ${p.words_to_avoid}` : "",
+        p?.response_length ? `Response length preference: ${p.response_length}` : "",
+        p?.languages ? `Languages: ${arr(p.languages)}` : "",
+        ``,
+        p?.clarification_prompt ? `# Clarification Protocol\n${p.clarification_prompt}` : "",
+        ``,
+        kbContext ? `# Knowledge Base\n${kbContext}` : "",
+        channelsEnabled ? `# Active Channel Context\nChannel integrations are active (email, WhatsApp, etc.). Consider business communication channels in responses.` : "",
+        webSearchEnabled ? `# Web Search\nWeb search is enabled — reference current and up-to-date information when it adds value.` : "",
+        websiteContent ? `# Website Content (fetched from ${p?.website})\n${websiteContent}` : "",
+        ``,
+        `# Core Instructions`,
+        `- You are ${p?.ai_name || "Nira"} — stay in character at all times`,
+        `- You already know the user's full profile — proactively reference it where relevant`,
+        `- Apply communication guidelines consistently in every response`,
+        `- When using Knowledge Base content, cite references like #1 or #2`,
+        `- Be accurate, direct, and practical — no hype language`,
+      ].filter(Boolean).join("\n")
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
+          systemPrompt,
+          responseLength: aiProfile?.response_length || "Standard",
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || "Request failed")
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: data.content,
+        confidence: "high",
+        timestamp: new Date(),
+      }])
+    } catch (err: any) {
+      setChatError(err?.message || "Something went wrong. Please try again.")
+      setMessages(prev => prev.slice(0, -0))
+    } finally {
+      clearInterval(iv)
+      setLoading(false)
+      setLoadingText("")
+    }
   }
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -204,13 +289,13 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
-    if (activeInputTab !== "knowledge") return
+    if (!showKbPanel) return
     function handleClick(e: MouseEvent) {
-      if (!kbPanelRef.current?.contains(e.target as Node)) setActiveInputTab(null)
+      if (!kbPanelRef.current?.contains(e.target as Node)) setShowKbPanel(false)
     }
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
-  }, [activeInputTab])
+  }, [showKbPanel])
 
   async function loadKbDocs() {
     if (!user || kbDocs.length > 0) return
@@ -229,9 +314,20 @@ export default function ChatPage() {
   }
 
   function handleTabClick(tab: "knowledge" | "channels" | "websearch") {
-    if (activeInputTab === tab) { setActiveInputTab(null); return }
-    setActiveInputTab(tab)
-    if (tab === "knowledge") loadKbDocs()
+    if (tab === "knowledge") {
+      const next = !kbEnabled
+      setKbEnabled(next)
+      localStorage.setItem("exploro_kb_enabled", String(next))
+      if (next) { loadKbDocs(); setShowKbPanel(true) } else { setShowKbPanel(false) }
+    } else if (tab === "channels") {
+      const next = !channelsEnabled
+      setChannelsEnabled(next)
+      localStorage.setItem("exploro_channels_enabled", String(next))
+    } else if (tab === "websearch") {
+      const next = !webSearchEnabled
+      setWebSearchEnabled(next)
+      localStorage.setItem("exploro_websearch_enabled", String(next))
+    }
   }
 
   function insertDocRef(index: number) {
@@ -239,7 +335,7 @@ export default function ChatPage() {
       const ref = `#${index} `
       return prev === "" || prev.endsWith(" ") ? prev + ref : prev + " " + ref
     })
-    setActiveInputTab(null)
+    setShowKbPanel(false)
   }
 
   return (
@@ -436,7 +532,7 @@ export default function ChatPage() {
                   />
                   <div className="absolute bottom-3 flex w-full items-center justify-between px-3">
                     <div className="relative flex items-center gap-0.5" ref={kbPanelRef}>
-                      {activeInputTab === "knowledge" && (
+                      {showKbPanel && (
                         <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
                           <div className="border-b border-white/5 px-3 py-2">
                             <p className="text-xs font-semibold text-white">Knowledge Base</p>
@@ -468,9 +564,9 @@ export default function ChatPage() {
                         </div>
                       )}
                       {([
-                        { id: "knowledge" as const, icon: BookOpen, label: "Knowledge Base" },
-                        { id: "channels" as const, icon: Radio, label: "Channels" },
-                        { id: "websearch" as const, icon: Globe, label: "Web Search" },
+                        { id: "knowledge" as const, icon: BookOpen, label: "Knowledge Base", active: kbEnabled },
+                        { id: "channels" as const, icon: Radio, label: "Channels", active: channelsEnabled },
+                        { id: "websearch" as const, icon: Globe, label: "Web Search", active: webSearchEnabled },
                       ]).map(tab => (
                         <button
                           key={tab.id}
@@ -478,7 +574,7 @@ export default function ChatPage() {
                           title={tab.label}
                           className={cn(
                             "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
-                            activeInputTab === tab.id
+                            tab.active
                               ? "bg-emerald-600/20 text-emerald-400"
                               : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                           )}
@@ -596,7 +692,7 @@ export default function ChatPage() {
                 />
                 <div className="absolute bottom-3 flex w-full items-center justify-between px-3">
                   <div className="relative flex items-center gap-0.5" ref={kbPanelRef}>
-                    {activeInputTab === "knowledge" && (
+                    {showKbPanel && (
                       <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
                         <div className="border-b border-white/5 px-3 py-2">
                           <p className="text-xs font-semibold text-white">Knowledge Base</p>
@@ -628,9 +724,9 @@ export default function ChatPage() {
                       </div>
                     )}
                     {([
-                      { id: "knowledge" as const, icon: BookOpen, label: "Knowledge Base" },
-                      { id: "channels" as const, icon: Radio, label: "Channels" },
-                      { id: "websearch" as const, icon: Globe, label: "Web Search" },
+                      { id: "knowledge" as const, icon: BookOpen, label: "Knowledge Base", active: kbEnabled },
+                      { id: "channels" as const, icon: Radio, label: "Channels", active: channelsEnabled },
+                      { id: "websearch" as const, icon: Globe, label: "Web Search", active: webSearchEnabled },
                     ]).map(tab => (
                       <button
                         key={tab.id}
@@ -638,7 +734,7 @@ export default function ChatPage() {
                         title={tab.label}
                         className={cn(
                           "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
-                          activeInputTab === tab.id
+                          tab.active
                             ? "bg-emerald-600/20 text-emerald-400"
                             : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                         )}
@@ -657,9 +753,14 @@ export default function ChatPage() {
                   </button>
                 </div>
               </div>
-              <p className="mt-2 text-center text-xs text-muted-foreground">
-                {t("chatFooter")}
-              </p>
+              {chatError && (
+                <p className="mt-2 text-center text-xs text-red-400">{chatError}</p>
+              )}
+              {!chatError && (
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  {t("chatFooter")}
+                </p>
+              )}
             </div>
           </div>}
         </main>
