@@ -29,13 +29,7 @@ export function Navbar() {
   const [activeSection, setActiveSection] = useState("")
   const [mobileOpen, setMobileOpen] = useState(false)
   const { t, lang, setLang } = useI18n()
-  const { user } = useAuth()
-  const [avatarUrl, setAvatarUrl] = useState("")
-
-  useEffect(() => {
-    const av = localStorage.getItem("exploro_avatar_url")
-    if (av) setAvatarUrl(av)
-  }, [])
+  const { user, avatarUrl, loading } = useAuth()
 
   const handleCTA = () => {
     if (user) router.push("/chat")
@@ -143,10 +137,13 @@ export function Navbar() {
           </div>
 
           {user ? (
-            <Link href="/profile" className="relative flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
-              <span className={avatarUrl ? "hidden" : ""}>{userInitials || <User className="h-4 w-4 text-white" />}</span>
+            <Link href="/profile" className={cn(
+              "relative flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white transition-colors overflow-hidden",
+              loading || avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500"
+            )}>
+              {!loading && !avatarUrl && (userInitials || <User className="h-4 w-4 text-white" />)}
               {avatarUrl && (
-                <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+                <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
               )}
             </Link>
           ) : (

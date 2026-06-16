@@ -111,13 +111,12 @@ function getInitials(name: string): string {
 }
 
 export default function ChannelsPage() {
-  const { user } = useAuth()
+  const { user, avatarUrl, loading: authLoading } = useAuth()
   const { t, lang, setLang } = useI18n()
   const [channelStates, setChannelStates] = useState<Record<string, string>>(
     Object.fromEntries(channels.map(c => [c.id, c.status]))
   )
   const [userInitials, setUserInitials] = useState("")
-  const [avatarUrl, setAvatarUrl] = useState("")
 
   const channelDescriptions: Record<string, string> = {
     whatsapp: t("channelDescWhatsapp"),
@@ -142,7 +141,6 @@ export default function ChannelsPage() {
         const profile = await getProfile(user.id)
         const name = profile?.full_name || user.user_metadata?.full_name || ""
         setUserInitials(getInitials(name))
-        if (profile?.avatar_url) setAvatarUrl(profile.avatar_url)
       } catch {
         const name = user.user_metadata?.full_name || ""
         setUserInitials(getInitials(name))
@@ -198,9 +196,12 @@ export default function ChannelsPage() {
               ES
             </button>
           </div>
-          <Link href="/profile" className="relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
-            <span className={avatarUrl ? "hidden" : ""}>{userInitials || <User className="h-4 w-4 text-white" />}</span>
-            {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
+          <Link href="/profile" className={cn(
+            "relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden",
+            authLoading || avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500"
+          )}>
+            {!authLoading && !avatarUrl && (userInitials || <User className="h-4 w-4 text-white" />)}
+            {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
           </Link>
         </div>
       </header>

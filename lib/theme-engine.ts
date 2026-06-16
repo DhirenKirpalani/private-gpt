@@ -30,6 +30,55 @@ export interface CompiledTheme {
   }
 }
 
+export function getBrandInputColors(primary: string, secondary?: string): {
+  bgGradient: string
+  border: string
+  shadow: string
+  text: string
+  iconAccent: string
+} {
+  const p = hexToRgb(primary)
+  const s = secondary ? hexToRgb(secondary) : null
+
+  // Very dark base with a subtle brand tint (~5% brand mixed into near-black)
+  const base1 = rgbToHex(
+    Math.round(p.r * 0.05 + 4),
+    Math.round(p.g * 0.04 + 3),
+    Math.round(p.b * 0.07 + 5),
+  )
+  const base2 = s
+    ? rgbToHex(
+        Math.round(s.r * 0.05 + 3),
+        Math.round(s.g * 0.04 + 3),
+        Math.round(s.b * 0.07 + 4),
+      )
+    : rgbToHex(
+        Math.round(p.r * 0.04 + 5),
+        Math.round(p.g * 0.06 + 3),
+        Math.round(p.b * 0.09 + 7),
+      )
+
+  const bgGradient = `linear-gradient(135deg, ${base1} 0%, ${base2} 100%)`
+  const border = `rgba(${p.r}, ${p.g}, ${p.b}, 0.5)`
+  const shadow = `0 0 0 1px rgba(${p.r}, ${p.g}, ${p.b}, 0.3), 0 4px 24px rgba(${p.r}, ${p.g}, ${p.b}, 0.18)`
+  const iconAccent = lighten(primary, 80)
+
+  return { bgGradient, border, shadow, text: "#ffffff", iconAccent }
+}
+
+export function getLuminance(hex: string): number {
+  const { r, g, b } = hexToRgb(hex)
+  const [R, G, B] = [r, g, b].map(v => {
+    v /= 255
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  })
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B
+}
+
+export function isDark(hex: string): boolean {
+  return getLuminance(hex) < 0.5
+}
+
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const clean = hex.replace("#", "")
   const bigint = parseInt(clean, 16)

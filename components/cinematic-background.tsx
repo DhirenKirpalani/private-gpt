@@ -21,11 +21,11 @@ export function CinematicBackground({ primaryColor, secondaryColor, style, mood 
   return (
     <>
       <style>{keyframes}</style>
-      <div style={theme.background} aria-hidden="true" />
+      <div style={{ ...theme.background, pointerEvents: "none" }} aria-hidden="true" />
       {theme.overlayLayers.map((layer, i) => (
-        <div key={i} style={layer} aria-hidden="true" />
+        <div key={i} style={{ ...layer, pointerEvents: "none" }} aria-hidden="true" />
       ))}
-      <div style={theme.noise} aria-hidden="true" />
+      <div style={{ ...theme.noise, pointerEvents: "none" }} aria-hidden="true" />
     </>
   )
 }

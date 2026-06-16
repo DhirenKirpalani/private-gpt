@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import Link from "next/link"
 import {
   Search, Upload, FileText, Trash2, Info, X,
@@ -99,13 +99,12 @@ function categoryDisplay(cat: string, translate: (k: string) => string) {
 }
 
 export default function KnowledgePage() {
-  const { user } = useAuth()
+  const { user, avatarUrl, loading: authLoading } = useAuth()
   const { t, lang, setLang } = useI18n()
   const [activeCategory, setActiveCategory] = useState("All Documents")
   const [search, setSearch] = useState("")
   const [docsTooltipOpen, setDocsTooltipOpen] = useState(false)
   const [userInitials, setUserInitials] = useState("")
-  const [avatarUrl, setAvatarUrl] = useState("")
   const [customCategories, setCustomCategories] = useState<{ id: string; name: string }[]>([])
   const [addingCategory, setAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
@@ -116,6 +115,7 @@ export default function KnowledgePage() {
   const [isUploading, setIsUploading] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [docsLoading, setDocsLoading] = useState(true)
   const [filterOpen, setFilterOpen] = useState(false)
   const filterRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -123,11 +123,11 @@ export default function KnowledgePage() {
   useEffect(() => {
     async function load() {
       if (!user) return
+      setDocsLoading(true)
       try {
         const profile = await getProfile(user.id)
         const name = profile?.full_name || user.user_metadata?.full_name || ""
         setUserInitials(getInitials(name))
-        if (profile?.avatar_url) setAvatarUrl(profile.avatar_url)
 
         // Load categories and documents from DB
         let cats = await fetchUserCategories(user.id)
@@ -157,6 +157,8 @@ export default function KnowledgePage() {
         console.error("Failed to load knowledge base:", err)
         const name = user.user_metadata?.full_name || ""
         setUserInitials(getInitials(name))
+      } finally {
+        setDocsLoading(false)
       }
     }
     load()
@@ -200,6 +202,14 @@ export default function KnowledgePage() {
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
   }, [filterOpen])
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { "All Documents": docList.length }
+    for (const doc of docList) {
+      counts[doc.category] = (counts[doc.category] || 0) + 1
+    }
+    return counts
+  }, [docList])
 
   const filtered = docList.filter(d =>
     (activeCategory === "All Documents" || d.category === activeCategory) &&
@@ -316,9 +326,12 @@ export default function KnowledgePage() {
               ES
             </button>
           </div>
-          <Link href="/profile" className="relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
-            <span className={avatarUrl ? "hidden" : ""}>{userInitials || <User className="h-4 w-4 text-white" />}</span>
-            {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
+          <Link href="/profile" className={cn(
+            "relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden",
+            authLoading || avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500"
+          )}>
+            {!authLoading && !avatarUrl && (userInitials || <User className="h-4 w-4 text-white" />)}
+            {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
           </Link>
         </div>
       </header>
@@ -329,35 +342,27 @@ export default function KnowledgePage() {
 
         {/* Sidebar: categories */}
         <aside className="flex w-56 shrink-0 flex-col border-r border-white/5 bg-[#2a3444] overflow-hidden">
-          <div className="p-3">
-            <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors">
-              <Upload className="h-4 w-4" />
-              {t("knowledgeUpload")}
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                accept={ACCEPTED_MIME_TYPES.join(",")}
-                onChange={handleFileChange}
-              />
-            </label>
-          </div>
-          <div className="flex-1 overflow-y-auto px-2 pb-4">
+          <div className="flex-1 overflow-y-auto px-3 py-3">
             <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("knowledgeCategories")}</p>
             {allCategories.map(cat => (
               <div key={cat} className="group relative flex items-center">
                 <button
                   onClick={() => setActiveCategory(cat)}
                   className={cn(
-                    "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                    "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 pr-7 text-sm transition-colors",
                     activeCategory === cat
                       ? "bg-emerald-600/15 text-emerald-400 font-medium"
                       : "text-muted-foreground hover:bg-muted/50"
                   )}
                 >
                   <FileText className="h-3.5 w-3.5 shrink-0" />
-                  {categoryDisplay(cat, t as unknown as (k: string) => string)}
+                  <span className="flex-1 truncate text-left">{categoryDisplay(cat, t as unknown as (k: string) => string)}</span>
+                  <span className={cn(
+                    "ml-1 shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums leading-none transition-opacity",
+                    (categoryCounts[cat] ?? 0) > 0 ? "opacity-100" : "opacity-0"
+                  )}>
+                    {categoryCounts[cat] ?? 0}
+                  </span>
                 </button>
                 {(() => {
                   const catObj = customCategories.find(c => c.name === cat)
@@ -492,9 +497,31 @@ export default function KnowledgePage() {
             </div>
           </div>
 
+          {/* Centered upload bar — hidden when no documents */}
+          {filtered.length > 0 && (
+            <div className="flex shrink-0 items-center justify-center border-b px-6 py-3">
+              <label className="group flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-white/15 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5">
+                <Upload className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-emerald-400" />
+                <span>Click here to upload</span>
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept={ACCEPTED_MIME_TYPES.join(",")}
+                  onChange={handleFileChange}
+                />
+              </label>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-6">
             <div className="space-y-2">
-              {filtered.map(doc => (
+              {docsLoading && (
+                <div className="flex items-center justify-center py-20">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                </div>
+              )}
+              {!docsLoading && filtered.map(doc => (
                 <div
                   key={doc.id}
                   className="card-3d flex items-center gap-4 rounded-xl border border-white/5 bg-[#2a3444] px-4 py-3 shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10"
@@ -564,11 +591,21 @@ export default function KnowledgePage() {
                 </div>
               ))}
 
-              {filtered.length === 0 && (
+              {!docsLoading && filtered.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-                    <BookOpen className="h-6 w-6 text-muted-foreground" />
-                  </div>
+                  <label className="mb-6 flex cursor-pointer flex-col items-center gap-2 group">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-muted transition-colors group-hover:border-emerald-500/50 group-hover:bg-emerald-600/5">
+                      <Upload className="h-7 w-7 text-muted-foreground transition-colors group-hover:text-emerald-400" />
+                    </div>
+                    <span className="text-sm font-medium text-emerald-400 group-hover:underline">Click here to upload</span>
+                    <input
+                      type="file"
+                      multiple
+                      className="hidden"
+                      accept={ACCEPTED_MIME_TYPES.join(",")}
+                      onChange={handleFileChange}
+                    />
+                  </label>
                   <p className="font-medium">{t("knowledgeEmptyTitle")}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{t("knowledgeEmptySubtitle")}</p>
                 </div>
