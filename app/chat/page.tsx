@@ -3,14 +3,14 @@
 import { useState, useRef, useEffect, useMemo } from "react"
 import Link from "next/link"
 import {
-  Plus, MessageSquare, Search, Send, Paperclip, Mic,
+  Plus, MessageSquare, Search, Send, BookOpen, Globe, Radio,
   Bot, Copy, RefreshCw, Share2, Sparkles,
   PanelLeftClose, X, User, SunMoon,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
-import { getProfile } from "@/lib/supabase"
+import { getProfile, fetchUserDocuments } from "@/lib/supabase"
 import { useI18n } from "@/lib/i18n"
 import { CinematicBackground } from "@/components/cinematic-background"
 import { compileTheme, type ThemeStyle, type ThemeMood, getBrandInputColors } from "@/lib/theme-engine"
@@ -71,7 +71,11 @@ export default function ChatPage() {
   const [logoUrl, setLogoUrl] = useState("")
   const [greeting, setGreeting] = useState("")
   const [mounted, setMounted] = useState(false)
+  const [activeInputTab, setActiveInputTab] = useState<"knowledge" | "channels" | "websearch" | null>(null)
+  const [kbDocs, setKbDocs] = useState<{ id: string; index: number; name: string; category: string }[]>([])
+  const [kbLoading, setKbLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const kbPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -156,9 +160,20 @@ export default function ChatPage() {
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return
+    const docRefs = input.match(/#(\d+)/g)
+    let docContext = ""
+    if (docRefs && kbDocs.length > 0) {
+      const refDocs = docRefs
+        .map(ref => kbDocs.find(d => d.index === parseInt(ref.slice(1))))
+        .filter(Boolean)
+      if (refDocs.length > 0) {
+        docContext = `\n\n📚 Referenced from your Knowledge Base: ${refDocs.map(d => `#${d!.index} "${d!.name}"`).join(", ")}`
+      }
+    }
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: input, timestamp: new Date() }
     setMessages(prev => [...prev, userMsg])
     setInput("")
+    setActiveInputTab(null)
     setLoading(true)
     let i = 0
     const iv = setInterval(() => { setLoadingText(loadingStates[i++ % loadingStates.length]) }, 900)
@@ -167,7 +182,7 @@ export default function ChatPage() {
     setMessages(prev => [...prev, {
       id: (Date.now() + 1).toString(),
       role: "assistant",
-      content: t("chatDemoResponse", { query: userMsg.content }),
+      content: t("chatDemoResponse", { query: userMsg.content }) + docContext,
       sources: [t("chatDemoSource1"), t("chatDemoSource2"), t("chatDemoSource3")],
       confidence: "high",
       timestamp: new Date(),
@@ -178,6 +193,45 @@ export default function ChatPage() {
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  }
+
+  useEffect(() => {
+    if (activeInputTab !== "knowledge") return
+    function handleClick(e: MouseEvent) {
+      if (!kbPanelRef.current?.contains(e.target as Node)) setActiveInputTab(null)
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [activeInputTab])
+
+  async function loadKbDocs() {
+    if (!user || kbDocs.length > 0) return
+    setKbLoading(true)
+    try {
+      const docs = await fetchUserDocuments(user.id)
+      setKbDocs(docs.map((d: any, i: number) => ({
+        id: d.id,
+        index: i + 1,
+        name: d.original_filename,
+        category: d.category || "Uncategorized",
+      })))
+    } catch { /* silent */ } finally {
+      setKbLoading(false)
+    }
+  }
+
+  function handleTabClick(tab: "knowledge" | "channels" | "websearch") {
+    if (activeInputTab === tab) { setActiveInputTab(null); return }
+    setActiveInputTab(tab)
+    if (tab === "knowledge") loadKbDocs()
+  }
+
+  function insertDocRef(index: number) {
+    setInput(prev => {
+      const ref = `#${index} `
+      return prev === "" || prev.endsWith(" ") ? prev + ref : prev + " " + ref
+    })
+    setActiveInputTab(null)
   }
 
   return (
@@ -373,13 +427,56 @@ export default function ChatPage() {
                     style={{ color: inputDark ? brandInput.text : "#1e293b" }}
                   />
                   <div className="absolute bottom-3 flex w-full items-center justify-between px-3">
-                    <div className="flex gap-0.5">
-                      {[{ icon: Paperclip, label: t("chatAttach") }, { icon: Mic, label: t("chatVoice") }].map(a => (
-                        <button key={a.label} title={a.label} className={cn(
-                          "rounded-lg p-2 transition-colors",
-                          inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                        )}>
-                          <a.icon className="h-4 w-4" />
+                    <div className="relative flex items-center gap-0.5" ref={kbPanelRef}>
+                      {activeInputTab === "knowledge" && (
+                        <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                          <div className="border-b border-white/5 px-3 py-2">
+                            <p className="text-xs font-semibold text-white">Knowledge Base</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">Click a doc or type #N to reference it</p>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto py-1">
+                            {kbLoading && (
+                              <div className="flex items-center justify-center py-6">
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                              </div>
+                            )}
+                            {!kbLoading && kbDocs.length === 0 && (
+                              <p className="px-3 py-4 text-xs text-muted-foreground text-center">No documents uploaded yet.</p>
+                            )}
+                            {!kbLoading && kbDocs.map(doc => (
+                              <button
+                                key={doc.id}
+                                onClick={() => insertDocRef(doc.index)}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
+                              >
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-[10px] font-bold text-emerald-400">
+                                  {doc.index}
+                                </span>
+                                <span className="flex-1 truncate text-white">{doc.name}</span>
+                                <span className="shrink-0 text-[10px] text-muted-foreground">{doc.category}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {([
+                        { id: "knowledge" as const, icon: BookOpen, label: "Knowledge Base" },
+                        { id: "channels" as const, icon: Radio, label: "Channels" },
+                        { id: "websearch" as const, icon: Globe, label: "Web Search" },
+                      ]).map(tab => (
+                        <button
+                          key={tab.id}
+                          onClick={() => handleTabClick(tab.id)}
+                          title={tab.label}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                            activeInputTab === tab.id
+                              ? "bg-emerald-600/20 text-emerald-400"
+                              : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                          )}
+                        >
+                          <tab.icon className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">{tab.label}</span>
                         </button>
                       ))}
                       <button
@@ -499,13 +596,56 @@ export default function ChatPage() {
                   style={{ color: inputDark ? brandInput.text : "#1e293b" }}
                 />
                 <div className="absolute bottom-3 flex w-full items-center justify-between px-3">
-                  <div className="flex gap-0.5">
-                    {[{ icon: Paperclip, label: t("chatAttach") }, { icon: Mic, label: t("chatVoice") }].map(a => (
-                      <button key={a.label} title={a.label} className={cn(
-                        "rounded-lg p-2 transition-colors",
-                        inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                      )}>
-                        <a.icon className="h-4 w-4" />
+                  <div className="relative flex items-center gap-0.5" ref={kbPanelRef}>
+                    {activeInputTab === "knowledge" && (
+                      <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                        <div className="border-b border-white/5 px-3 py-2">
+                          <p className="text-xs font-semibold text-white">Knowledge Base</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">Click a doc or type #N to reference it</p>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto py-1">
+                          {kbLoading && (
+                            <div className="flex items-center justify-center py-6">
+                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                            </div>
+                          )}
+                          {!kbLoading && kbDocs.length === 0 && (
+                            <p className="px-3 py-4 text-xs text-muted-foreground text-center">No documents uploaded yet.</p>
+                          )}
+                          {!kbLoading && kbDocs.map(doc => (
+                            <button
+                              key={doc.id}
+                              onClick={() => insertDocRef(doc.index)}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
+                            >
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-[10px] font-bold text-emerald-400">
+                                {doc.index}
+                              </span>
+                              <span className="flex-1 truncate text-white">{doc.name}</span>
+                              <span className="shrink-0 text-[10px] text-muted-foreground">{doc.category}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {([
+                      { id: "knowledge" as const, icon: BookOpen, label: "Knowledge Base" },
+                      { id: "channels" as const, icon: Radio, label: "Channels" },
+                      { id: "websearch" as const, icon: Globe, label: "Web Search" },
+                    ]).map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => handleTabClick(tab.id)}
+                        title={tab.label}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                          activeInputTab === tab.id
+                            ? "bg-emerald-600/20 text-emerald-400"
+                            : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                        )}
+                      >
+                        <tab.icon className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">{tab.label}</span>
                       </button>
                     ))}
                     <button
