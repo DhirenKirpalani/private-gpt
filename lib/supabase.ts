@@ -62,6 +62,7 @@ export type Profile = {
   brand_colors: any
   brand_style: string
   brand_mood: string
+  input_style: string
   token_cap: number
   slogan: string
   doc_categories: any
