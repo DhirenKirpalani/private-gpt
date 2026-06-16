@@ -122,6 +122,7 @@ const defaultForm = {
   secondaryColor: "",
   brandStyle: "cinematic" as "minimal" | "editorial" | "cinematic",
   brandMood: "futuristic" as "calm" | "bold" | "luxury" | "futuristic",
+  inputStyle: "dark" as "dark" | "light",
   slogan: "",
   docCategories: "",
   preferredSources: "",
@@ -174,6 +175,7 @@ function profileToForm(p: Profile | null) {
     secondaryColor: (Array.isArray(p.brand_colors) ? p.brand_colors[1] : "") || "",
     brandStyle: (p.brand_style || "cinematic") as "minimal" | "editorial" | "cinematic",
     brandMood: (p.brand_mood || "futuristic") as "calm" | "bold" | "luxury" | "futuristic",
+    inputStyle: (p.input_style || "dark") as "dark" | "light",
     slogan: p.slogan || "",
     docCategories: jsonbToString(p.doc_categories),
     preferredSources: jsonbToString(p.preferred_sources),
@@ -212,6 +214,7 @@ function formToProfile(form: typeof defaultForm): Partial<Profile> {
     brand_colors: [form.primaryColor, form.secondaryColor].filter(Boolean),
     brand_style: form.brandStyle,
     brand_mood: form.brandMood,
+    input_style: form.inputStyle,
     slogan: form.slogan,
     doc_categories: stringToJsonb(form.docCategories),
     preferred_sources: stringToJsonb(form.preferredSources),
@@ -287,6 +290,7 @@ export default function ProfilePage() {
       if (form.secondaryColor) localStorage.setItem("exploro_theme_secondary", form.secondaryColor)
       localStorage.setItem("exploro_theme_style", form.brandStyle)
       localStorage.setItem("exploro_theme_mood", form.brandMood)
+      localStorage.setItem("exploro_input_dark", form.inputStyle === "dark" ? "true" : "false")
       setOriginalForm(form)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -1442,6 +1446,31 @@ export default function ProfilePage() {
                           )}
                         >
                           {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Input Style */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Chat Input Style</Label>
+                    <div className="flex w-48 rounded-lg border border-white/10 p-0.5">
+                      {(["dark", "light"] as const).map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => {
+                            update("inputStyle", s)
+                            localStorage.setItem("exploro_input_dark", s === "dark" ? "true" : "false")
+                          }}
+                          className={cn(
+                            "flex-1 rounded-md py-1.5 text-xs font-medium capitalize transition-colors",
+                            form.inputStyle === s
+                              ? "bg-emerald-600 text-white"
+                              : "text-muted-foreground hover:text-white"
+                          )}
+                        >
+                          {s}
                         </button>
                       ))}
                     </div>

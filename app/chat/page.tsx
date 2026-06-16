@@ -5,7 +5,7 @@ import Link from "next/link"
 import {
   Plus, MessageSquare, Search, Send, BookOpen, Globe, Radio,
   Bot, Copy, RefreshCw, Share2, Sparkles,
-  PanelLeftClose, X, User, SunMoon,
+  PanelLeftClose, X, User,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
@@ -64,7 +64,7 @@ export default function ChatPage() {
     () => compileTheme({ primaryColor: themePrimary, secondaryColor: themeSecondary, style: themeStyle, mood: themeMood }),
     [themePrimary, themeSecondary, themeStyle, themeMood]
   )
-  const [inputDark, setInputDark] = useState(false)
+  const [inputDark, setInputDark] = useState(true)
   const brandInput = useMemo(() => getBrandInputColors(themePrimary, themeSecondary || undefined), [themePrimary, themeSecondary])
   const [userInitials, setUserInitials] = useState("")
   const [userName, setUserName] = useState("")
@@ -80,7 +80,8 @@ export default function ChatPage() {
   useEffect(() => {
     setMounted(true)
     setGreeting("Hi")
-    setInputDark(localStorage.getItem("exploro_input_dark") === "true")
+    const stored = localStorage.getItem("exploro_input_dark")
+    if (stored !== null) setInputDark(stored !== "false")
   }, [])
 
   useEffect(() => {
@@ -96,6 +97,13 @@ export default function ChatPage() {
         localStorage.setItem("exploro_user_name", name)
         setLogoUrl(profile?.logo_url || "")
         console.log("[CHAT DEBUG] logoUrl state set to:", profile?.logo_url || "")
+        // Input style from profile
+        const inputStyle = profile?.input_style
+        if (inputStyle) {
+          const dark = inputStyle !== "light"
+          setInputDark(dark)
+          localStorage.setItem("exploro_input_dark", String(dark))
+        }
         // Always load theme from DB — DB is authoritative, only written by profile page Save button
         const colors = profile?.brand_colors
         const savedStyle = profile?.brand_style as ThemeStyle
@@ -479,15 +487,6 @@ export default function ChatPage() {
                           <span className="hidden sm:inline">{tab.label}</span>
                         </button>
                       ))}
-                      <button
-                        type="button"
-                        title={inputDark ? "Switch to light" : "Switch to dark"}
-                        onClick={() => setInputDark(v => { const next = !v; localStorage.setItem("exploro_input_dark", String(next)); return next })}
-                        className="rounded-lg p-2 transition-colors"
-                        style={inputDark ? { color: brandInput.iconAccent } : { color: "#94a3b8" }}
-                      >
-                        <SunMoon className="h-4 w-4" />
-                      </button>
                     </div>
                     <button
                       onClick={sendMessage}
@@ -648,15 +647,6 @@ export default function ChatPage() {
                         <span className="hidden sm:inline">{tab.label}</span>
                       </button>
                     ))}
-                    <button
-                      type="button"
-                      title={inputDark ? "Switch to light" : "Switch to dark"}
-                      onClick={() => setInputDark(v => { const next = !v; localStorage.setItem("exploro_input_dark", String(next)); return next })}
-                      className="rounded-lg p-2 transition-colors"
-                      style={inputDark ? { color: brandInput.iconAccent } : { color: "#94a3b8" }}
-                    >
-                      <SunMoon className="h-4 w-4" />
-                    </button>
                   </div>
                   <button
                     onClick={sendMessage}
