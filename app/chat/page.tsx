@@ -10,11 +10,18 @@ import {
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
-import { getProfile, fetchUserDocuments, type Profile } from "@/lib/supabase"
+import {
+  getProfile, fetchUserDocuments, type Profile,
+  getConversations, createConversation, updateConversationTitle,
+  deleteConversation, getMessages, saveMessage, type ChatConversation,
+  fetchDocumentContents,
+} from "@/lib/supabase"
 import { useI18n } from "@/lib/i18n"
 import { CinematicBackground } from "@/components/cinematic-background"
 import { compileTheme, type ThemeStyle, type ThemeMood, getBrandInputColors } from "@/lib/theme-engine"
 import { AnimatedPlaceholder } from "@/components/animated-placeholder"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 
 interface Message {
   id: string
@@ -35,6 +42,21 @@ const loadingStateKeys = [
 function getInitials(name: string): string {
   if (!name.trim()) return ""
   return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+}
+
+function timeAgo(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+  if (seconds < 60) return "Just now"
+  if (minutes < 60) return `${minutes}m ago`
+  if (hours < 24) return `${hours}h ago`
+  if (days === 1) return "Yesterday"
+  if (days < 7) return `${days}d ago`
+  return date.toLocaleDateString()
 }
 
 export default function ChatPage() {
@@ -77,11 +99,17 @@ export default function ChatPage() {
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [showKbPanel, setShowKbPanel] = useState(false)
   const [kbDocs, setKbDocs] = useState<{ id: string; index: number; name: string; category: string }[]>([])
+  const [kbDocContents, setKbDocContents] = useState<Record<string, string>>({})
   const [kbLoading, setKbLoading] = useState(false)
   const [chatError, setChatError] = useState("")
   const [websiteContent, setWebsiteContent] = useState("")
+  const [conversations, setConversations] = useState<ChatConversation[]>([])
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
+  const [conversationsLoading, setConversationsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const kbPanelRef = useRef<HTMLDivElement>(null)
+  const messageCountRef = useRef(0)
 
   useEffect(() => {
     setMounted(true)
@@ -95,6 +123,28 @@ export default function ChatPage() {
     setChannelsEnabled(ch)
     setWebSearchEnabled(ws)
   }, [])
+
+  // Load KB docs and their contents on mount if toggle is enabled
+  useEffect(() => {
+    if (kbEnabled && user) loadKbDocs()
+  }, [kbEnabled, user])
+
+  // Reload KB docs when tab becomes visible or regains focus
+  // (user may have deleted/added docs in another tab or navigated away and back)
+  useEffect(() => {
+    function handleVisibility() {
+      if (!document.hidden && kbEnabled && user) loadKbDocs()
+    }
+    function handleFocus() {
+      if (kbEnabled && user) loadKbDocs()
+    }
+    document.addEventListener("visibilitychange", handleVisibility)
+    window.addEventListener("focus", handleFocus)
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility)
+      window.removeEventListener("focus", handleFocus)
+    }
+  }, [kbEnabled, user])
 
   useEffect(() => {
     async function load() {
@@ -116,6 +166,21 @@ export default function ChatPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url: profile.website }),
           }).then(r => r.json()).then(d => { if (d.content) setWebsiteContent(d.content) }).catch(() => {})
+        }
+        await loadConversations()
+        // Restore last active conversation
+        const storedConvId = localStorage.getItem("exploro_current_conv")
+        if (storedConvId) {
+          setCurrentConversationId(storedConvId)
+          try {
+            const dbMessages = await getMessages(storedConvId)
+            setMessages(dbMessages.map(m => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              timestamp: new Date(m.created_at),
+            })))
+          } catch { /* silent */ }
         }
         // Input style from profile
         const inputStyle = profile?.input_style
@@ -159,13 +224,6 @@ export default function ChatPage() {
     localStorage.setItem("exploro_theme_mood", themeMood)
   }, [themePrimary, themeSecondary, themeStyle, themeMood])
 
-  const recentChats = [
-    { id: "1", title: t("chatRecent1"), time: t("chatTime2h") },
-    { id: "2", title: t("chatRecent2"), time: t("chatTime5h") },
-    { id: "3", title: t("chatRecent3"), time: t("chatTimeYesterday") },
-    { id: "4", title: t("chatRecent4"), time: t("chatTime2d") },
-    { id: "5", title: t("chatRecent5"), time: t("chatTime3d") },
-  ]
 
   // Close sidebars by default on mobile so they don't overlap
   useEffect(() => {
@@ -179,31 +237,70 @@ export default function ChatPage() {
   }, [])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, loading])
+    const newCount = messages.length
+    if (newCount > messageCountRef.current) {
+      requestAnimationFrame(() => {
+        const container = messagesContainerRef.current
+        if (container) {
+          container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
+        }
+      })
+    }
+    messageCountRef.current = newCount
+  }, [messages])
 
   const toggleSidebar = () => {
     setSidebarOpen(v => !v)
   }
 
+  async function ensureConversation(): Promise<string> {
+    if (currentConversationId) return currentConversationId
+    if (!user) throw new Error("Not authenticated")
+    const conv = await createConversation(user.id, input.trim().slice(0, 40))
+    setConversations(prev => [conv, ...prev])
+    setCurrentConversationId(conv.id)
+    return conv.id
+  }
+
   const sendMessage = async () => {
     if (!input.trim() || loading) return
     setChatError("")
+
+    let convId = currentConversationId
+    try {
+      convId = await ensureConversation()
+    } catch (err: any) {
+      setChatError(err?.message || "Failed to create conversation")
+      return
+    }
+
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: input, timestamp: new Date() }
     const nextMessages = [...messages, userMsg]
     setMessages(nextMessages)
     setInput("")
     setShowKbPanel(false)
     setLoading(true)
+
+    // Save user message to DB
+    saveMessage(convId, "user", userMsg.content).catch(() => {})
+
     let i = 0
     const iv = setInterval(() => { setLoadingText(loadingStates[i++ % loadingStates.length]) }, 900)
     try {
       const kbContext = kbEnabled && kbDocs.length > 0
-        ? `\nKnowledge Base documents available:\n${kbDocs.map(d => `#${d.index} "${d.name}" (${d.category})`).join("\n")}`
+        ? `\n# Knowledge Base\nThe following documents are available. You have full access to their contents. Cite them using their reference numbers (#1, #2, etc.).\n\n${kbDocs.map(d => {
+          const content = kbDocContents[d.id]
+          if (content) {
+            return `---\n#${d.index} "${d.name}" (${d.category}):\n${content}\n---`
+          }
+          return `#${d.index} "${d.name}" (${d.category}) — [content not yet extracted]`
+        }).join("\n\n")}`
         : ""
       const p = aiProfile
       const arr = (v: any) => Array.isArray(v) ? v.join(", ") : (v ? String(v) : "")
       const systemPrompt = [
+        `LANGUAGE RULE — HIGHEST PRIORITY: You must respond in ${lang === "es" ? "Spanish" : "English"} only. The user wrote in ${lang === "es" ? "Spanish" : "English"}. Ignore any other language cues from the profile context. NEVER mix languages.`,
+        ``,
         `# Identity`,
         `You are ${p?.ai_name || "Nira"}, an AI business operations assistant. You have been fully briefed on the user's profile, business, and goals before this conversation began. Treat this as context you already know — do not ask the user to re-explain it.`,
         ``,
@@ -214,7 +311,6 @@ export default function ChatPage() {
         p?.full_name ? `Name: ${p.full_name}` : "",
         p?.job_title ? `Job Title: ${p.job_title}` : "",
         p?.location ? `Location: ${p.location}` : "",
-        p?.linkedin_url ? `LinkedIn: ${p.linkedin_url} (this is the user's professional profile — treat it as a reference for their background)` : "",
         p?.contact_email ? `Contact Email: ${p.contact_email}` : "",
         ``,
         `# Business Profile`,
@@ -240,13 +336,13 @@ export default function ChatPage() {
         p?.tone_examples ? `Tone examples:\n${p.tone_examples}` : "",
         p?.words_to_avoid ? `Words/phrases to avoid: ${p.words_to_avoid}` : "",
         p?.response_length ? `Response length preference: ${p.response_length}` : "",
-        p?.languages ? `Languages: ${arr(p.languages)}` : "",
+        ``,
+        `User's preferred languages: ${p?.languages ? arr(p.languages) : "English"}.`,
         ``,
         p?.clarification_prompt ? `# Clarification Protocol\n${p.clarification_prompt}` : "",
         ``,
         kbContext ? `# Knowledge Base\n${kbContext}` : "",
         channelsEnabled ? `# Active Channel Context\nChannel integrations are active (email, WhatsApp, etc.). Consider business communication channels in responses.` : "",
-        webSearchEnabled ? `# Web Search\nWeb search is enabled — reference current and up-to-date information when it adds value.` : "",
         websiteContent ? `# Website Content (fetched from ${p?.website})\n${websiteContent}` : "",
         ``,
         `# Core Instructions`,
@@ -255,28 +351,47 @@ export default function ChatPage() {
         `- Apply communication guidelines consistently in every response`,
         `- When using Knowledge Base content, cite references like #1 or #2`,
         `- Be accurate, direct, and practical — no hype language`,
+        `- You are an AI assistant powered by DeepSeek. You do NOT have internet access, web browsing, or real-time search capabilities. You cannot look up current news, prices, or events.`,
+        `- You do NOT know the current date or time. If asked, say you do not have access to real-time information.`,
+        `- NEVER invent URLs, citations, sources, or facts. If you don't know something, say so clearly.`,
+        `- NEVER claim you performed a web search, visited a website, or accessed external data. You only use the context provided in this prompt.`,
       ].filter(Boolean).join("\n")
+      const apiMessages = nextMessages.map((m, i) => {
+        const isLastUser = m.role === "user" && i === nextMessages.length - 1
+        return {
+          role: m.role,
+          content: isLastUser
+            ? `${m.content}\n\n[INSTRUCTION: Respond in ${lang === "es" ? "Spanish" : "English"} only.]`
+            : m.content,
+        }
+      })
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
+          messages: apiMessages,
           systemPrompt,
           responseLength: aiProfile?.response_length || "Standard",
         }),
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || "Request failed")
-      setMessages(prev => [...prev, {
+      const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: data.content,
         confidence: "high",
         timestamp: new Date(),
-      }])
+      }
+      setMessages(prev => [...prev, assistantMsg])
+      // Save assistant message to DB
+      saveMessage(convId, "assistant", assistantMsg.content).catch(() => {})
+      // Generate title from AI after first exchange
+      if (messages.length === 0) {
+        generateTitle(convId, userMsg.content, assistantMsg.content).catch(() => {})
+      }
     } catch (err: any) {
       setChatError(err?.message || "Something went wrong. Please try again.")
-      setMessages(prev => prev.slice(0, -0))
     } finally {
       clearInterval(iv)
       setLoading(false)
@@ -286,6 +401,78 @@ export default function ChatPage() {
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  }
+
+  async function loadConversations() {
+    if (!user) return
+    setConversationsLoading(true)
+    try {
+      const convs = await getConversations(user.id)
+      setConversations(convs)
+    } catch { /* silent */ } finally {
+      setConversationsLoading(false)
+    }
+  }
+
+  async function generateTitle(convId: string, userMsg: string, assistantMsg: string) {
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "user", content: userMsg },
+            { role: "assistant", content: assistantMsg },
+            { role: "user", content: "Generate a very short, concise 3-5 word title for this conversation. Only output the title, nothing else." },
+          ],
+          systemPrompt: "You are a title generator. Respond with only a short 3-5 word title. No quotes, no explanations.",
+          responseLength: "Standard",
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) return
+      const title = (data.content || "New conversation").replace(/^["']|["']$/g, "").trim().slice(0, 40)
+      if (title) {
+        await updateConversationTitle(convId, title)
+        setConversations(prev => prev.map(c => c.id === convId ? { ...c, title } : c))
+      }
+    } catch { /* silent */ }
+  }
+
+  async function handleNewConversation() {
+    setMessages([])
+    setCurrentConversationId(null)
+    localStorage.removeItem("exploro_current_conv")
+    setChatError("")
+  }
+
+  async function handleSelectConversation(convId: string) {
+    if (convId === currentConversationId) return
+    setChatError("")
+    setCurrentConversationId(convId)
+    localStorage.setItem("exploro_current_conv", convId)
+    try {
+      const dbMessages = await getMessages(convId)
+      setMessages(dbMessages.map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(m.created_at),
+      })))
+    } catch { /* silent */ }
+  }
+
+  async function handleDeleteConversation(e: React.MouseEvent, convId: string) {
+    e.stopPropagation()
+    try {
+      await deleteConversation(convId)
+      setConversations(prev => prev.filter(c => c.id !== convId))
+      if (currentConversationId === convId) {
+        setCurrentConversationId(null)
+        setMessages([])
+        localStorage.removeItem("exploro_current_conv")
+      }
+    } catch { /* silent */ }
   }
 
   useEffect(() => {
@@ -298,7 +485,7 @@ export default function ChatPage() {
   }, [showKbPanel])
 
   async function loadKbDocs() {
-    if (!user || kbDocs.length > 0) return
+    if (!user) return
     setKbLoading(true)
     try {
       const docs = await fetchUserDocuments(user.id)
@@ -308,6 +495,13 @@ export default function ChatPage() {
         name: d.original_filename,
         category: d.category || "Uncategorized",
       })))
+      // Load actual parsed text for documents that have it
+      try {
+        const contents = await fetchDocumentContents(user.id)
+        const map: Record<string, string> = {}
+        for (const c of contents) map[c.id] = c.parsed_text
+        setKbDocContents(map)
+      } catch { /* silent */ }
     } catch { /* silent */ } finally {
       setKbLoading(false)
     }
@@ -450,7 +644,7 @@ export default function ChatPage() {
           >
             <div className="p-3 pb-2">
               <button
-                onClick={() => setMessages([])}
+                onClick={handleNewConversation}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
               >
                 <Plus className="h-4 w-4" /> {t("chatNewConversation")}
@@ -458,17 +652,34 @@ export default function ChatPage() {
             </div>
             <div className="flex-1 overflow-y-auto px-3 pb-4">
               <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("chatRecent")}</p>
-              {recentChats.map(chat => (
+              {conversationsLoading && (
+                <div className="flex items-center justify-center py-6">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                </div>
+              )}
+              {!conversationsLoading && conversations.length === 0 && (
+                <p className="px-2 py-4 text-xs text-muted-foreground text-center">No conversations yet.</p>
+              )}
+              {!conversationsLoading && conversations.map(conv => (
                 <button
-                  key={chat.id}
-                  onClick={() => setMessages([])}
-                  className="flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left hover:bg-muted/50 transition-colors"
+                  key={conv.id}
+                  onClick={() => handleSelectConversation(conv.id)}
+                  className={cn(
+                    "group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors",
+                    currentConversationId === conv.id ? "bg-emerald-600/10" : "hover:bg-muted/50"
+                  )}
                 >
-                  <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <MessageSquare className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", currentConversationId === conv.id ? "text-emerald-400" : "text-muted-foreground")} />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{chat.title}</div>
-                    <div className="text-xs text-muted-foreground">{chat.time}</div>
+                    <div className={cn("truncate text-sm font-medium", currentConversationId === conv.id ? "text-emerald-400" : "text-white")}>
+                      {conv.title || "New conversation"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{timeAgo(conv.updated_at)}</div>
                   </div>
+                  <X
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400"
+                    onClick={e => handleDeleteConversation(e, conv.id)}
+                  />
                 </button>
               ))}
             </div>
@@ -486,12 +697,17 @@ export default function ChatPage() {
                 <img
                   src={logoUrl}
                   alt=""
-                  className="mb-6 h-28 w-auto object-contain"
+                  className="mb-2 h-28 w-auto object-contain"
                   onError={e => {
                     console.error("[CHAT DEBUG] Logo image failed to load:", logoUrl)
                     ;(e.target as HTMLImageElement).style.display = "none"
                   }}
                 />
+              )}
+              {aiProfile?.slogan && (
+                <p className="mb-6 text-center text-sm text-emerald-200/70 font-medium tracking-wide">
+                  {aiProfile.slogan}
+                </p>
               )}
               <div className="mb-6 text-center">
                 <h2 className="pb-1 text-2xl font-semibold tracking-normal text-white sm:text-3xl">
@@ -502,10 +718,10 @@ export default function ChatPage() {
               {/* Input inline — centered with greeting */}
               <div className="w-full max-w-3xl">
                 <div
-                  className="relative rounded-2xl border focus-within:ring-2 focus-within:ring-emerald-500/30 transition-all"
+                  className="relative rounded-2xl border focus-within:ring-2 transition-all"
                   style={inputDark
-                    ? { background: brandInput.bgGradient, borderColor: brandInput.border, boxShadow: brandInput.shadow }
-                    : { background: "#ffffff", borderColor: "#e2e8f0" }
+                    ? { background: brandInput.bgGradient, borderColor: brandInput.border, boxShadow: brandInput.shadow, outlineColor: `${themePrimary}4d` }
+                    : { background: "#ffffff", borderColor: "#e2e8f0", outlineColor: `${themePrimary}4d` }
                   }
                 >
                   {!input.trim() && (
@@ -599,30 +815,64 @@ export default function ChatPage() {
               </div>
             </div>
           ) : (
-            <div className="flex-1 space-y-4 sm:space-y-6 overflow-y-auto p-3 sm:p-6">
+            <div ref={messagesContainerRef} className="flex-1 space-y-4 sm:space-y-6 overflow-y-auto p-3 sm:p-6">
               {messages.map(msg => (
                 <div key={msg.id} className={cn("flex gap-3", msg.role === "user" && "flex-row-reverse")}>
                   <div className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                    msg.role === "user" ? "bg-muted text-foreground" : "bg-emerald-600 text-white"
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold overflow-hidden",
+                    msg.role === "user" ? "bg-muted text-foreground" : "bg-transparent"
                   )}>
-                    {msg.role === "user"
-                      ? (userInitials || <User className="h-4 w-4" />)
-                      : <Bot className="h-4 w-4" />}
+                    {msg.role === "user" ? (
+                      avatarUrl ? (
+                        <img src={avatarUrl} alt="" className="h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+                      ) : (userInitials || <User className="h-4 w-4" />)
+                    ) : (
+                      <img src="/assets/images/exploro-icon.svg" alt="" className="h-8 w-8 object-contain" />
+                    )}
                   </div>
                   <div className={cn("max-w-[72%] space-y-2", msg.role === "user" && "flex flex-col items-end")}>
-                    <div className={cn(
-                      "rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                      msg.role === "user"
-                        ? "rounded-tr-sm bg-emerald-600 text-white"
-                        : "rounded-tl-sm border border-white/5 shadow-lg shadow-emerald-900/5"
-                    )}
-                    style={msg.role === "assistant" ? { backgroundColor: theme.ui.surfaceBg } : undefined}>
-                      {msg.content.split('\n').map((line, i) => (
-                        <p key={i} className={cn("mt-0.5", line.startsWith('1.') || line.startsWith('2.') || line.startsWith('3.') ? "ml-2" : "")}>
-                          {line}
-                        </p>
-                      ))}
+                    <div
+                      className={cn(
+                        "rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                        msg.role === "user"
+                          ? "rounded-tr-sm text-white"
+                          : "rounded-tl-sm border border-white/15 shadow-xl"
+                      )}
+                      style={msg.role === "user"
+                        ? { backgroundColor: themePrimary, color: "#fff" }
+                        : { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.15)", color: "#f1f5f9", boxShadow: "0 2px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)" }
+                      }>
+                      {msg.role === "assistant" ? (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            p: ({ children }) => <p className="mt-1.5 first:mt-0">{children}</p>,
+                            strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                            em: ({ children }) => <em className="italic text-slate-300">{children}</em>,
+                            ul: ({ children }) => <ul className="mt-1.5 list-disc pl-5 space-y-1">{children}</ul>,
+                            ol: ({ children }) => <ol className="mt-1.5 list-decimal pl-5 space-y-1">{children}</ol>,
+                            li: ({ children }) => <li className="text-sm">{children}</li>,
+                            code: ({ children }) => <code className="rounded bg-black/20 px-1 py-0.5 text-xs font-mono text-slate-200">{children}</code>,
+                            h1: ({ children }) => <h1 className="mt-3 text-lg font-bold text-white">{children}</h1>,
+                            h2: ({ children }) => <h2 className="mt-2 text-base font-bold text-white">{children}</h2>,
+                            h3: ({ children }) => <h3 className="mt-2 text-sm font-bold text-white">{children}</h3>,
+                            blockquote: ({ children }) => <blockquote className="mt-1.5 border-l-2 border-white/20 pl-3 text-slate-300">{children}</blockquote>,
+                            hr: () => <hr className="my-3 border-white/10" />,
+                            table: ({ children }) => <div className="mt-2 overflow-x-auto rounded-lg border border-white/10"><table className="w-full text-sm border-collapse">{children}</table></div>,
+                            thead: ({ children }) => <thead className="bg-white/10">{children}</thead>,
+                            tbody: ({ children }) => <tbody>{children}</tbody>,
+                            tr: ({ children }) => <tr className="border-b border-white/8 last:border-0">{children}</tr>,
+                            th: ({ children }) => <th className="px-3 py-2 text-left font-semibold text-white whitespace-nowrap">{children}</th>,
+                            td: ({ children }) => <td className="px-3 py-2 text-slate-200 align-top">{children}</td>,
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      ) : (
+                        msg.content.split('\n').filter(line => line.trim() !== '').map((line, i) => (
+                          <p key={i} className="mt-0.5">{line}</p>
+                        ))
+                      )}
                     </div>
                     {msg.role === "assistant" && msg.sources && (
                       <div className="flex gap-0.5 pl-1">
@@ -638,14 +888,14 @@ export default function ChatPage() {
               ))}
               {loading && (
                 <div className="flex gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-600">
-                    <Bot className="h-4 w-4 text-white" />
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent overflow-hidden">
+                    <img src="/assets/images/exploro-icon.svg" alt="" className="h-8 w-8 object-contain" />
                   </div>
-                  <div className="rounded-2xl rounded-tl-sm border border-white/5 px-4 py-3 shadow-lg shadow-emerald-900/5" style={{ backgroundColor: theme.ui.surfaceBg }}>
-                    <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                  <div className="rounded-2xl rounded-tl-sm border px-4 py-3 shadow-xl" style={{ backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.15)", boxShadow: "0 2px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)" }}>
+                    <div className="flex items-center gap-2.5 text-sm text-slate-200">
                       <div className="flex gap-1">
                         {[0, 1, 2].map(i => (
-                          <span key={i} className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+                          <span key={i} className="h-2 w-2 rounded-full animate-bounce bg-white/80" style={{ animationDelay: `${i * 150}ms` }} />
                         ))}
                       </div>
                       {loadingText}
@@ -662,10 +912,10 @@ export default function ChatPage() {
           {messages.length > 0 && <div className="relative z-10 shrink-0 border-t border-white/5 px-3 py-3 sm:px-4 sm:py-4">
             <div className="mx-auto max-w-3xl">
               <div
-                className="relative rounded-2xl border focus-within:ring-2 focus-within:ring-emerald-500/30 transition-all"
+                className="relative rounded-2xl border focus-within:ring-2 transition-all"
                 style={inputDark
-                  ? { background: brandInput.bgGradient, borderColor: brandInput.border, boxShadow: brandInput.shadow }
-                  : { background: "#ffffff", borderColor: "#e2e8f0" }
+                  ? { background: brandInput.bgGradient, borderColor: brandInput.border, boxShadow: brandInput.shadow, outlineColor: `${themePrimary}4d` }
+                  : { background: "#ffffff", borderColor: "#e2e8f0", outlineColor: `${themePrimary}4d` }
                 }
               >
                 {!input.trim() && (

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
-const DEEPSEEK_MODEL = "deepseek-chat"
+const DEEPSEEK_MODEL = "deepseek-v4-flash"
 
 const MAX_TOKENS_MAP: Record<string, number> = {
   Standard: 2000,
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
         })),
       ],
       max_tokens: maxTokens,
-      temperature: 0.7,
+      temperature: 0.3,
     }
 
     const response = await fetch(DEEPSEEK_URL, {
