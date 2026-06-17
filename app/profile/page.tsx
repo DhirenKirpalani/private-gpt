@@ -95,7 +95,6 @@ const defaultForm = {
   countryCode: "",
   phone: "",
   location: "",
-  linkedinUrl: "",
   companyName: "",
   industry: "Consulting",
   companySize: "1-10",
@@ -148,7 +147,6 @@ function profileToForm(p: Profile | null) {
     countryCode: parsedPhone.code,
     phone: parsedPhone.local,
     location: p.location || "",
-    linkedinUrl: p.linkedin_url || "",
     companyName: p.company_name || "",
     industry: p.industry || "Consulting",
     companySize: p.company_size || "1-10",
@@ -188,7 +186,6 @@ function formToProfile(form: typeof defaultForm): Partial<Profile> {
     job_title: form.jobTitle,
     phone: (form.countryCode + " " + form.phone).trim(),
     location: form.location,
-    linkedin_url: form.linkedinUrl,
     company_name: form.companyName,
     industry: form.industry,
     company_size: form.companySize,
@@ -807,10 +804,6 @@ export default function ProfilePage() {
                     )}
                   </div>
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="linkedinUrl">{t("profileLabelLinkedIn")}</Label>
-                  <Input id="linkedinUrl" type="url" value={form.linkedinUrl} onChange={e => update("linkedinUrl", e.target.value)} placeholder={t("profilePlaceholderLinkedIn")} />
-                </div>
               </div>
             </section>
 
@@ -961,7 +954,12 @@ export default function ProfilePage() {
                   <Input id="email" type="email" value={form.email} onChange={e => update("email", e.target.value)} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="businessDescription">{t("profileLabelBusinessDesc")}</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="businessDescription">{t("profileLabelBusinessDesc")}</Label>
+                    <button type="button" onClick={() => setTooltipOpen("businessDescription")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </div>
                   <textarea
                     id="businessDescription"
                     rows={3}
@@ -1664,7 +1662,7 @@ export default function ProfilePage() {
               <X className="h-5 w-5" />
             </button>
             <h3 className="mb-2 text-lg font-semibold text-white">
-              {tooltipOpen === "aiRole" ? t("profileTooltipAIRoleTitle") : tooltipOpen === "tokenCap" ? t("profileTooltipTokenCapTitle") : tooltipOpen === "logoUpload" ? t("profileTooltipLogoTitle") : tooltipOpen === "brandColors" ? t("profileTooltipBrandColorsTitle") : t("profileTooltipToneTitle")}
+              {tooltipOpen === "aiRole" ? t("profileTooltipAIRoleTitle") : tooltipOpen === "tokenCap" ? t("profileTooltipTokenCapTitle") : tooltipOpen === "logoUpload" ? t("profileTooltipLogoTitle") : tooltipOpen === "brandColors" ? t("profileTooltipBrandColorsTitle") : tooltipOpen === "businessDescription" ? t("profileTooltipBusinessDescTitle") : t("profileTooltipToneTitle")}
             </h3>
             <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
               {tooltipOpen === "brandColors" ? (
@@ -1732,6 +1730,28 @@ export default function ProfilePage() {
                     if (idx === -1) return <p>{text}</p>
                     return <p><strong className="text-white">{text.slice(0, idx + 1)}</strong>{text.slice(idx + 1)}</p>
                   })()}
+                </>
+              ) : tooltipOpen === "businessDescription" ? (
+                <>
+                  <p><strong className="text-white">{t("profileTooltipBusinessDescTitle")}</strong></p>
+                  <p>{t("profileTooltipBusinessDescIntro")}</p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li>{t("profileTooltipBusinessDescItem1")}</li>
+                    <li>{t("profileTooltipBusinessDescItem2")}</li>
+                    <li>{t("profileTooltipBusinessDescItem3")}</li>
+                    <li>{t("profileTooltipBusinessDescItem4")}</li>
+                    <li>{t("profileTooltipBusinessDescItem5")}</li>
+                  </ul>
+                  <p><strong className="text-white">{t("profileTooltipBusinessDescImportant")}</strong></p>
+                  <p>{t("profileTooltipBusinessDescPrivacy")}</p>
+                  <p><strong className="text-white">{t("profileTooltipBusinessDescCanDo")}</strong></p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li>{t("profileTooltipBusinessDescDo1")}</li>
+                    <li>{t("profileTooltipBusinessDescDo2")}</li>
+                    <li>{t("profileTooltipBusinessDescDo3")}</li>
+                    <li>{t("profileTooltipBusinessDescDo4")}</li>
+                  </ul>
+                  <p>{t("profileTooltipBusinessDescDataNote")}</p>
                 </>
               ) : (
                 <>

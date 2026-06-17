@@ -115,15 +115,6 @@ export default function SignupPage() {
         </Link>
 
         <div className="w-full max-w-sm">
-          <Link href="/" className="mb-6 hidden items-center justify-center md:flex">
-            <Image
-              src="/assets/images/exploro-logo.png"
-              alt="Exploro"
-              width={160}
-              height={160}
-              className="h-12 w-auto object-contain"
-            />
-          </Link>
           <div className="mb-7 text-center md:text-left">
             <h1 className="gradient-text-shimmer text-3xl font-bold tracking-tight pb-1">{t("createAccount")}</h1>
             <p className="mt-2 text-sm text-muted-foreground">{t("getStartedFreeTagline")}</p>

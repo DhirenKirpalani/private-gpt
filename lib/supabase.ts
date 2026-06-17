@@ -37,7 +37,6 @@ export type Profile = {
   job_title: string
   phone: string
   location: string
-  linkedin_url: string
   company_name: string
   industry: string
   company_size: string
@@ -348,6 +347,25 @@ export async function deleteDocument(documentId: string) {
   if (error) throw error
 }
 
+export async function updateDocumentText(documentId: string, parsedText: string) {
+  const { error } = await supabase
+    .from("documents")
+    .update({ parsed_text: parsedText, status: "INDEXED" })
+    .eq("id", documentId)
+  if (error) throw error
+}
+
+export async function fetchDocumentContents(userId: string) {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("id, original_filename, category, parsed_text")
+    .eq("user_id", userId)
+    .not("parsed_text", "is", null)
+    .order("created_at", { ascending: false })
+  if (error) throw error
+  return (data ?? []) as { id: string; original_filename: string; category: string; parsed_text: string }[]
+}
+
 export function getDocumentPublicUrl(userId: string, filename: string) {
   const { data } = supabase.storage.from("knowledge-base").getPublicUrl(`${userId}/${filename}`)
   return data.publicUrl
@@ -398,6 +416,79 @@ export async function deleteEmailConnection(userId: string, provider: string): P
     .eq("user_id", userId)
     .eq("provider", provider)
   if (error) throw error
+}
+
+// Chat history
+export type ChatConversation = {
+  id: string
+  user_id: string
+  title: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ChatMessage = {
+  id: string
+  conversation_id: string
+  role: "user" | "assistant"
+  content: string
+  created_at: string
+}
+
+export async function getConversations(userId: string): Promise<ChatConversation[]> {
+  const { data, error } = await supabase
+    .from("chat_conversations")
+    .select("*")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+  if (error) throw error
+  return (data ?? []) as ChatConversation[]
+}
+
+export async function createConversation(userId: string, title?: string): Promise<ChatConversation> {
+  const { data, error } = await supabase
+    .from("chat_conversations")
+    .insert({ user_id: userId, title: title || null })
+    .select()
+    .single()
+  if (error) throw error
+  return data as ChatConversation
+}
+
+export async function updateConversationTitle(conversationId: string, title: string): Promise<void> {
+  const { error } = await supabase
+    .from("chat_conversations")
+    .update({ title })
+    .eq("id", conversationId)
+  if (error) throw error
+}
+
+export async function deleteConversation(conversationId: string): Promise<void> {
+  const { error } = await supabase
+    .from("chat_conversations")
+    .delete()
+    .eq("id", conversationId)
+  if (error) throw error
+}
+
+export async function getMessages(conversationId: string): Promise<ChatMessage[]> {
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true })
+  if (error) throw error
+  return (data ?? []) as ChatMessage[]
+}
+
+export async function saveMessage(conversationId: string, role: "user" | "assistant", content: string): Promise<ChatMessage> {
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .insert({ conversation_id: conversationId, role, content })
+    .select()
+    .single()
+  if (error) throw error
+  return data as ChatMessage
 }
 
 // Support screenshots

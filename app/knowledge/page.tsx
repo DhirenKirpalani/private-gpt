@@ -4,14 +4,14 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import Link from "next/link"
 import {
   Search, Upload, FileText, Trash2, Info, X,
-  Filter, File, CheckCircle2, Clock, AlertCircle, BookOpen, User, Plus, ChevronDown,
+  Filter, File, CheckCircle2, Clock, AlertCircle, BookOpen, User, Plus, ChevronDown, RefreshCw,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { useI18n } from "@/lib/i18n"
-import { getProfile, uploadDocument, fetchUserDocuments, fetchUserCategories, insertCategory, deleteCategory, deleteDocument, getDocumentPublicUrl } from "@/lib/supabase"
+import { getProfile, uploadDocument, fetchUserDocuments, fetchUserCategories, insertCategory, deleteCategory, deleteDocument, getDocumentPublicUrl, updateDocumentText } from "@/lib/supabase"
 import { toast, Toaster } from "@/components/ui/toast"
 
 const DEFAULT_CATEGORIES = ["SOPs", "FAQs", "Training Material", "Policies", "Reports"]
@@ -50,6 +50,7 @@ interface DocItem {
   status: "indexed" | "processing" | "error" | "UPLOADING" | "PROCESSING" | "INDEXING" | "INDEXED" | "FAILED"
   uploaded: string
   filename: string
+  mime_type: string
 }
 
 function relativeTime(date: Date): string {
@@ -117,6 +118,7 @@ export default function KnowledgePage() {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [docsLoading, setDocsLoading] = useState(true)
   const [filterOpen, setFilterOpen] = useState(false)
+  const [parsingDocId, setParsingDocId] = useState<string | null>(null)
   const filterRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -151,6 +153,7 @@ export default function KnowledgePage() {
           status: (d.status?.toLowerCase() === "indexed" ? "indexed" : d.status?.toLowerCase() === "failed" ? "error" : "processing") as DocItem["status"],
           uploaded: relativeTime(new Date(d.created_at)),
           filename: d.filename,
+          mime_type: d.mime_type || "",
         }))
         setDocList(mapped)
       } catch (err) {
@@ -256,7 +259,24 @@ export default function KnowledgePage() {
             pageCount = data.pageCount || 0
           }
         }
-        await uploadDocument(user.id, file, category, pageCount)
+        const doc = await uploadDocument(user.id, file, category, pageCount)
+        // Parse text in background
+        try {
+          const parseRes = await fetch("/api/parse-document", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id, filename: doc.filename, mimeType: file.type }),
+          })
+          if (parseRes.ok) {
+            const { text } = await parseRes.json()
+            if (text) await updateDocumentText(doc.id, text)
+          } else {
+            const errText = await parseRes.text()
+            console.error("[PARSE DOCUMENT] API error:", parseRes.status, errText)
+          }
+        } catch (err) {
+          console.error("[PARSE DOCUMENT] Network/exception:", err)
+        }
       }
       // Refresh document list
       const docs = await fetchUserDocuments(user.id)
@@ -269,6 +289,7 @@ export default function KnowledgePage() {
         status: (d.status?.toLowerCase() === "indexed" ? "indexed" : d.status?.toLowerCase() === "failed" ? "error" : "processing") as DocItem["status"],
         uploaded: relativeTime(new Date(d.created_at)),
         filename: d.filename,
+        mime_type: d.mime_type || "",
       }))
       setDocList(mapped)
       setUploadPreview([])
@@ -278,6 +299,54 @@ export default function KnowledgePage() {
       toast({ title: "Upload failed", description: err.message || "Upload failed", variant: "error" })
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  async function handleParseDocument(doc: DocItem) {
+    if (!user) {
+      console.error("[FRONTEND PARSE] No user, aborting")
+      return
+    }
+    console.log("[FRONTEND PARSE] ====== Starting parse for:", doc.name, "======")
+    console.log("[FRONTEND PARSE] Doc details:", { id: doc.id, filename: doc.filename, mimeType: doc.mime_type, userId: user.id })
+    setParsingDocId(doc.id)
+    try {
+      console.log("[FRONTEND PARSE] Fetching /api/parse-document...")
+      const parseRes = await fetch("/api/parse-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, filename: doc.filename, mimeType: doc.mime_type }),
+      })
+      console.log("[FRONTEND PARSE] Response status:", parseRes.status, "ok:", parseRes.ok)
+
+      if (parseRes.ok) {
+        const responseData = await parseRes.json()
+        console.log("[FRONTEND PARSE] Response data keys:", Object.keys(responseData))
+        console.log("[FRONTEND PARSE] Debug info:", responseData.debug)
+        const text = responseData.text
+        console.log("[FRONTEND PARSE] Text length:", text?.length, "| Text preview:", text?.slice(0, 100))
+
+        if (text && text.length > 0 && !text.startsWith("[")) {
+          console.log("[FRONTEND PARSE] Saving to DB via updateDocumentText...")
+          await updateDocumentText(doc.id, text)
+          console.log("[FRONTEND PARSE] DB update successful")
+          setDocList(prev => prev.map(d => d.id === doc.id ? { ...d, status: "indexed" } : d))
+          toast({ title: "Parsed", description: `${doc.name} — ${text.length} chars extracted (${responseData.debug?.method || "unknown"})`, variant: "default" })
+        } else {
+          console.error("[FRONTEND PARSE] Empty or error text returned:", text)
+          toast({ title: "Parse empty/error", description: `Server returned: "${text}". Check server console.`, variant: "error" })
+        }
+      } else {
+        const errText = await parseRes.text()
+        console.error("[FRONTEND PARSE] API error:", parseRes.status, errText)
+        toast({ title: "Parse failed", description: `HTTP ${parseRes.status}: ${errText}`, variant: "error" })
+      }
+    } catch (err: any) {
+      console.error("[FRONTEND PARSE] Network/exception:", err?.message, err)
+      toast({ title: "Parse failed", description: err.message || "Network error", variant: "error" })
+    } finally {
+      console.log("[FRONTEND PARSE] ====== Parse finished ======")
+      setParsingDocId(null)
     }
   }
 
@@ -555,6 +624,21 @@ export default function KnowledgePage() {
                   </div>
                   <p className="hidden text-xs text-muted-foreground sm:block">{doc.uploaded}</p>
                   <div className="relative flex items-center gap-1">
+                    <button
+                      className={cn(
+                        "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-emerald-400",
+                        parsingDocId === doc.id && "opacity-50 cursor-not-allowed"
+                      )}
+                      disabled={parsingDocId === doc.id}
+                      title="Parse document text"
+                      onClick={() => handleParseDocument(doc)}
+                    >
+                      {parsingDocId === doc.id ? (
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                     <button
                       className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-red-400"
                       onClick={async () => {

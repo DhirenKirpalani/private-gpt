@@ -16,7 +16,6 @@ create table profiles (
   job_title text,
   phone text,
   location text,
-  linkedin_url text,
 
   -- Company
   company_name text,
