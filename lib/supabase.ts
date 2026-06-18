@@ -432,6 +432,7 @@ export type ChatMessage = {
   conversation_id: string
   role: "user" | "assistant"
   content: string
+  sources?: string[] | null
   created_at: string
 }
 
@@ -481,10 +482,17 @@ export async function getMessages(conversationId: string): Promise<ChatMessage[]
   return (data ?? []) as ChatMessage[]
 }
 
-export async function saveMessage(conversationId: string, role: "user" | "assistant", content: string): Promise<ChatMessage> {
+export async function saveMessage(
+  conversationId: string,
+  role: "user" | "assistant",
+  content: string,
+  sources?: string[]
+): Promise<ChatMessage> {
+  const payload: Record<string, any> = { conversation_id: conversationId, role, content }
+  if (sources && sources.length > 0) payload.sources = sources
   const { data, error } = await supabase
     .from("chat_messages")
-    .insert({ conversation_id: conversationId, role, content })
+    .insert(payload)
     .select()
     .single()
   if (error) throw error
