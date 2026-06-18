@@ -33,13 +33,6 @@ interface Message {
   timestamp: Date
 }
 
-const loadingStateKeys = [
-  "chatLoading1",
-  "chatLoading2",
-  "chatLoading3",
-  "chatLoading4",
-] as const
-
 function getInitials(name: string): string {
   if (!name.trim()) return ""
   return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
@@ -63,7 +56,6 @@ function timeAgo(dateStr: string): string {
 export default function ChatPage() {
   const { user, avatarUrl, loading: authLoading } = useAuth()
   const { t, lang, setLang } = useI18n()
-  const loadingStates = loadingStateKeys.map(k => t(k))
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -213,6 +205,7 @@ export default function ChatPage() {
               id: m.id,
               role: m.role,
               content: m.content,
+              sources: m.sources || undefined,
               timestamp: new Date(m.created_at),
             })))
           } catch { /* silent */ }
@@ -321,6 +314,37 @@ export default function ChatPage() {
     // Save user message to DB
     saveMessage(convId, "user", userMsg.content).catch(() => {})
 
+    // Detect if user is asking about internal documents — skip web search if so
+    function isInternalQuery(query: string): boolean {
+      const lower = query.toLowerCase()
+      const internalSignals = [
+        "my document", "my file", "my sop", "my kb", "my knowledge",
+        "the document", "the file", "the sop", "the uploaded",
+        "our document", "our file", "our sop", "our internal",
+        "from my", "from the document", "from the file",
+        "knowledge base", "uploaded file", "uploaded document",
+        "any data from", "data from the", "taken from",
+        "internal document", "internal file", "internal sop",
+        "reference document", "reference file",
+        "#1", "#2", "#3", "#4", "#5",
+      ]
+      return internalSignals.some(s => lower.includes(s))
+    }
+    const userAsksAboutInternal = isInternalQuery(input)
+
+    // Build context-aware loading texts based on active toggles
+    const hasKb = kbEnabled && kbDocs.length > 0
+    const actuallySearchingWeb = webSearchEnabled && !userAsksAboutInternal
+    let loadingStates: string[]
+    if (hasKb && actuallySearchingWeb) {
+      loadingStates = [t("chatLoadingKbWeb"), t("chatLoadingGenerating")]
+    } else if (hasKb) {
+      loadingStates = [t("chatLoadingKb"), t("chatLoadingGenerating")]
+    } else if (actuallySearchingWeb) {
+      loadingStates = [t("chatLoadingWeb"), t("chatLoadingGenerating")]
+    } else {
+      loadingStates = [t("chatLoadingThinking"), t("chatLoadingGenerating")]
+    }
     let i = 0
     const iv = setInterval(() => { setLoadingText(loadingStates[i++ % loadingStates.length]) }, 900)
     try {
@@ -388,7 +412,14 @@ export default function ChatPage() {
         `- Apply communication guidelines consistently in every response`,
         `- When using Knowledge Base content, cite references like #1 or #2`,
         `- Be accurate, direct, and practical — no hype language`,
-        `- You are an AI assistant powered by DeepSeek. You do NOT have internet access, web browsing, or real-time search capabilities. You cannot look up current news, prices, or events.`,
+        `- You are an AI assistant powered by DeepSeek. You do NOT have native internet access, web browsing, or real-time search capabilities.`,
+        `- However, when the user enables Web Search, live search results are injected into your prompt as context.`,
+        `- CITATION DISCIPLINE — WEB SEARCH: When web search results are provided, base your answer primarily on those sources. Cite every web fact with [1], [2], etc. matching the source numbers.`,
+        `- DATE FLEXIBILITY: If the user asks about "2026" or "current" trends, do NOT refuse to answer just because the search results are dated 2024–2025. Information from the past 1–2 years is still highly relevant unless explicitly outdated. Use the sources and present them as the current state of the industry.`,
+        `- CITATION DISCIPLINE — KNOWLEDGE BASE: When Knowledge Base documents are provided, cite every internal fact with #1, #2, etc. matching the document numbers in the KB context.`,
+        `- WHEN BOTH KB AND WEB SEARCH ARE ACTIVE: You may combine both sources in your answer. Use [1], [2] for web sources and #1, #2 for KB sources. Clearly distinguish between internal company knowledge (KB) and external web information. Prioritize KB docs for company-specific answers; use web results for current/external data.`,
+        `- NEVER fabricate data, statistics, or quotes that are not in the provided sources. If the sources genuinely do not contain relevant information (e.g., the topic is completely unrelated), say so clearly. Do not refuse to answer just because the sources lack a specific year or date.`,
+        `- When NO web search results are provided in the prompt, you cannot look up current news, prices, or events.`,
         `- You do NOT know the current date or time. If asked, say you do not have access to real-time information.`,
         `- NEVER invent URLs, citations, sources, or facts. If you don't know something, say so clearly.`,
         `- NEVER claim you performed a web search, visited a website, or accessed external data. You only use the context provided in this prompt.`,
@@ -402,6 +433,33 @@ export default function ChatPage() {
         `5. Do NOT generate any proposal, contract, or formal document from scratch without reference materials — this wastes output tokens and produces low-quality, generic results.`,
         `6. This rule applies to: proposals, business plans, contracts, pitches, SOWs, RFP responses, service agreements, and any other formal business documents.`,
       ].filter(Boolean).join("\n")
+
+      // Fetch live web search results if enabled and user is not asking about internal docs
+      let webSearchContext = ""
+      let wsData: any = null
+      if (actuallySearchingWeb) {
+        const lastUserMsg = nextMessages.findLast(m => m.role === "user")
+        if (lastUserMsg?.content) {
+          try {
+            const wsRes = await fetch("/api/web-search", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query: lastUserMsg.content }),
+            })
+            if (wsRes.ok) {
+              wsData = await wsRes.json()
+              if (wsData.formatted) {
+                webSearchContext = `\n# Live Web Search Results (queried: "${wsData.query}")\n${wsData.formatted}\n\nINSTRUCTION: Use the above sources as the basis for your answer. Cite facts with [1], [2], etc. matching the source numbers. Recent sources (past 1–2 years) are considered current even if the user mentions a specific year like 2026. Only say information is missing if the sources are completely unrelated to the topic — do not refuse to answer just because the sources lack a specific date.`
+              }
+            }
+          } catch (err) {
+            console.error("[WEB SEARCH] Failed:", err)
+          }
+        }
+      }
+
+      const finalSystemPrompt = webSearchContext ? systemPrompt + webSearchContext : systemPrompt
+
       const apiMessages = nextMessages.map((m, i) => {
         const isLastUser = m.role === "user" && i === nextMessages.length - 1
         return {
@@ -416,7 +474,7 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: apiMessages,
-          systemPrompt,
+          systemPrompt: finalSystemPrompt,
           responseLength: aiProfile?.response_length || "Standard",
         }),
       })
@@ -428,10 +486,11 @@ export default function ChatPage() {
         content: data.content,
         confidence: "high",
         timestamp: new Date(),
+        sources: wsData?.sources?.map((s: any) => s.url).filter(Boolean) || undefined,
       }
       setMessages(prev => [...prev, assistantMsg])
       // Save assistant message to DB
-      saveMessage(convId, "assistant", assistantMsg.content).catch(() => {})
+      saveMessage(convId, "assistant", assistantMsg.content, assistantMsg.sources).catch(() => {})
       // Generate title from AI after first exchange
       if (messages.length === 0) {
         generateTitle(convId, userMsg.content, assistantMsg.content).catch(() => {})
@@ -571,6 +630,7 @@ export default function ChatPage() {
         id: m.id,
         role: m.role,
         content: m.content,
+        sources: m.sources || undefined,
         timestamp: new Date(m.created_at),
       })))
     } catch { /* silent */ }
@@ -1010,13 +1070,24 @@ export default function ChatPage() {
                         ))
                       )}
                     </div>
-                    {msg.role === "assistant" && msg.sources && (
-                      <div className="flex gap-0.5 pl-1">
-                        {[Copy, RefreshCw, Share2].map((Icon, i) => (
-                          <button key={i} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                            <Icon className="h-3.5 w-3.5" />
-                          </button>
-                        ))}
+                    {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
+                      <div className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Sources</p>
+                        <div className="flex flex-wrap gap-2">
+                          {msg.sources.map((url, i) => (
+                            <a
+                              key={i}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex max-w-[200px] items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[11px] text-emerald-300 transition-colors hover:bg-white/15 hover:text-emerald-200"
+                              title={url}
+                            >
+                              <Globe className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{new URL(url).hostname.replace(/^www\./, "")}</span>
+                            </a>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
