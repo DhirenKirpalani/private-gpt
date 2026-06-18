@@ -5,7 +5,7 @@ import Link from "next/link"
 import {
   Plus, MessageSquare, Search, Send, BookOpen, Globe, Radio,
   Bot, Copy, RefreshCw, Share2, Sparkles,
-  PanelLeftClose, X, User,
+  PanelLeftClose, X, User, Paperclip, File, CheckCircle2, ChevronDown,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
@@ -14,7 +14,7 @@ import {
   getProfile, fetchUserDocuments, type Profile,
   getConversations, createConversation, updateConversationTitle,
   deleteConversation, getMessages, saveMessage, type ChatConversation,
-  fetchDocumentContents,
+  fetchDocumentContents, uploadDocument, updateDocumentText,
 } from "@/lib/supabase"
 import { useI18n } from "@/lib/i18n"
 import { CinematicBackground } from "@/components/cinematic-background"
@@ -22,6 +22,7 @@ import { compileTheme, type ThemeStyle, type ThemeMood, getBrandInputColors } fr
 import { AnimatedPlaceholder } from "@/components/animated-placeholder"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { toast, Toaster } from "@/components/ui/toast"
 
 interface Message {
   id: string
@@ -109,11 +110,45 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const kbPanelRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const messageCountRef = useRef(0)
+
+  const [uploadPreview, setUploadPreview] = useState<{ file: File; category: string }[]>([])
+  const [openCategoryIndex, setOpenCategoryIndex] = useState<number | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+
+  const DEFAULT_CATEGORIES = ["SOPs", "FAQs", "Training Material", "Policies", "Reports"]
+  const ACCEPTED_MIME_TYPES = [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+    "text/plain",
+    "text/markdown",
+    "text/x-markdown",
+    "text/html",
+    "application/json",
+    "text/csv",
+    "application/xml",
+    "text/xml",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/epub+zip",
+  ]
+
+  function formatFileSize(bytes: number): string {
+    if (bytes === 0) return "0 B"
+    const k = 1024
+    const sizes = ["B", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
+  }
 
   useEffect(() => {
     setMounted(true)
     setGreeting("Hi")
+    const draft = localStorage.getItem("exploro_chat_draft")
+    if (draft) setInput(draft)
     const stored = localStorage.getItem("exploro_input_dark")
     if (stored !== null) setInputDark(stored !== "false")
     const kb = localStorage.getItem("exploro_kb_enabled") === "true"
@@ -278,6 +313,8 @@ export default function ChatPage() {
     const nextMessages = [...messages, userMsg]
     setMessages(nextMessages)
     setInput("")
+    localStorage.removeItem("exploro_chat_draft")
+    if (textareaRef.current) { textareaRef.current.style.height = "auto" }
     setShowKbPanel(false)
     setLoading(true)
 
@@ -355,6 +392,15 @@ export default function ChatPage() {
         `- You do NOT know the current date or time. If asked, say you do not have access to real-time information.`,
         `- NEVER invent URLs, citations, sources, or facts. If you don't know something, say so clearly.`,
         `- NEVER claim you performed a web search, visited a website, or accessed external data. You only use the context provided in this prompt.`,
+        ``,
+        `# Proposal & Document Generation Protocol — CRITICAL`,
+        `When the user asks you to generate, draft, or write a proposal, business plan, contract, or any similar formal deliverable:`,
+        `1. FIRST check if the user has uploaded reference documents to the Knowledge Base that are relevant to the requested deliverable.`,
+        `2. If NO relevant reference documents exist in the Knowledge Base, you MUST refuse to generate the deliverable.`,
+        `3. Instead, politely explain that you need the user to upload 1-3 similar examples or reference proposals/documents to the Knowledge Base first, so you can match the format, tone, structure, and specific requirements.`,
+        `4. Only AFTER the user confirms they have uploaded reference documents (or if you can see them in the Knowledge Base context above), you may proceed to generate the deliverable using those references as templates.`,
+        `5. Do NOT generate any proposal, contract, or formal document from scratch without reference materials — this wastes output tokens and produces low-quality, generic results.`,
+        `6. This rule applies to: proposals, business plans, contracts, pitches, SOWs, RFP responses, service agreements, and any other formal business documents.`,
       ].filter(Boolean).join("\n")
       const apiMessages = nextMessages.map((m, i) => {
         const isLastUser = m.role === "user" && i === nextMessages.length - 1
@@ -401,6 +447,74 @@ export default function ChatPage() {
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    const invalid = files.filter(f => !ACCEPTED_MIME_TYPES.includes(f.type))
+    if (invalid.length > 0) {
+      toast({ title: "Invalid file type", description: `File type "${invalid[0].type || "unknown"}" is not supported.`, variant: "error" })
+      if (fileInputRef.current) fileInputRef.current.value = ""
+      return
+    }
+    setUploadPreview(files.map(file => ({ file, category: DEFAULT_CATEGORIES[0] })))
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  async function confirmUpload() {
+    if (uploadPreview.length === 0) return
+    if (!user) {
+      toast({ title: "Sign in required", description: "Please sign in to upload documents.", variant: "error" })
+      return
+    }
+    setIsUploading(true)
+    try {
+      for (const { file, category } of uploadPreview) {
+        let pageCount = 0
+        const countableTypes = [
+          "application/pdf",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/msword",
+        ]
+        if (countableTypes.includes(file.type)) {
+          const formData = new FormData()
+          formData.append("file", file)
+          const res = await fetch("/api/count-pages", { method: "POST", body: formData })
+          if (res.ok) {
+            const data = await res.json()
+            pageCount = data.pageCount || 0
+          }
+        }
+        const doc = await uploadDocument(user.id, file, category, pageCount)
+        try {
+          const parseRes = await fetch("/api/parse-document", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id, filename: doc.filename, mimeType: file.type }),
+          })
+          if (parseRes.ok) {
+            const { text } = await parseRes.json()
+            if (text) await updateDocumentText(doc.id, text)
+          } else {
+            const errText = await parseRes.text()
+            console.error("[PARSE DOCUMENT] API error:", parseRes.status, errText)
+          }
+        } catch (err) {
+          console.error("[PARSE DOCUMENT] Network/exception:", err)
+        }
+      }
+      toast({ title: "Uploaded", description: `${uploadPreview.length} document(s) uploaded to Knowledge Base.`, variant: "default" })
+      setUploadPreview([])
+      setOpenCategoryIndex(null)
+      // Refresh KB docs if panel might be open
+      if (kbEnabled) loadKbDocs()
+    } catch (err: any) {
+      console.error("Upload failed:", err)
+      toast({ title: "Upload failed", description: err.message || "Upload failed", variant: "error" })
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   async function loadConversations() {
@@ -718,35 +832,45 @@ export default function ChatPage() {
               {/* Input inline — centered with greeting */}
               <div className="w-full max-w-3xl">
                 <div
-                  className="relative rounded-2xl border focus-within:ring-2 transition-all"
+                  className="rounded-2xl border focus-within:ring-2 transition-all flex flex-col"
                   style={inputDark
                     ? { background: brandInput.bgGradient, borderColor: brandInput.border, boxShadow: brandInput.shadow, outlineColor: `${themePrimary}4d` }
                     : { background: "#ffffff", borderColor: "#e2e8f0", outlineColor: `${themePrimary}4d` }
                   }
                 >
-                  {!input.trim() && (
-                    <div className="pointer-events-none absolute left-4 top-4 text-sm text-slate-400">
-                      <AnimatedPlaceholder
-                        messages={[
-                          t("chatInputPlaceholder"),
-                          t("chatSuggestion1"),
-                          t("chatSuggestion2"),
-                          t("chatSuggestion3"),
-                          t("chatSuggestion4"),
-                        ]}
-                        interval={3500}
-                      />
-                    </div>
-                  )}
-                  <textarea
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={handleKey}
-                    rows={1}
-                    className="w-full resize-none bg-transparent px-4 pb-12 pt-4 text-sm placeholder:text-slate-400 focus:outline-none"
-                    style={{ color: inputDark ? brandInput.text : "#1e293b" }}
-                  />
-                  <div className="absolute bottom-3 flex w-full items-center justify-between px-3">
+                  <div className="relative">
+                    {!input.trim() && (
+                      <div className="pointer-events-none absolute left-4 top-4 text-sm text-slate-400">
+                        <AnimatedPlaceholder
+                          messages={[
+                            t("chatInputPlaceholder"),
+                            t("chatSuggestion1"),
+                            t("chatSuggestion2"),
+                            t("chatSuggestion3"),
+                            t("chatSuggestion4"),
+                          ]}
+                          interval={3500}
+                        />
+                      </div>
+                    )}
+                    <textarea
+                      ref={textareaRef}
+                      value={input}
+                      onChange={e => {
+                        const val = e.target.value
+                        setInput(val)
+                        localStorage.setItem("exploro_chat_draft", val)
+                        const el = e.target
+                        el.style.height = "auto"
+                        const newH = Math.min(el.scrollHeight, 160)
+                        el.style.height = `${newH}px`
+                      }}
+                      onKeyDown={handleKey}
+                      className="w-full min-h-[48px] max-h-[160px] resize-none overflow-y-auto bg-transparent px-4 pt-4 pb-2 text-sm placeholder:text-slate-400 focus:outline-none"
+                      style={{ color: inputDark ? brandInput.text : "#1e293b" }}
+                    />
+                  </div>
+                  <div className="flex w-full items-center justify-between px-3 pb-3 pt-1">
                     <div className="relative flex items-center gap-0.5" ref={kbPanelRef}>
                       {showKbPanel && (
                         <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
@@ -779,6 +903,18 @@ export default function ChatPage() {
                           </div>
                         </div>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Upload document"
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                          inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                        )}
+                      >
+                        <Paperclip className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Upload</span>
+                      </button>
                       {([
                         { id: "knowledge" as const, icon: BookOpen, label: "Knowledge Base", active: kbEnabled },
                         { id: "channels" as const, icon: Radio, label: "Channels", active: channelsEnabled },
@@ -912,35 +1048,45 @@ export default function ChatPage() {
           {messages.length > 0 && <div className="relative z-10 shrink-0 border-t border-white/5 px-3 py-3 sm:px-4 sm:py-4">
             <div className="mx-auto max-w-3xl">
               <div
-                className="relative rounded-2xl border focus-within:ring-2 transition-all"
+                className="rounded-2xl border focus-within:ring-2 transition-all flex flex-col"
                 style={inputDark
                   ? { background: brandInput.bgGradient, borderColor: brandInput.border, boxShadow: brandInput.shadow, outlineColor: `${themePrimary}4d` }
                   : { background: "#ffffff", borderColor: "#e2e8f0", outlineColor: `${themePrimary}4d` }
                 }
               >
-                {!input.trim() && (
-                  <div className="pointer-events-none absolute left-4 top-4 text-sm text-slate-400">
-                    <AnimatedPlaceholder
-                      messages={[
-                        t("chatInputPlaceholder"),
-                        t("chatSuggestion1"),
-                        t("chatSuggestion2"),
-                        t("chatSuggestion3"),
-                        t("chatSuggestion4"),
-                      ]}
-                      interval={3500}
-                    />
-                  </div>
-                )}
-                <textarea
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKey}
-                  rows={1}
-                  className="w-full resize-none bg-transparent px-4 pb-12 pt-4 text-sm placeholder:text-slate-400 focus:outline-none"
-                  style={{ color: inputDark ? brandInput.text : "#1e293b" }}
-                />
-                <div className="absolute bottom-3 flex w-full items-center justify-between px-3">
+                <div className="relative">
+                  {!input.trim() && (
+                    <div className="pointer-events-none absolute left-4 top-4 text-sm text-slate-400">
+                      <AnimatedPlaceholder
+                        messages={[
+                          t("chatInputPlaceholder"),
+                          t("chatSuggestion1"),
+                          t("chatSuggestion2"),
+                          t("chatSuggestion3"),
+                          t("chatSuggestion4"),
+                        ]}
+                        interval={3500}
+                      />
+                    </div>
+                  )}
+                  <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={e => {
+                      const val = e.target.value
+                      setInput(val)
+                      localStorage.setItem("exploro_chat_draft", val)
+                      const el = e.target
+                      el.style.height = "auto"
+                      const newH = Math.min(el.scrollHeight, 160)
+                      el.style.height = `${newH}px`
+                    }}
+                    onKeyDown={handleKey}
+                    className="w-full min-h-[48px] max-h-[160px] resize-none overflow-y-auto bg-transparent px-4 pt-4 pb-2 text-sm placeholder:text-slate-400 focus:outline-none"
+                    style={{ color: inputDark ? brandInput.text : "#1e293b" }}
+                  />
+                </div>
+                <div className="flex w-full items-center justify-between px-3 pb-3 pt-1">
                   <div className="relative flex items-center gap-0.5" ref={kbPanelRef}>
                     {showKbPanel && (
                       <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
@@ -973,6 +1119,18 @@ export default function ChatPage() {
                         </div>
                       </div>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Upload document"
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                        inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                      )}
+                    >
+                      <Paperclip className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Upload</span>
+                    </button>
                     {([
                       { id: "knowledge" as const, icon: BookOpen, label: "Knowledge Base", active: kbEnabled },
                       { id: "channels" as const, icon: Radio, label: "Channels", active: channelsEnabled },
@@ -1016,6 +1174,119 @@ export default function ChatPage() {
         </main>
 
       </div>
+
+      {/* Hidden file input for document upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.docx,.doc,.txt,.md,.html,.json,.csv,.xml,.pptx,.xlsx,.epub"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {/* Upload Preview & Category Modal */}
+      {uploadPreview.length > 0 && (
+        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm py-10" onClick={() => { setUploadPreview([]); setOpenCategoryIndex(null) }}>
+          <div className="relative mx-4 w-full max-w-md rounded-2xl border border-white/10 bg-[#2a3444] p-6 shadow-2xl my-auto" onClick={e => e.stopPropagation()}>
+            <button type="button" onClick={() => { setUploadPreview([]); setOpenCategoryIndex(null) }} className="absolute right-3 top-3 text-muted-foreground hover:text-white transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="mb-4 text-lg font-semibold text-white">Upload Document{uploadPreview.length > 1 ? "s" : ""} ({uploadPreview.length})</h3>
+            <div className="mb-5 space-y-2 pr-1">
+              {uploadPreview.map(({ file, category }, i) => {
+                const dropdownOpen = openCategoryIndex === i
+                return (
+                  <div key={i} className="relative rounded-xl border border-white/5 bg-background p-3 overflow-visible">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                        <File className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-white">{file.name}</p>
+                        <p className="text-xs text-muted-foreground">{formatFileSize(file.size)} · {file.type || "Unknown"}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = uploadPreview.filter((_, idx) => idx !== i)
+                          setUploadPreview(next)
+                          if (next.length === 0) setOpenCategoryIndex(null)
+                        }}
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-red-400"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="mt-2">
+                      <div className="relative overflow-visible">
+                        <button
+                          type="button"
+                          onClick={() => setOpenCategoryIndex(dropdownOpen ? null : i)}
+                          className="flex h-9 w-full items-center justify-between rounded-md border border-white/10 bg-[#2a3444] px-3 py-2 text-xs text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                        >
+                          <span>{category}</span>
+                          <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", dropdownOpen && "rotate-180")} />
+                        </button>
+                        {dropdownOpen && (
+                          <div className="mt-1.5 max-h-48 overflow-y-auto rounded-xl border border-emerald-500/30 bg-[#1e2533] p-1 shadow-2xl shadow-black/40">
+                            {DEFAULT_CATEGORIES.map(cat => {
+                              const selected = category === cat
+                              return (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => {
+                                    setUploadPreview(prev => prev.map((item, idx) => idx === i ? { ...item, category: cat } : item))
+                                    setOpenCategoryIndex(null)
+                                  }}
+                                  className={cn(
+                                    "flex w-full items-center justify-between px-4 py-2 text-xs transition-colors hover:bg-emerald-600/10",
+                                    selected ? "text-emerald-400" : "text-white"
+                                  )}
+                                >
+                                  {cat}
+                                  {selected && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setUploadPreview([]); setOpenCategoryIndex(null) }}
+                className="rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmUpload}
+                disabled={isUploading}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {isUploading ? (
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Uploading...
+                  </span>
+                ) : (
+                  `Upload ${uploadPreview.length}`
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Toaster />
     </div>
   )
 }
