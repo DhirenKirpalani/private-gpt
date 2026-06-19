@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Search, Check, X, MessageSquare, User, Globe, Mail, Eye, EyeOff, Loader2, AlertCircle, ExternalLink } from "lucide-react"
@@ -46,7 +46,7 @@ function getInitials(name: string): string {
 
 type SmtpForm = { email_address: string; smtp_host: string; smtp_port: string; smtp_user: string; smtp_pass: string; imap_host: string; imap_port: string; smtp_secure: boolean }
 
-export default function ChannelsPage() {
+function ChannelsPageContent() {
   const { user, avatarUrl, loading: authLoading } = useAuth()
   const { t, lang, setLang } = useI18n()
   const searchParams = useSearchParams()
@@ -442,7 +442,7 @@ export default function ChannelsPage() {
                         {(!provider.isOAuth || connected) && (
                           <button
                             onClick={() => connected ? handleDisconnect(provider.id) : openModal(provider)}
-                            className={cn("rounded-lg px-4 py-2 text-sm font-semibold transition-colors", connected ? "border border-white/10 text-muted-foreground hover:text-red-400 hover:border-red-500/30" : "bg-emerald-600 text-white hover:bg-emerald-700")}
+                            className={cn("rounded-lg px-4 py-2 text-sm font-semibold transition-colors", connected ? "border border-red-500/30 text-red-400 hover:bg-red-500/10" : "bg-emerald-600 text-white hover:bg-emerald-700")}
                           >
                             {connected ? t("channelsDisconnect") : t("channelsConnect")}
                           </button>
@@ -486,7 +486,7 @@ export default function ChannelsPage() {
                         waConn ? (
                           <button
                             onClick={() => handleDisconnectWhatsApp(waConn.phone_number_id)}
-                            className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-red-400 hover:border-red-500/30"
+                            className="shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
                           >
                             Disconnect
                           </button>
@@ -539,7 +539,7 @@ export default function ChannelsPage() {
                       {calConnected ? (
                         <button
                           onClick={() => handleDisconnectCalendar("google")}
-                          className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-red-400 hover:border-red-500/30"
+                          className="shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
                         >
                           Disconnect
                         </button>
@@ -854,5 +854,23 @@ export default function ChannelsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function ChannelsPage() {
+  return (
+    <Suspense fallback={
+      <div className="fixed inset-0 z-[60] flex flex-col bg-background">
+        <div className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4" />
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex h-full w-16 shrink-0 flex-col items-center gap-2 border-r bg-background py-3" />
+          <div className="flex-1 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        </div>
+      </div>
+    }>
+      <ChannelsPageContent />
+    </Suspense>
   )
 }
