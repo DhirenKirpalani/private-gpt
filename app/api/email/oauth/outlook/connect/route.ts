@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
+export const dynamic = "force-dynamic"
+
 const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/email/oauth/callback`
 
