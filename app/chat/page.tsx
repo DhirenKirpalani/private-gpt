@@ -6,6 +6,7 @@ import {
   Plus, MessageSquare, Search, Send, BookOpen, Globe, Radio,
   Bot, Copy, RefreshCw, Share2, Sparkles,
   PanelLeftClose, X, User, Paperclip, File, CheckCircle2, ChevronDown,
+  Mail, Phone, CalendarDays, Check, Loader2,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
@@ -15,6 +16,7 @@ import {
   getConversations, createConversation, updateConversationTitle,
   deleteConversation, getMessages, saveMessage, type ChatConversation,
   fetchDocumentContents, uploadDocument, updateDocumentText,
+  getEmailConnections, getCalendarConnections, getWhatsAppConnections,
 } from "@/lib/supabase"
 import { useI18n } from "@/lib/i18n"
 import { CinematicBackground } from "@/components/cinematic-background"
@@ -31,6 +33,7 @@ interface Message {
   sources?: string[]
   confidence?: "high" | "medium" | "low"
   timestamp: Date
+  action?: { type: string; [key: string]: any }
 }
 
 function getInitials(name: string): string {
@@ -106,9 +109,16 @@ export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messageCountRef = useRef(0)
 
+  // Channels panel
+  const [showChannelsPanel, setShowChannelsPanel] = useState(false)
+  const channelsPanelRef = useRef<HTMLDivElement>(null)
+  const [channelsLoading, setChannelsLoading] = useState(false)
+  const [connectedChannels, setConnectedChannels] = useState<{ id: string; name: string; icon: React.ReactNode; connected: boolean; detail?: string }[]>([])
+
   const [uploadPreview, setUploadPreview] = useState<{ file: File; category: string }[]>([])
   const [openCategoryIndex, setOpenCategoryIndex] = useState<number | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [executingActions, setExecutingActions] = useState<Set<string>>(new Set())
 
   const DEFAULT_CATEGORIES = ["SOPs", "FAQs", "Training Material", "Policies", "Reports"]
   const ACCEPTED_MIME_TYPES = [
@@ -332,6 +342,20 @@ export default function ChatPage() {
     }
     const userAsksAboutInternal = isInternalQuery(input)
 
+    // Detect if user is asking about emails or calendar
+    function isEmailOrCalendarQuery(query: string): boolean {
+      const lower = query.toLowerCase()
+      const signals = [
+        "email", "emails", "inbox", "mail", "gmail", "outlook",
+        "calendar", "schedule", "meeting", "event", "appointment",
+        "upcoming", "my meetings", "my emails", "check email",
+        "draft email", "write email", "reply to", "respond to",
+        "busy", "free time", "available", "book a meeting",
+      ]
+      return signals.some(s => lower.includes(s))
+    }
+    const userAsksAboutEmailOrCalendar = isEmailOrCalendarQuery(input)
+
     // Build context-aware loading texts based on active toggles
     const hasKb = kbEnabled && kbDocs.length > 0
     const actuallySearchingWeb = webSearchEnabled && !userAsksAboutInternal
@@ -404,6 +428,42 @@ export default function ChatPage() {
         ``,
         kbContext ? `# Knowledge Base\n${kbContext}` : "",
         channelsEnabled ? `# Active Channel Context\nChannel integrations are active (email, WhatsApp, etc.). Consider business communication channels in responses.` : "",
+        `# Email, Calendar & WhatsApp Assistant Capabilities`,
+        `You have access to the user's connected Gmail, Google Calendar, and WhatsApp Business accounts. When the user asks about their emails, inbox, meetings, schedule, calendar, or WhatsApp messages, you will receive live context from these accounts in your prompt.`,
+        ``,
+        `Email capabilities:`,
+        `- Summarize recent emails from the inbox`,
+        `- Draft email replies or new emails (ask for recipient, subject, and content)`,
+        `- Send emails directly through the user's connected Gmail/Outlook account`,
+        `- Find specific emails by sender or subject`,
+        `- Suggest follow-up actions for unanswered emails`,
+        ``,
+        `Calendar capabilities:`,
+        `- List upcoming meetings and events`,
+        `- Suggest free time slots for scheduling`,
+        `- Create meetings/events in the user's Google Calendar (ask for title, time, duration, attendees, location)`,
+        `- Draft meeting invites (ask for attendees, time, and agenda)`,
+        `- Summarize the day's or week's schedule`,
+        ``,
+        `WhatsApp capabilities:`,
+        `- Summarize recent WhatsApp conversations`,
+        `- Find messages from specific contacts or phone numbers`,
+        `- Draft and send WhatsApp replies (ask for recipient phone number and message)`,
+        `- Suggest follow-up actions for unread WhatsApp messages`,
+        ``,
+        `When you draft an email the user wants to send, present the draft clearly and ask them to confirm. At the VERY END of your message, append an action block like this (it will be converted into a Send button):`,
+        `<!--ACTION:{"type":"send_email","to":"recipient@example.com","subject":"Subject","body":"Email body text"}-->`,
+        ``,
+        `When you propose creating a calendar event, do the same:`,
+        `<!--ACTION:{"type":"create_event","title":"Event Title","start":"2026-06-19T14:00:00Z","end":"2026-06-19T15:00:00Z","attendees":["a@b.com"],"location":"Zoom"}-->`,
+        ``,
+        `When you draft a WhatsApp message the user wants to send, do the same:`,
+        `<!--ACTION:{"type":"send_whatsapp","to":"+1234567890","body":"Hi, just following up on our meeting"}-->`,
+        ``,
+        `Do NOT tell the user to click anything — just present the draft and append the action block. The UI will render a confirm button automatically.`,
+        ``,
+        `When NO channel context is provided in the prompt, you do NOT have access to the user's inbox, calendar, or WhatsApp. In that case, tell them to ask about their emails, calendar, or WhatsApp to activate the context.`,
+        ``,
         websiteContent ? `# Website Content (fetched from ${p?.website})\n${websiteContent}` : "",
         ``,
         `# Core Instructions`,
@@ -458,7 +518,37 @@ export default function ChatPage() {
         }
       }
 
-      const finalSystemPrompt = webSearchContext ? systemPrompt + webSearchContext : systemPrompt
+      // Fetch email/calendar context if Channels toggle is enabled
+      let emailCalendarContext = ""
+      if (channelsEnabled && user) {
+        try {
+          const ctxRes = await fetch("/api/ai/context", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id }),
+          })
+          if (ctxRes.ok) {
+            const ctxData = await ctxRes.json()
+            const parts: string[] = []
+            if (ctxData.emailContext) {
+              parts.push(`# Recent Emails (from connected Gmail/Outlook)\n${ctxData.emailContext}`)
+            }
+            if (ctxData.calendarContext) {
+              parts.push(`# Upcoming Calendar Events (next 14 days)\n${ctxData.calendarContext}`)
+            }
+            if (ctxData.whatsappContext) {
+              parts.push(`# Recent WhatsApp Messages\n${ctxData.whatsappContext}`)
+            }
+            if (parts.length > 0) {
+              emailCalendarContext = `\n# Email, Calendar & WhatsApp Context\nThe following data was retrieved from the user's connected accounts:\n\n${parts.join("\n\n")}\n\nINSTRUCTION: Use this context to answer the user's question about their emails, calendar, or WhatsApp messages. Be concise and helpful.`
+            }
+          }
+        } catch (err) {
+          console.error("[AI CONTEXT] Failed:", err)
+        }
+      }
+
+      const finalSystemPrompt = systemPrompt + webSearchContext + emailCalendarContext
 
       const apiMessages = nextMessages.map((m, i) => {
         const isLastUser = m.role === "user" && i === nextMessages.length - 1
@@ -480,10 +570,13 @@ export default function ChatPage() {
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || "Request failed")
+      // Extract any AI action blocks for inline confirm buttons
+      const extracted = extractAiAction(data.content)
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: data.content,
+        content: extracted.content,
+        action: extracted.action,
         confidence: "high",
         timestamp: new Date(),
         sources: wsData?.sources?.map((s: any) => s.url).filter(Boolean) || undefined,
@@ -612,6 +705,95 @@ export default function ChatPage() {
     } catch { /* silent */ }
   }
 
+  // Detect AI action blocks (<!--ACTION:{...}-->) and return stripped content + action data
+  function extractAiAction(content: string): { content: string; action?: { type: string; [key: string]: any } } {
+    const match = content.match(/<!--ACTION:({.+?})-->/)
+    if (!match) return { content }
+    try {
+      const action = JSON.parse(match[1])
+      const stripped = content.replace(match[0], "").trim()
+      return { content: stripped, action }
+    } catch { /* silent */ }
+    return { content }
+  }
+
+  async function executeAiAction(action: { type: string; [key: string]: any }): Promise<string> {
+    if (action.type === "send_email" && user) {
+      const emailConns = await getEmailConnections(user.id)
+      const connected = emailConns.find((c: any) => c.status === "connected")
+      if (!connected) return "*(No connected email account. Please connect Gmail or Outlook in Channels.)*"
+      const sendRes = await fetch("/api/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          providerId: connected.provider,
+          to: action.to,
+          subject: action.subject,
+          body: action.body,
+          originalMessageId: action.originalMessageId || undefined,
+          threadId: action.threadId || undefined,
+        }),
+      })
+      const sendData = await sendRes.json()
+      return sendRes.ok
+        ? `*(Email sent to ${action.to})*`
+        : `*(Email failed: ${sendData.error || "Unknown error"})*`
+    }
+    if (action.type === "create_event" && user) {
+      const calRes = await fetch("/api/calendar/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          title: action.title,
+          description: action.description || "",
+          start: action.start,
+          end: action.end,
+          attendees: action.attendees || [],
+          location: action.location || undefined,
+        }),
+      })
+      const calData = await calRes.json()
+      return calRes.ok
+        ? `*(Event "${action.title}" created)*`
+        : `*(Event failed: ${calData.error || "Unknown error"})*`
+    }
+    if (action.type === "send_whatsapp" && user) {
+      const waRes = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          to: action.to,
+          body: action.body,
+        }),
+      })
+      const waData = await waRes.json()
+      return waRes.ok
+        ? `*(WhatsApp sent to ${action.to})*`
+        : `*(WhatsApp failed: ${waData.error || "Unknown error"})*`
+    }
+    return ""
+  }
+
+  async function handleExecuteAction(msgId: string, action: { type: string; [key: string]: any }) {
+    setExecutingActions(prev => new Set(prev).add(msgId))
+    try {
+      const resultText = await executeAiAction(action)
+      setMessages(prev => prev.map(m => {
+        if (m.id !== msgId) return m
+        return { ...m, content: m.content + "\n\n" + resultText, action: undefined }
+      }))
+    } finally {
+      setExecutingActions(prev => {
+        const next = new Set(prev)
+        next.delete(msgId)
+        return next
+      })
+    }
+  }
+
   async function handleNewConversation() {
     setMessages([])
     setCurrentConversationId(null)
@@ -658,6 +840,15 @@ export default function ChatPage() {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [showKbPanel])
 
+  useEffect(() => {
+    if (!showChannelsPanel) return
+    function handleClick(e: MouseEvent) {
+      if (!channelsPanelRef.current?.contains(e.target as Node)) setShowChannelsPanel(false)
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [showChannelsPanel])
+
   async function loadKbDocs() {
     if (!user) return
     setKbLoading(true)
@@ -681,6 +872,46 @@ export default function ChatPage() {
     }
   }
 
+  async function loadConnectedChannels() {
+    if (!user) return
+    setChannelsLoading(true)
+    try {
+      const [emailConns, calConns, waConns] = await Promise.all([
+        getEmailConnections(user.id),
+        getCalendarConnections(user.id),
+        getWhatsAppConnections(user.id),
+      ])
+      const channels: typeof connectedChannels = []
+      const emailConnected = emailConns.some((c: any) => c.status === "connected")
+      channels.push({
+        id: "email",
+        name: "Email",
+        icon: <Mail className="h-3.5 w-3.5" />,
+        connected: emailConnected,
+        detail: emailConnected ? (emailConns.find((c: any) => c.status === "connected")?.email_address || "Connected") : "Not connected",
+      })
+      const calConnected = calConns.length > 0
+      channels.push({
+        id: "calendar",
+        name: "Google Calendar",
+        icon: <CalendarDays className="h-3.5 w-3.5" />,
+        connected: calConnected,
+        detail: calConnected ? (calConns[0]?.calendar_email || "Connected") : "Not connected",
+      })
+      const waConnected = waConns.length > 0
+      channels.push({
+        id: "whatsapp",
+        name: "WhatsApp",
+        icon: <Phone className="h-3.5 w-3.5" />,
+        connected: waConnected,
+        detail: waConnected ? (waConns[0]?.phone_number || waConns[0]?.phone_number_id || "Connected") : "Not connected",
+      })
+      setConnectedChannels(channels)
+    } catch { /* silent */ } finally {
+      setChannelsLoading(false)
+    }
+  }
+
   function handleTabClick(tab: "knowledge" | "channels" | "websearch") {
     if (tab === "knowledge") {
       const next = !kbEnabled
@@ -688,9 +919,16 @@ export default function ChatPage() {
       localStorage.setItem("exploro_kb_enabled", String(next))
       if (next) { loadKbDocs(); setShowKbPanel(true) } else { setShowKbPanel(false) }
     } else if (tab === "channels") {
-      const next = !channelsEnabled
-      setChannelsEnabled(next)
-      localStorage.setItem("exploro_channels_enabled", String(next))
+      const nextShow = !showChannelsPanel
+      setShowChannelsPanel(nextShow)
+      if (nextShow) {
+        setChannelsEnabled(true)
+        localStorage.setItem("exploro_channels_enabled", "true")
+        loadConnectedChannels()
+      } else {
+        setChannelsEnabled(false)
+        localStorage.setItem("exploro_channels_enabled", "false")
+      }
     } else if (tab === "websearch") {
       const next = !webSearchEnabled
       setWebSearchEnabled(next)
@@ -975,26 +1213,82 @@ export default function ChatPage() {
                         <Paperclip className="h-3.5 w-3.5" />
                         <span className="hidden sm:inline">Upload</span>
                       </button>
-                      {([
-                        { id: "knowledge" as const, icon: BookOpen, label: "Knowledge Base", active: kbEnabled },
-                        { id: "channels" as const, icon: Radio, label: "Channels", active: channelsEnabled },
-                        { id: "websearch" as const, icon: Globe, label: "Web Search", active: webSearchEnabled },
-                      ]).map(tab => (
+                      {/* Knowledge Base button */}
+                      <button
+                        onClick={() => handleTabClick("knowledge")}
+                        title="Knowledge Base"
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                          kbEnabled
+                            ? "bg-emerald-600/20 text-emerald-400"
+                            : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                        )}
+                      >
+                        <BookOpen className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Knowledge Base</span>
+                      </button>
+                      {/* Channels button with dropdown */}
+                      <div className="relative" ref={channelsPanelRef}>
+                        {showChannelsPanel && (
+                          <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                            <div className="border-b border-white/5 px-3 py-2">
+                              <p className="text-xs font-semibold text-white">Channels</p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">Connected messaging and calendar accounts</p>
+                            </div>
+                            <div className="max-h-48 overflow-y-auto py-1">
+                              {channelsLoading && (
+                                <div className="flex items-center justify-center py-6">
+                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                                </div>
+                              )}
+                              {!channelsLoading && connectedChannels.filter(ch => ch.connected).length === 0 && (
+                                <p className="px-3 py-4 text-xs text-muted-foreground text-center">No channels connected.</p>
+                              )}
+                              {!channelsLoading && connectedChannels.filter(ch => ch.connected).map((ch, i) => (
+                                <button
+                                  key={ch.id}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
+                                >
+                                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-[10px] font-bold text-emerald-400">
+                                    {i + 1}
+                                  </span>
+                                  <span className="flex-1 truncate text-white">{ch.name}</span>
+                                  <span className="flex items-center gap-0.5 shrink-0 text-[10px] text-emerald-400">
+                                    <Check className="h-3 w-3" /> Connected
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <button
-                          key={tab.id}
-                          onClick={() => handleTabClick(tab.id)}
-                          title={tab.label}
+                          onClick={() => handleTabClick("channels")}
+                          title="Channels"
                           className={cn(
                             "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
-                            tab.active
+                            channelsEnabled
                               ? "bg-emerald-600/20 text-emerald-400"
                               : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                           )}
                         >
-                          <tab.icon className="h-3.5 w-3.5" />
-                          <span className="hidden sm:inline">{tab.label}</span>
+                          <Radio className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">Channels</span>
                         </button>
-                      ))}
+                      </div>
+                      {/* Web Search button */}
+                      <button
+                        onClick={() => handleTabClick("websearch")}
+                        title="Web Search"
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                          webSearchEnabled
+                            ? "bg-emerald-600/20 text-emerald-400"
+                            : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                        )}
+                      >
+                        <Globe className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Web Search</span>
+                      </button>
                     </div>
                     <button
                       onClick={sendMessage}
@@ -1070,6 +1364,43 @@ export default function ChatPage() {
                         ))
                       )}
                     </div>
+                    {/* Inline action buttons */}
+                    {msg.role === "assistant" && msg.action && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          onClick={() => handleExecuteAction(msg.id, msg.action!)}
+                          disabled={executingActions.has(msg.id)}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                            msg.action!.type === "send_email"
+                              ? "bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30"
+                              : msg.action!.type === "send_whatsapp"
+                              ? "bg-green-600/20 text-green-400 border border-green-500/30 hover:bg-green-600/30"
+                              : "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30",
+                            executingActions.has(msg.id) && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          {executingActions.has(msg.id) ? (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              {msg.action!.type === "send_email" ? "Sending..." : msg.action!.type === "send_whatsapp" ? "Sending..." : "Creating..."}
+                            </>
+                          ) : (
+                            <>
+                              {msg.action!.type === "send_email" ? <Send className="h-3 w-3" /> : msg.action!.type === "send_whatsapp" ? <MessageSquare className="h-3 w-3" /> : <CalendarDays className="h-3 w-3" />}
+                              {msg.action!.type === "send_email" ? "Send Email" : msg.action!.type === "send_whatsapp" ? "Send WhatsApp" : "Create Event"}
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, action: undefined } : m))}
+                          disabled={executingActions.has(msg.id)}
+                          className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                     {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
                       <div className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
                         <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Sources</p>
@@ -1202,26 +1533,82 @@ export default function ChatPage() {
                       <Paperclip className="h-3.5 w-3.5" />
                       <span className="hidden sm:inline">Upload</span>
                     </button>
-                    {([
-                      { id: "knowledge" as const, icon: BookOpen, label: "Knowledge Base", active: kbEnabled },
-                      { id: "channels" as const, icon: Radio, label: "Channels", active: channelsEnabled },
-                      { id: "websearch" as const, icon: Globe, label: "Web Search", active: webSearchEnabled },
-                    ]).map(tab => (
+                    {/* Knowledge Base button */}
+                    <button
+                      onClick={() => handleTabClick("knowledge")}
+                      title="Knowledge Base"
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                        kbEnabled
+                          ? "bg-emerald-600/20 text-emerald-400"
+                          : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                      )}
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Knowledge Base</span>
+                    </button>
+                    {/* Channels button with dropdown */}
+                    <div className="relative" ref={channelsPanelRef}>
+                      {showChannelsPanel && (
+                        <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                          <div className="border-b border-white/5 px-3 py-2">
+                            <p className="text-xs font-semibold text-white">Channels</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">Connected messaging and calendar accounts</p>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto py-1">
+                            {channelsLoading && (
+                              <div className="flex items-center justify-center py-6">
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                              </div>
+                            )}
+                            {!channelsLoading && connectedChannels.filter(ch => ch.connected).length === 0 && (
+                              <p className="px-3 py-4 text-xs text-muted-foreground text-center">No channels connected.</p>
+                            )}
+                            {!channelsLoading && connectedChannels.filter(ch => ch.connected).map((ch, i) => (
+                              <button
+                                key={ch.id}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
+                              >
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-[10px] font-bold text-emerald-400">
+                                  {i + 1}
+                                </span>
+                                <span className="flex-1 truncate text-white">{ch.name}</span>
+                                <span className="flex items-center gap-0.5 shrink-0 text-[10px] text-emerald-400">
+                                  <Check className="h-3 w-3" /> Connected
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <button
-                        key={tab.id}
-                        onClick={() => handleTabClick(tab.id)}
-                        title={tab.label}
+                        onClick={() => handleTabClick("channels")}
+                        title="Channels"
                         className={cn(
                           "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
-                          tab.active
+                          channelsEnabled
                             ? "bg-emerald-600/20 text-emerald-400"
                             : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                         )}
                       >
-                        <tab.icon className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">{tab.label}</span>
+                        <Radio className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Channels</span>
                       </button>
-                    ))}
+                    </div>
+                    {/* Web Search button */}
+                    <button
+                      onClick={() => handleTabClick("websearch")}
+                      title="Web Search"
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                        webSearchEnabled
+                          ? "bg-emerald-600/20 text-emerald-400"
+                          : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                      )}
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Web Search</span>
+                    </button>
                   </div>
                   <button
                     onClick={sendMessage}

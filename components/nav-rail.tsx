@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   MessageSquare, BookOpen, Plug2, User,
-  Users, InboxIcon, Mail, BarChart3, Layers, Workflow, Settings,
+  Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
@@ -21,12 +21,7 @@ export function NavRail() {
   ]
 
   const secondary = [
-    { href: "/crm",         icon: Users,     label: t("navCRM") },
-    { href: "/inbox",       icon: InboxIcon, label: t("navInbox") },
-    { href: "/contacts",    icon: Mail,      label: t("navContacts") },
-    { href: "/analytics",   icon: BarChart3, label: t("navAnalytics") },
-    { href: "/agents",      icon: Layers,    label: t("navAgents") },
-    { href: "/automations", icon: Workflow,  label: t("navAutomations") },
+    { href: "/crm", icon: Users, label: t("navCRM") },
   ]
 
   return (
@@ -65,15 +60,6 @@ export function NavRail() {
         </Link>
       ))}
 
-      <div className="mt-auto">
-        <Link
-          href="/"
-          title={t("navHome")}
-          className="flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Settings className="h-5 w-5" />
-        </Link>
-      </div>
     </nav>
   )
 }

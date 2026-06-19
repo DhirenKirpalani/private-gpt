@@ -499,6 +499,411 @@ export async function saveMessage(
   return data as ChatMessage
 }
 
+// Email messages
+export type EmailMessage = {
+  id: string
+  user_id: string
+  connection_id: string
+  provider: string
+  direction: "sent" | "received"
+  from_address: string | null
+  to_address: string | null
+  subject: string | null
+  body: string | null
+  html_body?: string | null
+  message_id?: string | null
+  thread_id?: string | null
+  read?: boolean
+  sent_at?: string
+  received_at?: string
+  created_at: string
+}
+
+export async function markEmailAsRead(userId: string, messageId: string) {
+  const { error } = await supabase
+    .from("email_messages")
+    .update({ read: true })
+    .eq("id", messageId)
+    .eq("user_id", userId)
+  if (error) throw error
+}
+
+export async function getEmailMessages(userId: string, direction?: "sent" | "received"): Promise<EmailMessage[]> {
+  let query = supabase
+    .from("email_messages")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+  if (direction) query = query.eq("direction", direction)
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []) as EmailMessage[]
+}
+
+export async function saveEmailMessage(msg: Partial<EmailMessage>): Promise<EmailMessage> {
+  const { data, error } = await supabase
+    .from("email_messages")
+    .insert(msg)
+    .select()
+    .single()
+  if (error) throw error
+  return data as EmailMessage
+}
+
+// ─── Contacts ───
+export interface Contact {
+  id: string
+  user_id: string
+  name: string
+  email: string | null
+  company: string | null
+  role: string | null
+  phone: string | null
+  location: string | null
+  tags: string[]
+  starred: boolean
+  source: string
+  last_contact: string | null
+  deal_value: number
+  deal_stage: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function getContacts(userId: string): Promise<Contact[]> {
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("*")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+  if (error) throw error
+  return (data || []) as Contact[]
+}
+
+export async function saveContact(contact: Partial<Contact> & { user_id: string }): Promise<Contact> {
+  const { data, error } = await supabase
+    .from("contacts")
+    .upsert(contact, { onConflict: "user_id,email" })
+    .select()
+    .single()
+  if (error) throw error
+  return data as Contact
+}
+
+export async function deleteContact(userId: string, contactId: string) {
+  const { error } = await supabase
+    .from("contacts")
+    .delete()
+    .eq("id", contactId)
+    .eq("user_id", userId)
+  if (error) throw error
+}
+
+// Import contacts from email messages (extract unique senders)
+export async function importContactsFromEmails(userId: string): Promise<number> {
+  console.log("[IMPORT DEBUG] Starting import for user:", userId)
+  // Get all received email messages for this user
+  const { data: messages, error } = await supabase
+    .from("email_messages")
+    .select("from_address, subject, received_at")
+    .eq("user_id", userId)
+    .eq("direction", "received")
+    .not("from_address", "is", null)
+
+  console.log("[IMPORT DEBUG] Messages query result:", { count: messages?.length || 0, error: error?.message || null })
+  if (error || !messages || messages.length === 0) {
+    console.log("[IMPORT DEBUG] No messages found, returning 0")
+    return 0
+  }
+
+  // Extract unique email addresses with their most recent message info
+  const uniqueSenders = new Map<string, { name: string; email: string; lastContact: string; subject: string }>()
+
+  for (const msg of messages) {
+    if (!msg.from_address) continue
+    // Parse "Name <email@example.com>" or just "email@example.com"
+    const from = msg.from_address as string
+    let name = from
+    let email = from
+
+    const match = from.match(/^(.+?)\s*<(.+?)>$/)
+    if (match) {
+      name = match[1].trim().replace(/"/g, "")
+      email = match[2].trim()
+    }
+
+    // Skip if already have this email with a more recent message
+    const existing = uniqueSenders.get(email)
+    const msgDate = msg.received_at || new Date().toISOString()
+    if (!existing || msgDate > existing.lastContact) {
+      uniqueSenders.set(email, { name, email, lastContact: msgDate, subject: msg.subject || "" })
+    }
+  }
+
+  console.log("[IMPORT DEBUG] Unique senders found:", uniqueSenders.size, Array.from(uniqueSenders.keys()).slice(0, 5))
+
+  // Check which contacts already exist
+  const { data: existingContacts } = await supabase
+    .from("contacts")
+    .select("email")
+    .eq("user_id", userId)
+    .in("email", Array.from(uniqueSenders.keys()))
+
+  const existingEmails = new Set((existingContacts || []).map((c: any) => c.email))
+  console.log("[IMPORT DEBUG] Existing emails:", existingEmails.size, Array.from(existingEmails).slice(0, 5))
+
+  let imported = 0
+  for (const [email, info] of Array.from(uniqueSenders.entries())) {
+    if (existingEmails.has(email)) { console.log("[IMPORT DEBUG] Skipping existing:", email); continue }
+
+    // Guess company from email domain
+    let company = ""
+    const domainMatch = email.match(/@(.+)$/)
+    if (domainMatch) {
+      const domain = domainMatch[1]
+      if (!domain.includes("gmail.com") && !domain.includes("yahoo.com") && !domain.includes("hotmail.com") && !domain.includes("outlook.com")) {
+        company = domain.replace(/\.(com|net|org|io|co\.\w+)$/, "").replace(/-/g, " ")
+        company = company.charAt(0).toUpperCase() + company.slice(1)
+      }
+    }
+
+    console.log("[IMPORT DEBUG] Inserting contact:", { name: info.name, email, company })
+    const { error: insertError } = await supabase.from("contacts").insert({
+      user_id: userId,
+      name: info.name || email.split("@")[0],
+      email: info.email,
+      company: company || null,
+      role: null,
+      phone: null,
+      location: null,
+      tags: [],
+      starred: false,
+      source: "email_import",
+      last_contact: info.lastContact,
+      deal_value: 0,
+      deal_stage: null,
+    })
+
+    if (insertError) {
+      console.error("[IMPORT DEBUG] Insert failed:", insertError.message)
+    } else {
+      imported++
+    }
+  }
+
+  console.log("[IMPORT DEBUG] Total imported:", imported)
+  return imported
+}
+
+// ─── Calendar ───
+export interface CalendarConnection {
+  id: string
+  user_id: string
+  provider: string
+  status: string
+  calendar_email?: string
+  created_at: string
+}
+
+export interface CalendarEvent {
+  id: string
+  user_id: string
+  summary: string
+  description?: string
+  start_time?: string
+  end_time?: string
+  attendees?: any[]
+  location?: string
+  event_link?: string
+  is_online?: boolean
+}
+
+export async function getCalendarConnections(userId: string): Promise<CalendarConnection[]> {
+  const { data, error } = await supabase
+    .from("calendar_connections")
+    .select("id, user_id, provider, status, calendar_email, created_at")
+    .eq("user_id", userId)
+  if (error) throw error
+  return (data ?? []) as CalendarConnection[]
+}
+
+export async function getCalendarEvents(userId: string): Promise<CalendarEvent[]> {
+  const { data, error } = await supabase
+    .from("calendar_events")
+    .select("*")
+    .eq("user_id", userId)
+    .order("start_time", { ascending: true })
+  if (error) throw error
+  return (data ?? []) as CalendarEvent[]
+}
+
+export async function deleteCalendarConnection(userId: string, connectionId: string) {
+  const { error } = await supabase
+    .from("calendar_connections")
+    .delete()
+    .eq("id", connectionId)
+    .eq("user_id", userId)
+  if (error) throw error
+}
+
+// ─── WhatsApp ───
+export interface WhatsAppConnection {
+  id: string
+  user_id: string
+  phone_number_id: string
+  phone_number?: string
+  display_name?: string
+  status: string
+  webhook_verified?: boolean
+  created_at: string
+}
+
+export interface WhatsAppMessage {
+  id: string
+  user_id: string
+  direction: string
+  from_number?: string
+  to_number?: string
+  body?: string
+  timestamp?: string
+  read?: boolean
+  created_at: string
+}
+
+export async function getWhatsAppConnections(userId: string): Promise<WhatsAppConnection[]> {
+  const { data, error } = await supabase
+    .from("whatsapp_connections")
+    .select("*")
+    .eq("user_id", userId)
+  if (error) throw error
+  return (data ?? []) as WhatsAppConnection[]
+}
+
+export async function getWhatsAppMessages(userId: string): Promise<WhatsAppMessage[]> {
+  const { data, error } = await supabase
+    .from("whatsapp_messages")
+    .select("*")
+    .eq("user_id", userId)
+    .order("timestamp", { ascending: false })
+  if (error) throw error
+  return (data ?? []) as WhatsAppMessage[]
+}
+
+export async function saveWhatsAppConnection(userId: string, phoneNumberId: string, accessToken: string, phoneNumber?: string, displayName?: string) {
+  const { error } = await supabase.from("whatsapp_connections").insert({
+    user_id: userId,
+    phone_number_id: phoneNumberId,
+    access_token: accessToken,
+    phone_number: phoneNumber,
+    display_name: displayName,
+    status: "connected",
+  })
+  if (error) throw error
+}
+
+export async function deleteWhatsAppConnection(userId: string, connectionId: string) {
+  const { error } = await supabase
+    .from("whatsapp_connections")
+    .delete()
+    .eq("id", connectionId)
+    .eq("user_id", userId)
+  if (error) throw error
+}
+
+// ─── Realtime Subscriptions ───
+export function subscribeToEmailMessages(
+  userId: string,
+  callback: (payload: { eventType: string; new: any; old: any }) => void
+) {
+  const channel = supabase
+    .channel("email_messages")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "email_messages",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: any) => callback(payload)
+    )
+    .subscribe()
+
+  return channel
+}
+
+export function subscribeToCalendarEvents(
+  userId: string,
+  callback: (payload: { eventType: string; new: any; old: any }) => void
+) {
+  const channel = supabase
+    .channel("calendar_events")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "calendar_events",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: any) => callback(payload)
+    )
+    .subscribe()
+
+  return channel
+}
+
+export function subscribeToContacts(
+  userId: string,
+  callback: (payload: { eventType: string; new: any; old: any }) => void
+) {
+  const channel = supabase
+    .channel("contacts")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "contacts",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: any) => callback(payload)
+    )
+    .subscribe()
+
+  return channel
+}
+
+export function unsubscribeChannel(channel: ReturnType<typeof subscribeToEmailMessages>) {
+  supabase.removeChannel(channel)
+}
+
+// ─── CRM Kanban column persistence ───────────────────────────────────────────
+
+export async function getKanbanCols(userId: string, board: "email" | "messages" | "calendar") {
+  const { data, error } = await supabase
+    .from("crm_kanban_cols")
+    .select("col_id, label, color, position")
+    .eq("user_id", userId)
+    .eq("board", board)
+    .order("position")
+  if (error) throw error
+  return (data || []).map((r: any) => ({ id: r.col_id, label: r.label, color: r.color }))
+}
+
+export async function upsertKanbanCols(
+  userId: string,
+  board: "email" | "messages" | "calendar",
+  cols: { id: string; label: string; color: string }[]
+) {
+  await supabase.from("crm_kanban_cols").delete().eq("user_id", userId).eq("board", board)
+  if (cols.length === 0) return
+  const { error } = await supabase.from("crm_kanban_cols").insert(
+    cols.map((c, i) => ({ user_id: userId, board, col_id: c.id, label: c.label, color: c.color, position: i }))
+  )
+  if (error) throw error
+}
+
 // Support screenshots
 export async function uploadSupportScreenshot(userId: string, file: File) {
   const filePath = `${userId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`
