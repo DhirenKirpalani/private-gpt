@@ -84,56 +84,89 @@ export async function POST(req: NextRequest) {
         if (!listRes.ok) throw new Error(listData.error?.message || "Gmail list failed")
 
         nextPageToken = listData.nextPageToken || null
-        const msgs = listData.messages || []
-        for (const m of msgs) {
-          // Check if already stored
-          const { data: existing } = await supabase
-            .from("email_messages").select("id")
-            .eq("user_id", userId).eq("connection_id", conn.id)
-            .eq("message_id", m.id).maybeSingle()
+        const messageIds = (listData.messages || []).map((m: any) => m.id)
+        if (messageIds.length === 0) {
+          return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
+        }
 
-          if (!existing) {
-            const detailRes = await fetch(
-              `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`,
-              { headers: { Authorization: `Bearer ${accessToken}` } }
+        // Batch check existing messages in one query
+        const { data: existingRows } = await supabase
+          .from("email_messages")
+          .select("message_id")
+          .eq("user_id", userId)
+          .eq("connection_id", conn.id)
+          .in("message_id", messageIds)
+
+        const existingIds = new Set((existingRows || []).map((r: any) => r.message_id))
+        const newIds = messageIds.filter((id: string) => !existingIds.has(id))
+
+        if (newIds.length === 0) {
+          return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
+        }
+
+        // Fetch details in parallel with concurrency limit of 8
+        const details: (any | null)[] = []
+        for (let i = 0; i < newIds.length; i += 8) {
+          const batch = newIds.slice(i, i + 8)
+          const batchResults = await Promise.allSettled(
+            batch.map((id: string) =>
+              fetch(
+                `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+              ).then(r => r.ok ? r.json() : null)
             )
-            const d = await detailRes.json()
-            if (!detailRes.ok) continue
-
-            const headers = d.payload?.headers || []
-            const getHeader = (name: string) => headers.find((h: any) => h.name === name)?.value || ""
-
-            // Extract body
-            let body = ""
-            let html = ""
-            const traverse = (parts: any[]) => {
-              for (const part of parts || []) {
-                if (part.mimeType === "text/plain" && part.body?.data) {
-                  body = Buffer.from(part.body.data, "base64url").toString("utf-8")
-                } else if (part.mimeType === "text/html" && part.body?.data) {
-                  html = Buffer.from(part.body.data, "base64url").toString("utf-8")
-                } else if (part.parts) { traverse(part.parts) }
-              }
-            }
-            if (d.payload?.parts) traverse(d.payload.parts)
-            else if (d.payload?.body?.data) {
-              body = Buffer.from(d.payload.body.data, "base64url").toString("utf-8")
-            }
-
-            const { data: inserted } = await supabase
-              .from("email_messages")
-              .insert({
-                user_id: userId, connection_id: conn.id, provider: providerId,
-                direction: "received",
-                from_address: getHeader("From"), to_address: getHeader("To"),
-                subject: getHeader("Subject"), body: body || html,
-                html_body: html || null, message_id: m.id,
-                message_id_header: getHeader("Message-ID") || null,
-                thread_id: d.threadId || m.id, read: false,
-                received_at: new Date(parseInt(d.internalDate)).toISOString(),
-              }).select().single()
-            if (inserted) results.push(inserted)
+          )
+          for (const r of batchResults) {
+            details.push(r.status === "fulfilled" ? r.value : null)
           }
+        }
+
+        const payloads: any[] = []
+        for (const d of details) {
+          if (!d) continue
+          const headers = d.payload?.headers || []
+          const getHeader = (name: string) => headers.find((h: any) => h.name === name)?.value || ""
+
+          let body = ""
+          let html = ""
+          const traverse = (parts: any[]) => {
+            for (const part of parts || []) {
+              if (part.mimeType === "text/plain" && part.body?.data) {
+                body = Buffer.from(part.body.data, "base64url").toString("utf-8")
+              } else if (part.mimeType === "text/html" && part.body?.data) {
+                html = Buffer.from(part.body.data, "base64url").toString("utf-8")
+              } else if (part.parts) { traverse(part.parts) }
+            }
+          }
+          if (d.payload?.parts) traverse(d.payload.parts)
+          else if (d.payload?.body?.data) {
+            body = Buffer.from(d.payload.body.data, "base64url").toString("utf-8")
+          }
+
+          payloads.push({
+            user_id: userId,
+            connection_id: conn.id,
+            provider: providerId,
+            direction: "received",
+            from_address: getHeader("From"),
+            to_address: getHeader("To"),
+            subject: getHeader("Subject"),
+            body: body || html,
+            html_body: html || null,
+            message_id: d.id,
+            message_id_header: getHeader("Message-ID") || null,
+            thread_id: d.threadId || d.id,
+            read: false,
+            received_at: new Date(parseInt(d.internalDate)).toISOString(),
+          })
+        }
+
+        if (payloads.length > 0) {
+          const { data: inserted } = await supabase
+            .from("email_messages")
+            .insert(payloads)
+            .select()
+          if (inserted) results.push(...inserted)
         }
 
       } else if (conn.oauth_provider === "microsoft") {
@@ -144,31 +177,50 @@ export async function POST(req: NextRequest) {
         if (!listRes.ok) throw new Error(listData.error?.message || "Graph list failed")
 
         nextPageToken = listData["@odata.nextLink"] || null
-        for (const msg of listData.value || []) {
-          const { data: existing } = await supabase
-            .from("email_messages").select("id")
-            .eq("user_id", userId).eq("connection_id", conn.id)
-            .eq("message_id", msg.id).maybeSingle()
-
-          if (!existing) {
-            const { data: inserted } = await supabase
-              .from("email_messages")
-              .insert({
-                user_id: userId, connection_id: conn.id, provider: providerId,
-                direction: "received",
-                from_address: msg.from?.emailAddress?.address || "",
-                to_address: msg.toRecipients?.map((r: any) => r.emailAddress?.address).join(", ") || "",
-                subject: msg.subject || "", body: msg.bodyPreview || msg.body?.content || "",
-                html_body: msg.body?.contentType === "html" ? msg.body?.content : null,
-                message_id: msg.id,
-                message_id_header: msg.internetMessageId || null,
-                thread_id: msg.conversationId || msg.id,
-                read: msg.isRead || false,
-                received_at: msg.receivedDateTime || new Date().toISOString(),
-              }).select().single()
-            if (inserted) results.push(inserted)
-          }
+        const msgs = listData.value || []
+        const msgIds = msgs.map((m: any) => m.id)
+        if (msgIds.length === 0) {
+          return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
         }
+
+        // Batch check existing messages
+        const { data: existingRows } = await supabase
+          .from("email_messages")
+          .select("message_id")
+          .eq("user_id", userId)
+          .eq("connection_id", conn.id)
+          .in("message_id", msgIds)
+
+        const existingIds = new Set((existingRows || []).map((r: any) => r.message_id))
+        const newMsgs = msgs.filter((m: any) => !existingIds.has(m.id))
+
+        if (newMsgs.length === 0) {
+          return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
+        }
+
+        const payloads = newMsgs.map((msg: any) => ({
+          user_id: userId,
+          connection_id: conn.id,
+          provider: providerId,
+          direction: "received",
+          from_address: msg.from?.emailAddress?.address || "",
+          to_address: msg.toRecipients?.map((r: any) => r.emailAddress?.address).join(", ") || "",
+          subject: msg.subject || "",
+          body: msg.bodyPreview || msg.body?.content || "",
+          html_body: msg.body?.contentType === "html" ? msg.body?.content : null,
+          message_id: msg.id,
+          message_id_header: msg.internetMessageId || null,
+          thread_id: msg.conversationId || msg.id,
+          read: msg.isRead || false,
+          received_at: msg.receivedDateTime || new Date().toISOString(),
+        }))
+
+        const { data: inserted } = await supabase
+          .from("email_messages")
+          .insert(payloads)
+          .select()
+
+        if (inserted) results.push(...inserted)
       }
 
     } else {

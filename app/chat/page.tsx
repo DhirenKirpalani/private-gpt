@@ -428,8 +428,8 @@ export default function ChatPage() {
         ``,
         kbContext ? `# Knowledge Base\n${kbContext}` : "",
         channelsEnabled ? `# Active Channel Context\nChannel integrations are active (email, WhatsApp, etc.). Consider business communication channels in responses.` : "",
-        `# Email & Calendar Assistant Capabilities`,
-        `You have access to the user's connected Gmail and Google Calendar accounts. When the user asks about their emails, inbox, meetings, schedule, or calendar, you will receive live context from these accounts in your prompt.`,
+        `# Email, Calendar & WhatsApp Assistant Capabilities`,
+        `You have access to the user's connected Gmail, Google Calendar, and WhatsApp Business accounts. When the user asks about their emails, inbox, meetings, schedule, calendar, or WhatsApp messages, you will receive live context from these accounts in your prompt.`,
         ``,
         `Email capabilities:`,
         `- Summarize recent emails from the inbox`,
@@ -438,14 +438,6 @@ export default function ChatPage() {
         `- Find specific emails by sender or subject`,
         `- Suggest follow-up actions for unanswered emails`,
         ``,
-        `When you draft an email the user wants to send, present the draft clearly and ask them to confirm. At the VERY END of your message, append an action block like this (it will be converted into a Send button):`,
-        `<!--ACTION:{"type":"send_email","to":"recipient@example.com","subject":"Subject","body":"Email body text"}-->`,
-        ``,
-        `When you propose creating a calendar event, do the same:`,
-        `<!--ACTION:{"type":"create_event","title":"Event Title","start":"2026-06-19T14:00:00Z","end":"2026-06-19T15:00:00Z","attendees":["a@b.com"],"location":"Zoom"}-->`,
-        ``,
-        `Do NOT tell the user to click anything — just present the draft and append the action block. The UI will render a confirm button automatically.`,
-        ``,
         `Calendar capabilities:`,
         `- List upcoming meetings and events`,
         `- Suggest free time slots for scheduling`,
@@ -453,7 +445,24 @@ export default function ChatPage() {
         `- Draft meeting invites (ask for attendees, time, and agenda)`,
         `- Summarize the day's or week's schedule`,
         ``,
-        `When NO email or calendar context is provided in the prompt, you do NOT have access to the user's inbox or calendar. In that case, tell them to ask about their emails or calendar to activate the context.`,
+        `WhatsApp capabilities:`,
+        `- Summarize recent WhatsApp conversations`,
+        `- Find messages from specific contacts or phone numbers`,
+        `- Draft and send WhatsApp replies (ask for recipient phone number and message)`,
+        `- Suggest follow-up actions for unread WhatsApp messages`,
+        ``,
+        `When you draft an email the user wants to send, present the draft clearly and ask them to confirm. At the VERY END of your message, append an action block like this (it will be converted into a Send button):`,
+        `<!--ACTION:{"type":"send_email","to":"recipient@example.com","subject":"Subject","body":"Email body text"}-->`,
+        ``,
+        `When you propose creating a calendar event, do the same:`,
+        `<!--ACTION:{"type":"create_event","title":"Event Title","start":"2026-06-19T14:00:00Z","end":"2026-06-19T15:00:00Z","attendees":["a@b.com"],"location":"Zoom"}-->`,
+        ``,
+        `When you draft a WhatsApp message the user wants to send, do the same:`,
+        `<!--ACTION:{"type":"send_whatsapp","to":"+1234567890","body":"Hi, just following up on our meeting"}-->`,
+        ``,
+        `Do NOT tell the user to click anything — just present the draft and append the action block. The UI will render a confirm button automatically.`,
+        ``,
+        `When NO channel context is provided in the prompt, you do NOT have access to the user's inbox, calendar, or WhatsApp. In that case, tell them to ask about their emails, calendar, or WhatsApp to activate the context.`,
         ``,
         websiteContent ? `# Website Content (fetched from ${p?.website})\n${websiteContent}` : "",
         ``,
@@ -527,8 +536,11 @@ export default function ChatPage() {
             if (ctxData.calendarContext) {
               parts.push(`# Upcoming Calendar Events (next 14 days)\n${ctxData.calendarContext}`)
             }
+            if (ctxData.whatsappContext) {
+              parts.push(`# Recent WhatsApp Messages\n${ctxData.whatsappContext}`)
+            }
             if (parts.length > 0) {
-              emailCalendarContext = `\n# Email & Calendar Context\nThe following data was retrieved from the user's connected Gmail and Google Calendar accounts:\n\n${parts.join("\n\n")}\n\nINSTRUCTION: Use this context to answer the user's question about their emails or calendar. Be concise and helpful.`
+              emailCalendarContext = `\n# Email, Calendar & WhatsApp Context\nThe following data was retrieved from the user's connected accounts:\n\n${parts.join("\n\n")}\n\nINSTRUCTION: Use this context to answer the user's question about their emails, calendar, or WhatsApp messages. Be concise and helpful.`
             }
           }
         } catch (err) {
@@ -746,6 +758,21 @@ export default function ChatPage() {
       return calRes.ok
         ? `*(Event "${action.title}" created)*`
         : `*(Event failed: ${calData.error || "Unknown error"})*`
+    }
+    if (action.type === "send_whatsapp" && user) {
+      const waRes = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          to: action.to,
+          body: action.body,
+        }),
+      })
+      const waData = await waRes.json()
+      return waRes.ok
+        ? `*(WhatsApp sent to ${action.to})*`
+        : `*(WhatsApp failed: ${waData.error || "Unknown error"})*`
     }
     return ""
   }
@@ -1347,6 +1374,8 @@ export default function ChatPage() {
                             "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
                             msg.action!.type === "send_email"
                               ? "bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30"
+                              : msg.action!.type === "send_whatsapp"
+                              ? "bg-green-600/20 text-green-400 border border-green-500/30 hover:bg-green-600/30"
                               : "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30",
                             executingActions.has(msg.id) && "opacity-50 cursor-not-allowed"
                           )}
@@ -1354,12 +1383,12 @@ export default function ChatPage() {
                           {executingActions.has(msg.id) ? (
                             <>
                               <Loader2 className="h-3 w-3 animate-spin" />
-                              {msg.action!.type === "send_email" ? "Sending..." : "Creating..."}
+                              {msg.action!.type === "send_email" ? "Sending..." : msg.action!.type === "send_whatsapp" ? "Sending..." : "Creating..."}
                             </>
                           ) : (
                             <>
-                              {msg.action!.type === "send_email" ? <Send className="h-3 w-3" /> : <CalendarDays className="h-3 w-3" />}
-                              {msg.action!.type === "send_email" ? "Send Email" : "Create Event"}
+                              {msg.action!.type === "send_email" ? <Send className="h-3 w-3" /> : msg.action!.type === "send_whatsapp" ? <MessageSquare className="h-3 w-3" /> : <CalendarDays className="h-3 w-3" />}
+                              {msg.action!.type === "send_email" ? "Send Email" : msg.action!.type === "send_whatsapp" ? "Send WhatsApp" : "Create Event"}
                             </>
                           )}
                         </button>

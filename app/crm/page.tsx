@@ -1,18 +1,18 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import {
   Search, Plus, Phone, Mail, MapPin, Building2,
   Filter, CircleDollarSign, ChevronDown, X,
   ClipboardList, FileText, Send, Inbox,
-  Star, StarOff, Shield, User, Loader2, Reply,
+  Star, StarOff, Shield, User, Loader2, Reply, Trash2, Check, Pencil,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
-import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages } from "@/lib/supabase"
+import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols } from "@/lib/supabase"
 
 /* ─── real data ─── */
 const stages = [
@@ -22,15 +22,19 @@ const stages = [
   { name: "Closed Won", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
 ]
 
-const tabs = ["Overview", "Deals", "Activity", "Notes", "Inbox", "Calendar"]
+const tabs = ["Overview", "Email", "Messages", "Calendar"]
 
-
-const baseChannels = [
-  { id: "whatsapp", label: "WhatsApp", color: "bg-green-600" },
-  { id: "email",    label: "Email",    color: "bg-blue-600" },
-  { id: "sms",      label: "SMS",      color: "bg-purple-600" },
-  { id: "call",     label: "Call",     color: "bg-orange-600" },
+type KanbanCol = { id: string; label: string; color: string }
+const COL_COLORS = [
+  "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  "bg-rose-500/10 text-rose-400 border-rose-500/20",
+  "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
 ]
+
+
 
 function getInitials(name: string): string {
   if (!name.trim()) return ""
@@ -44,8 +48,8 @@ export default function CRMPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("Overview")
   const [search, setSearch] = useState("")
-  const [activeNav, setActiveNav] = useState("Contacts")
-  const [activeChannel, setActiveChannel] = useState("email")
+  const [activeNav] = useState("Contacts")
+  const [activeChannel, setActiveChannel] = useState("")
   const [showChannelMenu, setShowChannelMenu] = useState(false)
   const [composerOpen, setComposerOpen] = useState(false)
   const [messageText, setMessageText] = useState("")
@@ -78,6 +82,58 @@ export default function CRMPage() {
   // Pagination state
   const [nextPageToken, setNextPageToken] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [emailView, setEmailView] = useState<"kanban" | "table">("kanban")
+  const [messagesView, setMessagesView] = useState<"kanban" | "table">("kanban")
+  const [calendarView, setCalendarView] = useState<"kanban" | "table">("kanban")
+
+  // Email search + filter
+  const [emailSearch, setEmailSearch] = useState("")
+  const [emailFilterOpen, setEmailFilterOpen] = useState(false)
+  const [emailFilter, setEmailFilter] = useState<{ direction: "all" | "sent" | "received"; read: "all" | "read" | "unread" }>({ direction: "all", read: "all" })
+
+  // Email kanban state
+  const [emailKanbanCols, setEmailKanbanCols] = useState<KanbanCol[]>([
+    { id: "unread", label: "Unread", color: COL_COLORS[0] },
+    { id: "read",   label: "Read",   color: COL_COLORS[1] },
+    { id: "sent",   label: "Sent",   color: COL_COLORS[2] },
+  ])
+  const [emailCardCols, setEmailCardCols] = useState<Record<string, string>>({})
+  const [editingEmailCol, setEditingEmailCol] = useState<string | null>(null)
+  const [dragOverEmailCol, setDragOverEmailCol] = useState<string | null>(null)
+  const dragEmailId = useRef<string | null>(null)
+
+  // Messages kanban state
+  const [msgKanbanCols, setMsgKanbanCols] = useState<KanbanCol[]>([
+    { id: "unread", label: "Unread", color: COL_COLORS[0] },
+    { id: "read",   label: "Read",   color: COL_COLORS[1] },
+    { id: "sent",   label: "Sent",   color: COL_COLORS[2] },
+  ])
+  const [msgCardCols, setMsgCardCols] = useState<Record<string, string>>({})
+  const [editingMsgCol, setEditingMsgCol] = useState<string | null>(null)
+  const [dragOverMsgCol, setDragOverMsgCol] = useState<string | null>(null)
+  const dragMsgId = useRef<string | null>(null)
+
+  // Calendar kanban state
+  const [calKanbanCols, setCalKanbanCols] = useState<KanbanCol[]>([
+    { id: "today",    label: "Today",     color: COL_COLORS[0] },
+    { id: "week",     label: "This Week", color: COL_COLORS[3] },
+    { id: "upcoming", label: "Upcoming",  color: COL_COLORS[2] },
+  ])
+  const [calCardCols, setCalCardCols] = useState<Record<string, string>>({})
+  const [editingCalCol, setEditingCalCol] = useState<string | null>(null)
+  const [dragOverCalCol, setDragOverCalCol] = useState<string | null>(null)
+  const dragCalId = useRef<string | null>(null)
+
+  // Table status dropdown state
+  const [emailStatusOpen, setEmailStatusOpen] = useState<string | null>(null)
+  const [msgStatusOpen, setMsgStatusOpen] = useState<string | null>(null)
+  const [calStatusOpen, setCalStatusOpen] = useState<string | null>(null)
+
+  // Inline label editing inside status dropdowns
+  const [editingEmailLabel, setEditingEmailLabel] = useState<string | null>(null)
+  const [editingMsgLabel, setEditingMsgLabel] = useState<string | null>(null)
+  const [editingCalLabel, setEditingCalLabel] = useState<string | null>(null)
 
   // Calendar state
   const [calendarConnections, setCalendarConnections] = useState<any[]>([])
@@ -94,18 +150,96 @@ export default function CRMPage() {
   const [waReplyTo, setWaReplyTo] = useState<string | null>(null)
   const [sendingWaReply, setSendingWaReply] = useState(false)
 
-  // Build channels array with real connection status
-  const channels = baseChannels.map((ch: any) => ({
-    ...ch,
-    connected: ch.id === "email"
-      ? emailConnections.some((conn: any) => conn.status === "connected")
-      : ch.id === "whatsapp"
-        ? whatsappConnections.length > 0
-        : false,
-  }))
+  // ── Persist CRM data to sessionStorage so it survives page navigation ──
+  const storageKey = (k: string) => `crm_${user?.id || "guest"}_${k}`
+
+  // Restore on mount
+  useEffect(() => {
+    if (typeof window === "undefined" || !user) return
+    try {
+      const savedContacts = sessionStorage.getItem(storageKey("contacts"))
+      if (savedContacts) setContacts(JSON.parse(savedContacts))
+      const savedEmails = sessionStorage.getItem(storageKey("emailMessages"))
+      if (savedEmails) setEmailMessages(JSON.parse(savedEmails))
+      const savedInbox = sessionStorage.getItem(storageKey("inboxMessages"))
+      if (savedInbox) setInboxMessages(JSON.parse(savedInbox))
+      const savedInboxFetched = sessionStorage.getItem(storageKey("inboxFetched"))
+      if (savedInboxFetched) setInboxFetched(JSON.parse(savedInboxFetched))
+      const savedCalendar = sessionStorage.getItem(storageKey("calendarEvents"))
+      if (savedCalendar) setCalendarEvents(JSON.parse(savedCalendar))
+      const savedCalendarFetched = sessionStorage.getItem(storageKey("calendarFetched"))
+      if (savedCalendarFetched) setCalendarFetched(JSON.parse(savedCalendarFetched))
+      const savedWa = sessionStorage.getItem(storageKey("whatsappMessages"))
+      if (savedWa) setWhatsAppMessages(JSON.parse(savedWa))
+      const savedWaFetched = sessionStorage.getItem(storageKey("whatsappFetched"))
+      if (savedWaFetched) setWhatsAppFetched(JSON.parse(savedWaFetched))
+      const savedActiveChannel = sessionStorage.getItem(storageKey("activeChannel"))
+      if (savedActiveChannel) setActiveChannel(savedActiveChannel)
+      const savedActiveTab = sessionStorage.getItem(storageKey("activeTab"))
+      if (savedActiveTab) setActiveTab(savedActiveTab)
+    } catch { /* ignore corrupt storage */ }
+  }, [user])
+
+  // Save when data changes
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("contacts"), JSON.stringify(contacts)) } catch {} }, [contacts, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("emailMessages"), JSON.stringify(emailMessages)) } catch {} }, [emailMessages, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("inboxMessages"), JSON.stringify(inboxMessages)) } catch {} }, [inboxMessages, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("inboxFetched"), JSON.stringify(inboxFetched)) } catch {} }, [inboxFetched, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("calendarEvents"), JSON.stringify(calendarEvents)) } catch {} }, [calendarEvents, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("calendarFetched"), JSON.stringify(calendarFetched)) } catch {} }, [calendarFetched, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("whatsappMessages"), JSON.stringify(whatsappMessages)) } catch {} }, [whatsappMessages, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("whatsappFetched"), JSON.stringify(whatsappFetched)) } catch {} }, [whatsappFetched, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("activeChannel"), activeChannel) } catch {} }, [activeChannel, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("activeTab"), activeTab) } catch {} }, [activeTab, user])
+
+  // Build dynamic channels from actual connections
+  const channels = useMemo(() => {
+    const list: { id: string; label: string; color: string; type: string; connected: boolean }[] = []
+    for (const conn of emailConnections) {
+      if (conn.status === "connected") {
+        list.push({
+          id: conn.provider,
+          label: conn.provider === "gmail" ? "Gmail" : conn.provider === "outlook" ? "Outlook" : conn.email_address || conn.provider,
+          color: conn.provider === "gmail" ? "bg-red-500" : conn.provider === "outlook" ? "bg-blue-500" : "bg-slate-500",
+          type: "email",
+          connected: true,
+        })
+      }
+    }
+    for (const conn of calendarConnections) {
+      if (conn.status === "connected") {
+        list.push({
+          id: conn.provider || conn.id,
+          label: conn.calendar_email || conn.provider === "google" ? "Google Calendar" : conn.provider || "Calendar",
+          color: conn.provider === "google" ? "bg-blue-400" : "bg-orange-500",
+          type: "calendar",
+          connected: true,
+        })
+      }
+    }
+    for (const conn of whatsappConnections) {
+      list.push({
+        id: conn.phone_number_id,
+        label: conn.display_name || conn.phone_number || "WhatsApp",
+        color: "bg-green-500",
+        type: "whatsapp",
+        connected: true,
+      })
+    }
+    return list
+  }, [emailConnections, calendarConnections, whatsappConnections])
+
+  // Default active channel to first connected one
+  const activeCh = channels.find((c) => c.id === activeChannel) || channels[0] || { id: "", label: "No channels", color: "bg-slate-500", type: "", connected: false }
+
+  // Initialize activeChannel to first available channel on load
+  useEffect(() => {
+    if (!activeChannel && channels.length > 0) {
+      setActiveChannel(channels[0].id)
+    }
+  }, [channels, activeChannel])
 
   const contact = contacts.find((c: Contact) => c.id === selectedId)
-  const activeCh = channels.find((c: any) => c.id === activeChannel) || channels[0]
 
   // Unread email count (received emails with read=false)
   const unreadCount = inboxMessages.filter((m: any) => !m.read).length
@@ -118,14 +252,13 @@ export default function CRMPage() {
     (c.company || "").toLowerCase().includes(search.toLowerCase())
   )
 
-  // Dynamic nav counts
-  const crmNav = [
-    { label: "Contacts", count: contacts.length },
-    { label: "Companies", count: new Set(contacts.map((c: Contact) => c.company).filter(Boolean)).size },
-    { label: "Deals", count: contacts.filter((c: Contact) => (c.dealValue || 0) > 0).length },
-    { label: "Tasks", count: 0 },
-    { label: "Tickets", count: 0 },
-  ]
+
+  // Safety timeout: never block the UI for more than 1s
+  useEffect(() => {
+    if (!channelsLoading) return
+    const t = setTimeout(() => setChannelsLoading(false), 1000)
+    return () => clearTimeout(t)
+  }, [channelsLoading])
 
   // Build activities from real email messages
   const activities = emailMessages.map((msg: any) => ({
@@ -151,46 +284,21 @@ export default function CRMPage() {
         setUserName(name)
       }
 
-      // Load real email data
-      try {
-        const conns = await getEmailConnections(user.id)
-        setEmailConnections(conns)
-        const msgs = await getEmailMessages(user.id)
-        setEmailMessages(msgs)
-        // Load inbox from DB on mount (persistent)
-        const received = msgs.filter((m: any) => m.direction === "received")
-        setInboxMessages(received)
-        if (received.length > 0) setInboxFetched(true)
-      } catch { /* ignore */ }
+      // Parallel fetch for core metadata (connections + contacts)
+      const [emailConnsRes, calConnsRes, waConnsRes, contactsRes] = await Promise.allSettled([
+        getEmailConnections(user.id),
+        getCalendarConnections(user.id),
+        getWhatsAppConnections(user.id),
+        getContacts(user.id),
+      ])
 
-      // Load calendar data
-      try {
-        const calConns = await getCalendarConnections(user.id)
-        setCalendarConnections(calConns)
-        if (calConns.length > 0) {
-          const events = await getCalendarEvents(user.id)
-          setCalendarEvents(events)
-          if (events.length > 0) setCalendarFetched(true)
-        }
-      } catch { /* ignore */ }
-
-      // Load WhatsApp data
-      try {
-        const waConns = await getWhatsAppConnections(user.id)
-        setWhatsAppConnections(waConns)
-        if (waConns.length > 0) {
-          const waMsgs = await getWhatsAppMessages(user.id)
-          setWhatsAppMessages(waMsgs)
-          if (waMsgs.length > 0) setWhatsAppFetched(true)
-        }
-      } catch { /* ignore */ }
-
-      // Load contacts
-      try {
-        console.log("[DEBUG] Loading contacts for user:", user.id)
-        const contactList = await getContacts(user.id)
-        console.log("[DEBUG] Loaded contacts:", contactList.length)
-        setContacts(contactList.map((c: any) => ({
+      if (emailConnsRes.status === "fulfilled") setEmailConnections(emailConnsRes.value)
+      if (calConnsRes.status === "fulfilled") setCalendarConnections(calConnsRes.value)
+      if (waConnsRes.status === "fulfilled") setWhatsAppConnections(waConnsRes.value)
+      if (contactsRes.status === "fulfilled") {
+        const list = contactsRes.value
+        console.log("[DEBUG] Loaded contacts:", list.length)
+        setContacts(list.map((c: any) => ({
           id: c.id,
           name: c.name,
           company: c.company || "",
@@ -204,67 +312,225 @@ export default function CRMPage() {
           dealValue: c.deal_value || 0,
           dealStage: c.deal_stage || "",
         })))
-      } catch (e) {
-        console.error("[DEBUG] Failed to load contacts:", e)
+      } else {
+        console.error("[DEBUG] Failed to load contacts:", contactsRes.reason)
       }
+
+      // Core metadata loaded — show CRM
       setChannelsLoading(false)
+
+      // Then fetch heavy message/event data in parallel (non-blocking)
+      await Promise.allSettled([
+        emailConnsRes.status === "fulfilled" && emailConnsRes.value.length > 0
+          ? getEmailMessages(user.id).then((msgs: any[]) => {
+              if (msgs.length > 0) {
+                setEmailMessages(msgs)
+                const received = msgs.filter((m: any) => m.direction === "received")
+                setInboxMessages(received)
+                if (received.length > 0) setInboxFetched(true)
+              }
+            }).catch((err) => { console.error("[LOAD] getEmailMessages failed:", err) })
+          : Promise.resolve(),
+        calConnsRes.status === "fulfilled" && calConnsRes.value.length > 0
+          ? getCalendarEvents(user.id).then((events: any[]) => {
+              setCalendarEvents(events)
+              if (events.length > 0) setCalendarFetched(true)
+            }).catch(() => {})
+          : Promise.resolve(),
+        waConnsRes.status === "fulfilled" && waConnsRes.value.length > 0
+          ? getWhatsAppMessages(user.id).then((msgs: any[]) => {
+              setWhatsAppMessages(msgs)
+              if (msgs.length > 0) setWhatsAppFetched(true)
+            }).catch(() => {})
+          : Promise.resolve(),
+      ])
     }
     load()
   }, [user])
 
-  // Poll for new emails every 60 seconds
+  // Live sync via Supabase Realtime
   useEffect(() => {
     if (!user) return
-    const interval = setInterval(() => {
-      fetchInbox()
-    }, 60000)
-    return () => clearInterval(interval)
-  }, [user, emailConnections])
+
+    const emailChannel = subscribeToEmailMessages(user.id, (payload) => {
+      if (payload.eventType === "INSERT") {
+        const msg = payload.new
+        setEmailMessages((prev) => [msg, ...prev])
+        if (msg.direction === "received") {
+          setInboxMessages((prev) => [msg, ...prev])
+          setInboxFetched(true)
+        }
+      } else if (payload.eventType === "UPDATE") {
+        const msg = payload.new
+        setEmailMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)))
+        if (msg.direction === "received") {
+          setInboxMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)))
+        }
+      } else if (payload.eventType === "DELETE") {
+        const id = payload.old.id
+        setEmailMessages((prev) => prev.filter((m) => m.id !== id))
+        setInboxMessages((prev) => prev.filter((m) => m.id !== id))
+      }
+    })
+
+    const calendarChannel = subscribeToCalendarEvents(user.id, (payload) => {
+      if (payload.eventType === "INSERT") {
+        const evt = payload.new
+        setCalendarEvents((prev) => [...prev, evt].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()))
+        setCalendarFetched(true)
+      } else if (payload.eventType === "UPDATE") {
+        const evt = payload.new
+        setCalendarEvents((prev) => prev.map((e) => (e.id === evt.id ? evt : e)))
+      } else if (payload.eventType === "DELETE") {
+        const id = payload.old.id
+        setCalendarEvents((prev) => prev.filter((e) => e.id !== id))
+      }
+    })
+
+    const contactsChannel = subscribeToContacts(user.id, (payload) => {
+      if (payload.eventType === "INSERT") {
+        const c = payload.new
+        setContacts((prev) => [
+          {
+            id: c.id,
+            name: c.name,
+            company: c.company || "",
+            role: c.role || "",
+            email: c.email || "",
+            phone: c.phone || "",
+            location: c.location || "",
+            tags: c.tags || [],
+            starred: c.starred,
+            lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+            dealValue: c.deal_value || 0,
+            dealStage: c.deal_stage || "",
+          },
+          ...prev,
+        ])
+      } else if (payload.eventType === "UPDATE") {
+        const c = payload.new
+        setContacts((prev) =>
+          prev.map((contact) =>
+            contact.id === c.id
+              ? {
+                  id: c.id,
+                  name: c.name,
+                  company: c.company || "",
+                  role: c.role || "",
+                  email: c.email || "",
+                  phone: c.phone || "",
+                  location: c.location || "",
+                  tags: c.tags || [],
+                  starred: c.starred,
+                  lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+                  dealValue: c.deal_value || 0,
+                  dealStage: c.deal_stage || "",
+                }
+              : contact
+          )
+        )
+      } else if (payload.eventType === "DELETE") {
+        const id = payload.old.id
+        setContacts((prev) => prev.filter((c) => c.id !== id))
+      }
+    })
+
+    return () => {
+      unsubscribeChannel(emailChannel)
+      unsubscribeChannel(calendarChannel)
+      unsubscribeChannel(contactsChannel)
+    }
+  }, [user])
+
+  // ── Load kanban cols from Supabase ──────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return
+    Promise.allSettled([
+      getKanbanCols(user.id, "email"),
+      getKanbanCols(user.id, "messages"),
+      getKanbanCols(user.id, "calendar"),
+    ]).then(([eRes, mRes, cRes]) => {
+      if (eRes.status === "fulfilled" && eRes.value.length > 0) setEmailKanbanCols(eRes.value)
+      if (mRes.status === "fulfilled" && mRes.value.length > 0) setMsgKanbanCols(mRes.value)
+      if (cRes.status === "fulfilled" && cRes.value.length > 0) setCalKanbanCols(cRes.value)
+    })
+  }, [user])
+
+  // ── Auto-save kanban cols to Supabase whenever they change ──────────────────
+  useEffect(() => {
+    if (!user) return
+    const t = setTimeout(() => { upsertKanbanCols(user.id, "email", emailKanbanCols).catch(() => {}) }, 600)
+    return () => clearTimeout(t)
+  }, [user, emailKanbanCols])
+
+  useEffect(() => {
+    if (!user) return
+    const t = setTimeout(() => { upsertKanbanCols(user.id, "messages", msgKanbanCols).catch(() => {}) }, 600)
+    return () => clearTimeout(t)
+  }, [user, msgKanbanCols])
+
+  useEffect(() => {
+    if (!user) return
+    const t = setTimeout(() => { upsertKanbanCols(user.id, "calendar", calKanbanCols).catch(() => {}) }, 600)
+    return () => clearTimeout(t)
+  }, [user, calKanbanCols])
 
   // Fetch inbox emails + auto-import contacts
   const fetchInbox = async (pageToken?: string) => {
-    console.log("[DEBUG] fetchInbox called", { pageToken })
-    if (!user) { console.log("[DEBUG] No user, returning"); return }
-    const conn = emailConnections.find((c: any) => c.status === "connected")
-    if (!conn) { console.log("[DEBUG] No connected email, returning"); return }
+    if (!user) return
+    const providerId = activeChannel || emailConnections.find((c: any) => c.status === "connected")?.provider
+    if (!providerId) { setFetchError("No email provider selected."); return }
+    const conn = emailConnections.find((c: any) => c.provider === providerId && c.status === "connected")
+    if (!conn) { setFetchError("No connected email account found. Connect Gmail in Channels."); return }
 
     const isLoadMore = !!pageToken
     if (isLoadMore) setLoadingMore(true)
     else setInboxLoading(true)
+    setFetchError(null)
 
     try {
       const res = await fetch("/api/email/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, providerId: conn.provider, pageToken }),
+        body: JSON.stringify({ userId: user.id, providerId, pageToken }),
       })
       const data = await res.json()
       if (!res.ok) {
-        console.error("[DEBUG] Fetch failed:", data.error)
+        setFetchError(data.error || "Failed to fetch emails")
         return
       }
-      // Store next page token
       setNextPageToken(data.nextPageToken || null)
-      // Reload from DB
-      const msgs = await getEmailMessages(user.id)
-      setEmailMessages(msgs)
-      setInboxMessages(msgs.filter((m: any) => m.direction === "received"))
+
+      // Merge API-returned messages directly into state (no extra DB reload)
+      const fetched = data.messages || []
+      const merge = (prev: any[]) => {
+        const map = new Map(prev.map(m => [m.id, m]))
+        for (const m of fetched) map.set(m.id, m)
+        return Array.from(map.values()).sort((a, b) => {
+          const da = a.received_at ? new Date(a.received_at).getTime() : 0
+          const db = b.received_at ? new Date(b.received_at).getTime() : 0
+          return db - da
+        })
+      }
+      setEmailMessages(prev => merge(prev))
+      setInboxMessages(prev => merge(prev).filter((m: any) => m.direction === "received"))
       setInboxFetched(true)
 
-      // Auto-import contacts
-      const imported = await importContactsFromEmails(user.id)
-      if (imported > 0) {
-        const contactList = await getContacts(user.id)
-        setContacts(contactList.map((c: any) => ({
-          id: c.id, name: c.name, company: c.company || "", role: c.role || "",
-          email: c.email || "", phone: c.phone || "", location: c.location || "",
-          tags: c.tags || [], starred: c.starred,
-          lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
-          dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
-        })))
-      }
-    } catch (e) {
-      console.error("[INBOX FETCH]", e)
+      // Fire contact import in background — don't block UI
+      importContactsFromEmails(user.id).then(async (imported) => {
+        if (imported > 0) {
+          const contactList = await getContacts(user.id)
+          setContacts(contactList.map((c: any) => ({
+            id: c.id, name: c.name, company: c.company || "", role: c.role || "",
+            email: c.email || "", phone: c.phone || "", location: c.location || "",
+            tags: c.tags || [], starred: c.starred,
+            lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+            dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
+          })))
+        }
+      }).catch(() => {})
+    } catch (e: any) {
+      setFetchError(e?.message || "Network error fetching emails")
     } finally {
       if (isLoadMore) setLoadingMore(false)
       else setInboxLoading(false)
@@ -302,7 +568,7 @@ export default function CRMPage() {
   // Send email
   const handleSendEmail = async () => {
     if (!user || !composeTo || !composeSubject) return
-    const conn = emailConnections.find((c: any) => c.status === "connected")
+    const conn = emailConnections.find((c: any) => c.provider === activeChannel && c.status === "connected")
     if (!conn) return
     setSendingEmail(true)
     try {
@@ -311,7 +577,7 @@ export default function CRMPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          providerId: conn.provider,
+          providerId: activeChannel,
           to: composeTo,
           subject: composeSubject,
           body: composeBody,
@@ -382,133 +648,46 @@ export default function CRMPage() {
         <NavRail />
 
         {/* ── CRM OBJECT NAV + CONTACTS ── */}
-        <aside className="flex w-80 shrink-0 flex-col border-r bg-card/30">
+        <aside className="flex w-64 shrink-0 flex-col border-r bg-card/30">
           {/* Object nav */}
-          <div className="p-3 pb-1">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">CRM</h2>
-              {/* Channel selector */}
-              <div className="relative">
+          <div className="flex flex-1 flex-col p-4">
+            <h2 className="mb-4 text-sm font-semibold">CRM</h2>
+
+            {/* Sidebar nav tabs */}
+            <div className="flex-1 space-y-1">
+              {tabs.map(tab => (
                 <button
-                  onClick={() => setShowChannelMenu(v => !v)}
-                  className="flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[10px] font-medium hover:bg-white/5 transition-colors"
-                >
-                  <span className={cn("h-2 w-2 rounded-full", activeCh.color)} />
-                  <span className={activeCh.connected ? "text-emerald-400" : "text-muted-foreground"}>{activeCh.label}</span>
-                  <ChevronDown className="h-2.5 w-2.5 text-muted-foreground" />
-                </button>
-                {showChannelMenu && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setShowChannelMenu(false)} />
-                    <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
-                      <div className="border-b border-white/5 px-3 py-2">
-                        <p className="text-xs font-semibold text-white">Channels</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">Select a channel to view messages</p>
-                      </div>
-                      <div className="py-1">
-                        {channels.map((ch, i) => (
-                          <button
-                            key={ch.id}
-                            onClick={() => { setActiveChannel(ch.id); setShowChannelMenu(false) }}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
-                          >
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-[10px] font-bold text-emerald-400">
-                              {i + 1}
-                            </span>
-                            <span className="flex-1 truncate text-white">{ch.label}</span>
-                            <span className={cn("shrink-0 text-[10px] font-medium", ch.connected ? "text-emerald-400" : "text-muted-foreground")}>
-                              {ch.connected ? "Connected" : ch.id === "email" ? "Connect" : "Soon"}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="space-y-0.5">
-              {crmNav.map(item => (
-                <button
-                  key={item.label}
-                  onClick={() => setActiveNav(item.label)}
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
                   className={cn(
-                    "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-                    activeNav === item.label ? "bg-emerald-600/10 text-emerald-400 font-medium" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                    "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+                    activeTab === tab ? "bg-emerald-600/10 text-emerald-400 font-medium" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                   )}
                 >
-                  <span>{item.label}</span>
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">{item.count}</span>
+                  <span>{tab}</span>
+                  {tab === "Email" && unreadCount > 0 && (
+                    <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                  {tab === "Calendar" && upcomingEventsCount > 0 && (
+                    <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
+                      {upcomingEventsCount > 99 ? "99+" : upcomingEventsCount}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
+
           </div>
 
-          <div className="mx-3 my-2 h-px bg-border" />
-
-          {/* Contact list */}
-          <div className="px-3 pb-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full rounded-lg border bg-muted/50 py-2 pl-8 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                placeholder={`Search ${activeNav.toLowerCase()}...`}
-              />
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto space-y-0.5 px-2 pb-2">
-            {filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
-                <User className="h-6 w-6 mb-2 opacity-30" />
-                <p className="text-xs">No contacts</p>
-                {emailConnections.some((c: any) => c.status === "connected") ? (
-                  <p className="text-[10px] mt-0.5">Go to Inbox tab → Fetch Emails</p>
-                ) : (
-                  <p className="text-[10px] mt-0.5">Connect email to auto-import</p>
-                )}
-              </div>
-            ) : (
-              filtered.map((c: Contact) => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelectedId(c.id)}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors",
-                    selectedId === c.id ? "bg-emerald-600/10" : "hover:bg-muted/50"
-                  )}
-                >
-                  <div className={cn(
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                    selectedId === c.id ? "bg-emerald-600 text-white" : "bg-muted text-foreground"
-                  )}>
-                    {c.name.split(" ").map((n: string) => n[0]).join("")}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-medium">{c.name}</span>
-                      {c.starred && <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />}
-                    </div>
-                    <div className="truncate text-xs text-muted-foreground">{c.company}</div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-[10px] text-muted-foreground">{c.lastContact}</div>
-                    {c.dealValue > 0 && (
-                      <div className="text-[10px] font-medium text-emerald-400">${(c.dealValue / 1000).toFixed(0)}k</div>
-                    )}
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
         </aside>
 
         {/* ── MAIN ── */}
         <main className="relative flex flex-1 flex-col overflow-hidden">
 
-          {/* Contact header - only for non-Inbox tabs when contact exists */}
-          {contact && activeTab !== "Inbox" && (
+          {/* Contact header - hidden on communication tabs */}
+          {contact && activeTab !== "Email" && activeTab !== "Messages" && activeTab !== "Calendar" && (
             <>
           <div className="flex items-start gap-4 border-b p-4 md:p-6">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-lg font-bold text-white">
@@ -572,7 +751,7 @@ export default function CRMPage() {
               </div>
               <button
                 onClick={() => {
-                  if (activeChannel === "email" && contact?.email) {
+                  if (activeCh.type === "email" && contact?.email) {
                     setComposeTo(contact.email)
                   }
                   setComposerOpen(true)
@@ -612,13 +791,8 @@ export default function CRMPage() {
                           onClick={() => { setActiveChannel(ch.id); setShowChannelMenu(false) }}
                           className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
                         >
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-[10px] font-bold text-emerald-400">
-                            {i + 1}
-                          </span>
                           <span className="flex-1 truncate text-white">{ch.label}</span>
-                          <span className={cn("shrink-0 text-[10px] font-medium", ch.connected ? "text-emerald-400" : "text-muted-foreground")}>
-                            {ch.connected ? "Connected" : ch.id === "email" ? "Connect" : "Soon"}
-                          </span>
+                          <span className="shrink-0 text-[10px] font-medium text-emerald-400">Connected</span>
                         </button>
                       ))}
                     </div>
@@ -628,7 +802,7 @@ export default function CRMPage() {
             </div>
             <button
               onClick={() => {
-                if (activeChannel === "email" && contact?.email) {
+                if (activeCh.type === "email" && contact?.email) {
                   setComposeTo(contact.email)
                 }
                 setComposerOpen(true)
@@ -641,43 +815,226 @@ export default function CRMPage() {
           </>
         )}
 
-        {/* Tabs */}
-          <div className="flex border-b px-4 md:px-6">
-            {tabs.map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  "relative px-4 py-3 text-xs font-medium transition-colors flex items-center gap-1.5",
-                  activeTab === tab ? "text-emerald-400" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {tab}
-                {tab === "Inbox" && unreadCount > 0 && (
-                  <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
-                {tab === "Calendar" && upcomingEventsCount > 0 && (
-                  <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
-                    {upcomingEventsCount > 99 ? "99+" : upcomingEventsCount}
-                  </span>
-                )}
-                {activeTab === tab && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
-                )}
-              </button>
-            ))}
-          </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className={cn("flex-1", (activeTab === "Email" || activeTab === "Messages" || activeTab === "Calendar") ? "flex flex-col overflow-hidden" : "overflow-y-auto p-4 md:p-6")}>
 
-            {/* Empty state for non-Inbox tabs when no contact selected */}
-            {activeTab !== "Inbox" && !contact && (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <User className="h-8 w-8 mb-2 opacity-30" />
-                <p className="text-sm">Select a contact to view details</p>
+            {/* Empty state for overview when no contact selected */}
+            {activeTab === "Overview" && !contact && (
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="mx-auto max-w-4xl space-y-6">
+
+                  {/* Header */}
+                  <div>
+                    <h1 className="text-xl font-bold tracking-tight">CRM Overview</h1>
+                    <p className="mt-0.5 text-sm text-muted-foreground">Summary of your connected channels and activity</p>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                    {[
+                      {
+                        label: "Inbox",
+                        value: inboxMessages.length,
+                        sub: `${inboxMessages.filter((m: any) => !m.read).length} unread`,
+                        icon: Mail,
+                        color: "text-blue-400",
+                        bg: "bg-blue-500/10",
+                        action: () => setActiveTab("Email"),
+                      },
+                      {
+                        label: "Messages",
+                        value: whatsappMessages.length,
+                        sub: `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length} unread`,
+                        icon: Phone,
+                        color: "text-emerald-400",
+                        bg: "bg-emerald-500/10",
+                        action: () => setActiveTab("Messages"),
+                      },
+                      {
+                        label: "Events",
+                        value: calendarEvents.length,
+                        sub: "upcoming",
+                        icon: ClipboardList,
+                        color: "text-amber-400",
+                        bg: "bg-amber-500/10",
+                        action: () => setActiveTab("Calendar"),
+                      },
+                      {
+                        label: "Contacts",
+                        value: contacts.length,
+                        sub: `${contacts.filter((c: any) => c.starred).length} starred`,
+                        icon: User,
+                        color: "text-purple-400",
+                        bg: "bg-purple-500/10",
+                        action: () => {},
+                      },
+                    ].map(({ label, value, sub, icon: Icon, color, bg, action }) => (
+                      <button key={label} onClick={action}
+                        className="group rounded-xl border bg-card p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                        <div className="flex items-start justify-between">
+                          <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", bg)}>
+                            <Icon className={cn("h-4 w-4", color)} />
+                          </div>
+                          <span className="text-2xl font-bold tabular-nums">{value >= 99 ? "99+" : value}</span>
+                        </div>
+                        <div className="mt-3">
+                          <p className="text-sm font-semibold">{label}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Connected Channels */}
+                  <div>
+                    <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider">Connected Channels</h2>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      {/* Email */}
+                      {(() => {
+                        const conn = emailConnections.find((c: any) => c.status === "connected")
+                        return (
+                          <button onClick={() => setActiveTab("Email")}
+                            className="flex items-center gap-3 rounded-xl border bg-card p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
+                              <Mail className="h-5 w-5 text-blue-400" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold">Gmail</p>
+                                {conn
+                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Connected</span>
+                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Not connected</span>
+                                }
+                              </div>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {conn ? `${inboxMessages.filter((m: any) => !m.read).length} unread · ${inboxMessages.length} total` : "Go to Channels to connect"}
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })()}
+                      {/* WhatsApp */}
+                      {(() => {
+                        const conn = whatsappConnections.length > 0 ? whatsappConnections[0] : null
+                        return (
+                          <button onClick={() => setActiveTab("Messages")}
+                            className="flex items-center gap-3 rounded-xl border bg-card p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+                              <Phone className="h-5 w-5 text-emerald-400" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold">WhatsApp</p>
+                                {conn
+                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Connected</span>
+                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Not connected</span>
+                                }
+                              </div>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {conn ? `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length} unread · ${whatsappMessages.length} total` : "Go to Channels to connect"}
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })()}
+                      {/* Calendar */}
+                      {(() => {
+                        const conn = calendarConnections.find((c: any) => c.status === "connected")
+                        const nextEvent = [...calendarEvents].sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
+                        return (
+                          <button onClick={() => setActiveTab("Calendar")}
+                            className="flex items-center gap-3 rounded-xl border bg-card p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+                              <ClipboardList className="h-5 w-5 text-amber-400" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold">Google Calendar</p>
+                                {conn
+                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Connected</span>
+                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Not connected</span>
+                                }
+                              </div>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {conn && nextEvent ? `Next: ${nextEvent.summary?.slice(0, 28) || "—"}` : conn ? `${calendarEvents.length} events` : "Go to Channels to connect"}
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Recent emails + upcoming events */}
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    {/* Recent emails */}
+                    <div className="rounded-xl border bg-card overflow-hidden">
+                      <div className="flex items-center justify-between border-b px-4 py-3">
+                        <h3 className="text-sm font-semibold">Recent Emails</h3>
+                        <button onClick={() => setActiveTab("Email")} className="text-xs text-emerald-400 hover:underline">View all →</button>
+                      </div>
+                      {inboxMessages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                          <Mail className="mb-2 h-5 w-5 text-muted-foreground opacity-40" />
+                          <p className="text-xs text-muted-foreground">No emails yet</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y">
+                          {[...inboxMessages].sort((a: any, b: any) => new Date(b.received_at || 0).getTime() - new Date(a.received_at || 0).getTime()).slice(0, 5).map((m: any) => (
+                            <button key={m.id} onClick={() => { setActiveTab("Email"); setOpenEmail(m) }}
+                              className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors">
+                              <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full" style={{ background: m.read ? "transparent" : "#10b981" }} />
+                              <div className="min-w-0 flex-1">
+                                <p className={cn("truncate text-xs", !m.read && "font-semibold")}>{m.from_address || "Unknown"}</p>
+                                <p className="truncate text-xs text-muted-foreground">{m.subject || "(No subject)"}</p>
+                              </div>
+                              <span className="shrink-0 text-[10px] text-muted-foreground whitespace-nowrap">
+                                {m.received_at ? new Date(m.received_at).toLocaleDateString() : ""}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Upcoming events */}
+                    <div className="rounded-xl border bg-card overflow-hidden">
+                      <div className="flex items-center justify-between border-b px-4 py-3">
+                        <h3 className="text-sm font-semibold">Upcoming Events</h3>
+                        <button onClick={() => setActiveTab("Calendar")} className="text-xs text-emerald-400 hover:underline">View all →</button>
+                      </div>
+                      {calendarEvents.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                          <ClipboardList className="mb-2 h-5 w-5 text-muted-foreground opacity-40" />
+                          <p className="text-xs text-muted-foreground">No upcoming events</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y">
+                          {[...calendarEvents].filter((e: any) => e.start_time && new Date(e.start_time) >= new Date())
+                            .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+                            .slice(0, 5).map((ev: any) => (
+                            <div key={ev.id} className="flex items-start gap-3 px-4 py-3">
+                              <div className="flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-lg bg-amber-500/10 text-amber-400">
+                                <span className="text-[10px] font-bold leading-none uppercase">{new Date(ev.start_time).toLocaleDateString("en", { month: "short" })}</span>
+                                <span className="text-sm font-bold leading-none">{new Date(ev.start_time).getDate()}</span>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-semibold">{ev.summary}</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                  {new Date(ev.start_time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                                  {ev.location ? ` · ${ev.location}` : ""}
+                                </p>
+                              </div>
+                              {ev.is_online && <span className="shrink-0 rounded-full bg-emerald-600/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Online</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
               </div>
             )}
 
@@ -767,146 +1124,264 @@ export default function CRMPage() {
               </div>
             )}
 
-            {/* ── DEALS ── */}
-            {activeTab === "Deals" && contact && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Pipeline</h3>
-                  <button className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors">
-                    <Filter className="h-3.5 w-3.5" /> Filter
-                  </button>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  {stages.map(stage => {
-                    const stageContacts = contacts.filter(c => c.dealStage === stage.name && c.dealValue > 0)
-                    return (
-                      <div key={stage.name} className="rounded-xl border bg-card/50 p-3">
-                        <div className="mb-3 flex items-center justify-between">
-                          <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-medium", stage.color)}>
-                            {stage.name}
-                          </span>
-                          <span className="text-xs font-semibold">
-                            ${stageContacts.reduce((sum, c) => sum + c.dealValue, 0).toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="space-y-2">
-                          {stageContacts.map(c => (
-                            <button
-                              key={c.id}
-                              onClick={() => { setSelectedId(c.id); setActiveTab("Overview") }}
-                              className="flex w-full items-center gap-2 rounded-lg border bg-card p-2 text-left hover:border-emerald-500/30 transition-colors"
-                            >
-                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold">
-                                {c.name.split(" ").map(n => n[0]).join("")}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-xs font-medium">{c.name}</div>
-                                <div className="text-[10px] text-emerald-400 font-medium">${c.dealValue.toLocaleString()}</div>
-                              </div>
-                            </button>
-                          ))}
-                          {stageContacts.length === 0 && (
-                            <div className="rounded-lg border border-dashed py-4 text-center text-xs text-muted-foreground">
-                              No deals
+
+            {/* ── EMAIL ── */}
+            {activeTab === "Email" && (
+              <div className="flex flex-1 flex-col min-h-0">
+                {/* Email Toolbar */}
+                <div className="flex items-center justify-between px-6 py-4 border-b bg-card/50">
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-lg font-bold">Email</h1>
+                    <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+                      <button onClick={() => setEmailView("kanban")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", emailView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Kanban</button>
+                      <button onClick={() => setEmailView("table")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", emailView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Table</button>
+                    </div>
+                    {/* Channel selector */}
+                    {channels.filter(c => c.type === "email").length > 0 && (
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowChannelMenu(v => !v)}
+                          className="flex items-center gap-1.5 rounded-full border border-white/10 bg-muted/50 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                        >
+                          <span className={cn("h-2 w-2 rounded-full", activeCh.color)} />
+                          <span className="text-foreground">{activeCh.label}</span>
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </button>
+                        {showChannelMenu && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setShowChannelMenu(false)} />
+                            <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                              {channels.filter(c => c.type === "email").map(ch => (
+                                <button
+                                  key={ch.id}
+                                  onClick={() => { setActiveChannel(ch.id); setShowChannelMenu(false) }}
+                                  className={cn("flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs hover:bg-emerald-600/10 transition-colors", activeChannel === ch.id && "text-emerald-400")}
+                                >
+                                  <span className={cn("h-2 w-2 rounded-full", ch.color)} />
+                                  <span className="flex-1 truncate">{ch.label}</span>
+                                </button>
+                              ))}
                             </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        value={emailSearch}
+                        onChange={e => setEmailSearch(e.target.value)}
+                        className="w-56 rounded-lg border bg-background py-1.5 pl-8 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                        placeholder="Search emails..."
+                      />
+                    </div>
+                    <div className="relative">
+                      <button
+                        onClick={() => setEmailFilterOpen(v => !v)}
+                        className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors", emailFilterOpen || emailFilter.direction !== "all" || emailFilter.read !== "all" ? "bg-emerald-600/10 border-emerald-500/30 text-emerald-400" : "hover:bg-accent")}
+                      >
+                        <Filter className="h-3.5 w-3.5" />
+                        Filter
+                        {(emailFilter.direction !== "all" || emailFilter.read !== "all") && (
+                          <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
+                            {(emailFilter.direction !== "all" ? 1 : 0) + (emailFilter.read !== "all" ? 1 : 0)}
+                          </span>
+                        )}
+                      </button>
+                      {emailFilterOpen && (
+                        <div className="absolute right-0 top-full z-40 mt-1 w-56 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl p-3 space-y-3">
+                          <div>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Direction</p>
+                            <div className="flex gap-1">
+                              {(["all", "received", "sent"] as const).map(d => (
+                                <button key={d} onClick={() => setEmailFilter(f => ({ ...f, direction: d }))}
+                                  className={cn("flex-1 rounded-lg py-1 text-[11px] font-medium capitalize border transition-colors", emailFilter.direction === d ? "bg-emerald-600/20 border-emerald-500/40 text-emerald-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}>
+                                  {d === "all" ? "All" : d === "received" ? "Inbox" : "Sent"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Read status</p>
+                            <div className="flex gap-1">
+                              {(["all", "unread", "read"] as const).map(r => (
+                                <button key={r} onClick={() => setEmailFilter(f => ({ ...f, read: r }))}
+                                  className={cn("flex-1 rounded-lg py-1 text-[11px] font-medium capitalize border transition-colors", emailFilter.read === r ? "bg-emerald-600/20 border-emerald-500/40 text-emerald-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}>
+                                  {r === "all" ? "All" : r}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          {(emailFilter.direction !== "all" || emailFilter.read !== "all") && (
+                            <button onClick={() => setEmailFilter({ direction: "all", read: "all" })} className="w-full rounded-lg border border-white/10 py-1.5 text-[11px] text-muted-foreground hover:text-white hover:bg-white/5 transition-colors">
+                              Clear filters
+                            </button>
                           )}
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* ── ACTIVITY ── */}
-            {activeTab === "Activity" && contact && (
-              <div className="mx-auto max-w-2xl">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold">Activity Timeline</h3>
-                  <button className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors">
-                    <Plus className="h-3.5 w-3.5" /> Log Activity
-                  </button>
-                </div>
-                <div className="relative space-y-4 pl-6">
-                  <div className="absolute left-[11px] top-2 bottom-2 w-px bg-border" />
-                  {activities.map(a => (
-                    <div key={a.id} className="relative">
-                      <div className="absolute -left-6 top-0 flex h-5 w-5 items-center justify-center rounded-full border bg-background">
-                        {a.type === "email" && <Mail className="h-2.5 w-2.5 text-emerald-400" />}
-                        {a.type === "call" && <Phone className="h-2.5 w-2.5 text-blue-400" />}
-                        {a.type === "note" && <FileText className="h-2.5 w-2.5 text-amber-400" />}
-                        {a.type === "deal" && <CircleDollarSign className="h-2.5 w-2.5 text-purple-400" />}
-                      </div>
-                      <div className="rounded-lg border bg-card p-3">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-medium">{a.contact}</span>
-                          <span className="text-[10px] text-muted-foreground">{a.time}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{a.text}</p>
-                      </div>
+                      )}
                     </div>
-                  ))}
+                    <button
+                      onClick={() => fetchInbox()}
+                      disabled={inboxLoading}
+                      className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                    >
+                      {inboxLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                      {inboxLoading ? "Fetching..." : "Fetch Emails"}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {/* ── NOTES ── */}
-            {activeTab === "Notes" && contact && (
-              <div className="mx-auto max-w-2xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Notes</h3>
-                  <button className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors">
-                    <Plus className="h-3.5 w-3.5" /> Add Note
-                  </button>
-                </div>
-                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
-                  <FileText className="mb-2 h-6 w-6 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">No notes yet</p>
-                  <p className="text-xs mt-1 text-muted-foreground">Add notes about this contact</p>
-                </div>
-              </div>
-            )}
-
-            {/* ── INBOX ── */}
-            {activeTab === "Inbox" && (
-              <div className="mx-auto max-w-3xl">
-                {activeChannel === "email" ? (
-                  <>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold">Email Inbox</h3>
+                {emailView === "kanban" ? (
+                  /* ── DRAGGABLE KANBAN ── */
+                  <div className="flex flex-1 overflow-x-auto overflow-y-hidden min-h-0" onClick={() => setEmailFilterOpen(false)}>
+                    <div className="flex h-full gap-5 p-6">
+                      {emailKanbanCols.map(col => {
+                        const q = emailSearch.toLowerCase()
+                        const allMsgs = [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")]
+                          .filter((m: any) => !activeCh.id || m.provider === activeCh.id)
+                          .filter((m: any) => !q || (m.subject || "").toLowerCase().includes(q) || (m.from_address || "").toLowerCase().includes(q) || (m.body || "").toLowerCase().includes(q))
+                          .filter((m: any) => emailFilter.direction === "all" || m.direction === emailFilter.direction)
+                          .filter((m: any) => emailFilter.read === "all" || (emailFilter.read === "read" ? m.read : !m.read))
+                        const getColId = (m: any) => emailCardCols[m.id] || (m.direction === "sent" ? "sent" : m.read ? "read" : "unread")
+                        const items = allMsgs.filter(m => getColId(m) === col.id)
+                        return (
+                          <div
+                            key={col.id}
+                            className={cn("group flex w-80 shrink-0 flex-col h-full rounded-xl transition-all", dragOverEmailCol === col.id && "ring-2 ring-emerald-500/40 bg-emerald-500/5")}
+                            onDragOver={e => { e.preventDefault(); setDragOverEmailCol(col.id) }}
+                            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverEmailCol(null) }}
+                            onDrop={e => {
+                              e.preventDefault()
+                              if (dragEmailId.current) setEmailCardCols(prev => ({ ...prev, [dragEmailId.current!]: col.id }))
+                              dragEmailId.current = null; setDragOverEmailCol(null)
+                            }}
+                          >
+                            {/* Column header */}
+                            <div className="mb-3 flex items-center gap-2">
+                              {editingEmailCol === col.id ? (
+                                <input
+                                  autoFocus
+                                  defaultValue={col.label}
+                                  className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold bg-transparent focus:outline-none flex-1", col.color)}
+                                  onBlur={e => { setEmailKanbanCols(prev => prev.map(c => c.id === col.id ? { ...c, label: e.target.value || col.label } : c)); setEditingEmailCol(null) }}
+                                  onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingEmailCol(null) }}
+                                />
+                              ) : (
+                                <span
+                                  title="Click to rename"
+                                  className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer hover:opacity-75 transition-opacity", col.color)}
+                                  onClick={() => setEditingEmailCol(col.id)}
+                                >{col.label}</span>
+                              )}
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">{items.length}</span>
+                              <button
+                                title="Delete column"
+                                onClick={() => emailKanbanCols.length > 1 && setEmailKanbanCols(prev => prev.filter(c => c.id !== col.id))}
+                                className="ml-auto p-1 rounded hover:bg-rose-500/10 hover:text-rose-400 text-muted-foreground transition-colors opacity-0 group-hover:opacity-100"
+                              ><Trash2 className="h-3 w-3" /></button>
+                            </div>
+                            {/* Cards */}
+                            <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1 pb-4">
+                              {items.length === 0 ? (
+                                <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">Drop emails here</p></div>
+                              ) : items.map((msg: any) => (
+                                <div
+                                  key={msg.id}
+                                  draggable
+                                  onDragStart={e => { dragEmailId.current = msg.id; e.dataTransfer.effectAllowed = "move" }}
+                                  className="w-full rounded-xl border bg-card p-4 text-left shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-grab active:cursor-grabbing active:opacity-60 active:scale-95"
+                                >
+                                  <button className="w-full text-left" onClick={async () => {
+                                    setOpenEmail(msg); setReplyBody(""); setSendingReply(false)
+                                    if (!msg.read && user) {
+                                      try {
+                                        await markEmailAsRead(user.id, msg.id)
+                                        setInboxMessages(prev => prev.map(m => m.id === msg.id ? { ...m, read: true } : m))
+                                        setEmailMessages(prev => prev.map(m => m.id === msg.id ? { ...m, read: true } : m))
+                                      } catch { /* ignore */ }
+                                    }
+                                  }}>
+                                    <p className="text-sm font-semibold mb-1 truncate">{msg.subject || "(No subject)"}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{msg.direction === "sent" ? `To: ${msg.to_address}` : msg.from_address}</p>
+                                    <p className="text-xs text-muted-foreground truncate mt-1">{msg.body?.slice(0, 80) || ""}</p>
+                                    <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
+                                      <Mail className="h-3 w-3" />
+                                      <span>{msg.received_at ? new Date(msg.received_at).toLocaleDateString() : msg.sent_at ? new Date(msg.sent_at).toLocaleDateString() : ""}</span>
+                                    </div>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {/* Add column */}
                       <button
-                        onClick={() => fetchInbox()}
-                        disabled={inboxLoading || !emailConnections.some((c: any) => c.status === "connected")}
-                        className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                        onClick={() => {
+                          const newId = `col-${Date.now()}`
+                          const nextColor = COL_COLORS[emailKanbanCols.length % COL_COLORS.length]
+                          setEmailKanbanCols(prev => [...prev, { id: newId, label: "New Column", color: nextColor }])
+                          setTimeout(() => setEditingEmailCol(newId), 50)
+                        }}
+                        className="flex h-10 w-64 shrink-0 items-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground hover:border-emerald-500/50 hover:text-emerald-400 transition-colors px-4 self-start"
                       >
-                        {inboxLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Inbox className="h-3.5 w-3.5" />}
-                        {inboxLoading ? "Fetching..." : "Fetch Emails"}
+                        <Plus className="h-4 w-4" /> Add Column
                       </button>
                     </div>
-
-                    {!emailConnections.some((c: any) => c.status === "connected") ? (
-                      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
-                        <Mail className="mb-2 h-6 w-6 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">No email account connected</p>
-                        <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">
-                          Go to Channels to connect →
-                        </Link>
-                      </div>
-                    ) : inboxMessages.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
-                        <Inbox className="mb-2 h-6 w-6 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">
-                          {inboxFetched ? "No emails found" : "Click Fetch Emails to load your inbox"}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {[...inboxMessages].sort((a: any, b: any) => {
-                          const da = a.received_at ? new Date(a.received_at).getTime() : 0
-                          const db = b.received_at ? new Date(b.received_at).getTime() : 0
-                          return db - da
-                        }).map((msg: any) => (
-                          <button
+                  </div>
+                ) : (
+                  <div className="flex-1 min-h-0 overflow-y-auto p-6">
+                  <div className="mx-auto max-w-5xl">
+                  {fetchError && (
+                    <div className="mb-4 rounded-lg border border-red-500/20 bg-red-600/10 p-3 text-xs text-red-400">
+                      {fetchError}
+                    </div>
+                  )}
+                {!activeCh.connected && inboxMessages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
+                    <Mail className="mb-2 h-6 w-6 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">No email account connected</p>
+                    <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">
+                      Go to Channels to connect →
+                    </Link>
+                  </div>
+                ) : inboxMessages.filter((m: any) => !activeCh.id || m.provider === activeCh.id).length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
+                    <Mail className="mb-2 h-6 w-6 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      {inboxFetched ? "No emails found" : "Click Fetch Emails to load your inbox"}
+                    </p>
+                  </div>
+                ) : emailView === "table" ? (
+                  <div className="rounded-xl border overflow-x-auto" onClick={() => setEmailStatusOpen(null)}>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-8"></th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">From</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Subject</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-32">Status</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-28">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const q = emailSearch.toLowerCase()
+                          return [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")]
+                            .filter((m: any) => !activeCh.id || m.provider === activeCh.id)
+                            .filter((m: any) => !q || (m.subject || "").toLowerCase().includes(q) || (m.from_address || "").toLowerCase().includes(q) || (m.body || "").toLowerCase().includes(q))
+                            .filter((m: any) => emailFilter.direction === "all" || m.direction === emailFilter.direction)
+                            .filter((m: any) => emailFilter.read === "all" || (emailFilter.read === "read" ? m.read : !m.read))
+                        })().sort((a: any, b: any) => {
+                            const da = a.received_at ? new Date(a.received_at).getTime() : a.sent_at ? new Date(a.sent_at).getTime() : 0
+                            const db = b.received_at ? new Date(b.received_at).getTime() : b.sent_at ? new Date(b.sent_at).getTime() : 0
+                            return db - da
+                          }).map((msg: any) => {
+                          const colId = emailCardCols[msg.id] || (msg.direction === "sent" ? "sent" : msg.read ? "read" : "unread")
+                          const col = emailKanbanCols.find(c => c.id === colId) || emailKanbanCols[0]
+                          return (
+                          <tr
                             key={msg.id}
                             onClick={async () => {
                               setOpenEmail(msg); setReplyBody(""); setSendingReply(false)
@@ -918,182 +1393,564 @@ export default function CRMPage() {
                                 } catch { /* ignore */ }
                               }
                             }}
-                            className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-emerald-500/30", !msg.read && "border-l-2 border-l-emerald-500")}
+                            className={cn("border-b last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors", !msg.read && msg.direction !== "sent" && "bg-emerald-500/5")}
                           >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-medium truncate max-w-[60%]">{msg.from_address}</span>
-                              <span className="text-[10px] text-muted-foreground">
-                                {msg.received_at ? new Date(msg.received_at).toLocaleDateString() : ""}
-                              </span>
-                            </div>
-                            <p className="text-sm font-medium truncate">{msg.subject || "(No subject)"}</p>
-                            <p className="text-xs text-muted-foreground truncate mt-0.5">{msg.body?.slice(0, 120) || ""}...</p>
-                          </button>
-                        ))}
-                        {nextPageToken && (
-                          <div className="flex justify-center pt-2">
-                            <button
-                              onClick={() => fetchInbox(nextPageToken)}
-                              disabled={loadingMore}
-                              className="flex items-center gap-1.5 rounded-lg border px-4 py-2 text-xs font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-40"
-                            >
-                              {loadingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Inbox className="h-3.5 w-3.5" />}
-                              {loadingMore ? "Loading..." : "Load More"}
-                            </button>
-                          </div>
-                        )}
+                            <td className="px-4 py-2.5">
+                              {!msg.read && msg.direction !== "sent" && <span className="block h-2 w-2 rounded-full bg-emerald-500" />}
+                            </td>
+                            <td className="px-4 py-2.5 font-medium truncate max-w-[180px]">{msg.direction === "sent" ? `To: ${msg.to_address}` : msg.from_address}</td>
+                            <td className="px-4 py-2.5 truncate max-w-[360px]">
+                              <span className={cn(!msg.read && msg.direction !== "sent" && "font-semibold")}>{msg.subject || "(No subject)"}</span>
+                              <span className="text-muted-foreground ml-2 font-normal">{msg.body?.slice(0, 60) || ""}</span>
+                            </td>
+                            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                              <div className="relative">
+                                <button
+                                  onClick={e => { e.stopPropagation(); setEmailStatusOpen(emailStatusOpen === msg.id ? null : msg.id) }}
+                                  className={cn("w-full rounded-lg px-3 py-1.5 text-[11px] font-semibold flex items-center justify-between gap-1.5 border transition-all hover:brightness-110", col?.color)}
+                                >
+                                  <span>{col?.label}</span>
+                                  <ChevronDown className={cn("h-3 w-3 transition-transform", emailStatusOpen === msg.id && "rotate-180")} />
+                                </button>
+                                {emailStatusOpen === msg.id && (
+                                  <div className="absolute left-0 top-full z-30 mt-1 w-full min-w-[160px] rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                                    <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Move to / Rename</p>
+                                    {emailKanbanCols.map(c => (
+                                      <div key={c.id} className={cn("flex items-center gap-1 px-2 py-1 hover:bg-white/5 transition-colors", c.id === colId && "bg-white/5")}>
+                                        {editingEmailLabel === c.id ? (
+                                          <input autoFocus defaultValue={c.label}
+                                            className={cn("flex-1 rounded-md border px-2 py-1 text-xs bg-transparent focus:outline-none", c.color)}
+                                            onClick={e => e.stopPropagation()}
+                                            onBlur={e => { const v = e.target.value.trim(); if (v) setEmailKanbanCols(prev => prev.map(col => col.id === c.id ? { ...col, label: v } : col)); setEditingEmailLabel(null) }}
+                                            onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingEmailLabel(null) }}
+                                          />
+                                        ) : (
+                                          <button onClick={e => { e.stopPropagation(); setEmailCardCols(prev => ({ ...prev, [msg.id]: c.id })); setEmailStatusOpen(null) }}
+                                            className="flex flex-1 items-center gap-2 py-1 text-left text-xs">
+                                            <span className="flex-1">{c.label}</span>
+                                            {c.id === colId && <Check className="h-3 w-3 text-emerald-400 shrink-0" />}
+                                          </button>
+                                        )}
+                                        {editingEmailLabel !== c.id && (
+                                          <button onClick={e => { e.stopPropagation(); setEditingEmailLabel(c.id) }}
+                                            className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-white transition-colors shrink-0">
+                                            <Pencil className="h-3 w-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                              {msg.received_at ? new Date(msg.received_at).toLocaleDateString() : msg.sent_at ? new Date(msg.sent_at).toLocaleDateString() : ""}
+                            </td>
+                          </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                    {nextPageToken && (
+                      <div className="flex justify-center p-3 border-t">
+                        <button onClick={() => fetchInbox(nextPageToken)} disabled={loadingMore} className="flex items-center gap-1.5 rounded-lg border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-40">
+                          {loadingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                          {loadingMore ? "Loading..." : "Load More"}
+                        </button>
                       </div>
                     )}
-                  </>
-                ) : activeChannel === "whatsapp" ? (
-                  /* WhatsApp messages */
-                  <>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold">WhatsApp Messages</h3>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {[...inboxMessages].filter((m: any) => !activeCh.id || m.provider === activeCh.id).sort((a: any, b: any) => {
+                      const da = a.received_at ? new Date(a.received_at).getTime() : 0
+                      const db = b.received_at ? new Date(b.received_at).getTime() : 0
+                      return db - da
+                    }).map((msg: any) => (
                       <button
+                        key={msg.id}
                         onClick={async () => {
-                          if (!user) return
-                          setWhatsAppLoading(true)
-                          try {
-                            const msgs = await getWhatsAppMessages(user.id)
-                            setWhatsAppMessages(msgs)
-                            setWhatsAppFetched(true)
-                          } catch (e) { console.error(e) }
-                          finally { setWhatsAppLoading(false) }
+                          setOpenEmail(msg); setReplyBody(""); setSendingReply(false)
+                          if (!msg.read && user) {
+                            try {
+                              await markEmailAsRead(user.id, msg.id)
+                              setInboxMessages(prev => prev.map(m => m.id === msg.id ? { ...m, read: true } : m))
+                              setEmailMessages(prev => prev.map(m => m.id === msg.id ? { ...m, read: true } : m))
+                            } catch { /* ignore */ }
+                          }
                         }}
-                        disabled={whatsappLoading || whatsappConnections.length === 0}
-                        className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                        className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-emerald-500/30", !msg.read && "border-l-2 border-l-emerald-500")}
                       >
-                        {whatsappLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Inbox className="h-3.5 w-3.5" />}
-                        {whatsappLoading ? "Refreshing..." : "Refresh"}
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium truncate max-w-[60%]">{msg.from_address}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {msg.received_at ? new Date(msg.received_at).toLocaleDateString() : ""}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium truncate">{msg.subject || "(No subject)"}</p>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{msg.body?.slice(0, 120) || ""}...</p>
+                      </button>
+                    ))}
+                    {nextPageToken && (
+                      <div className="flex justify-center pt-2">
+                        <button
+                          onClick={() => fetchInbox(nextPageToken)}
+                          disabled={loadingMore}
+                          className="flex items-center gap-1.5 rounded-lg border px-4 py-2 text-xs font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-40"
+                        >
+                          {loadingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                          {loadingMore ? "Loading..." : "Load More"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                </div>
+                </div>
+                )}
+              </div>
+            )}
+
+            {/* ── MESSAGES ── */}
+            {activeTab === "Messages" && (
+              <div className="flex flex-1 flex-col min-h-0">
+                {/* Messages Toolbar */}
+                <div className="flex items-center justify-between px-6 py-4 border-b bg-card/50">
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-lg font-bold">Messages</h1>
+                    <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+                      <button onClick={() => setMessagesView("kanban")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", messagesView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Kanban</button>
+                      <button onClick={() => setMessagesView("table")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", messagesView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Table</button>
+                    </div>
+                    {channels.filter(c => c.type === "whatsapp").map(ch => (
+                      <span key={ch.id} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-muted/50 px-3 py-1.5 text-xs font-medium">
+                        <span className={cn("h-2 w-2 rounded-full", ch.color)} />
+                        {ch.label}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3">
+                  <button
+                    onClick={async () => {
+                      if (!user) return
+                      setWhatsAppLoading(true)
+                      try {
+                        const msgs = await getWhatsAppMessages(user.id)
+                        setWhatsAppMessages(msgs)
+                        setWhatsAppFetched(true)
+                      } catch (e) { console.error(e) }
+                      finally { setWhatsAppLoading(false) }
+                    }}
+                    disabled={whatsappLoading || whatsappConnections.length === 0}
+                    className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                  >
+                    {whatsappLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />}
+                    {whatsappLoading ? "Refreshing..." : "Refresh"}
+                  </button>
+                  </div>
+                </div>
+                {messagesView === "kanban" ? (
+                  <div className="flex flex-1 overflow-x-auto overflow-y-hidden min-h-0">
+                    <div className="flex h-full gap-5 p-6">
+                      {msgKanbanCols.map(col => {
+                        const getColId = (m: any) => msgCardCols[m.id] || (m.direction === "sent" ? "sent" : m.read ? "read" : "unread")
+                        const items = whatsappMessages.filter(m => getColId(m) === col.id)
+                        return (
+                          <div
+                            key={col.id}
+                            className={cn("group flex w-72 shrink-0 flex-col h-full rounded-xl transition-all", dragOverMsgCol === col.id && "ring-2 ring-emerald-500/40 bg-emerald-500/5")}
+                            onDragOver={e => { e.preventDefault(); setDragOverMsgCol(col.id) }}
+                            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverMsgCol(null) }}
+                            onDrop={e => { e.preventDefault(); if (dragMsgId.current) setMsgCardCols(prev => ({ ...prev, [dragMsgId.current!]: col.id })); dragMsgId.current = null; setDragOverMsgCol(null) }}
+                          >
+                            <div className="mb-3 flex items-center gap-2">
+                              {editingMsgCol === col.id ? (
+                                <input autoFocus defaultValue={col.label}
+                                  className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold bg-transparent focus:outline-none flex-1", col.color)}
+                                  onBlur={e => { setMsgKanbanCols(prev => prev.map(c => c.id === col.id ? { ...c, label: e.target.value || col.label } : c)); setEditingMsgCol(null) }}
+                                  onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingMsgCol(null) }}
+                                />
+                              ) : (
+                                <span title="Click to rename" className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer hover:opacity-75", col.color)} onClick={() => setEditingMsgCol(col.id)}>{col.label}</span>
+                              )}
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">{items.length}</span>
+                              <button title="Delete column" onClick={() => msgKanbanCols.length > 1 && setMsgKanbanCols(prev => prev.filter(c => c.id !== col.id))}
+                                className="ml-auto p-1 rounded hover:bg-rose-500/10 hover:text-rose-400 text-muted-foreground transition-colors opacity-0 group-hover:opacity-100"><Trash2 className="h-3 w-3" /></button>
+                            </div>
+                            <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1 pb-4">
+                              {items.length === 0 ? (
+                                <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">Drop messages here</p></div>
+                              ) : items.map((msg: any) => (
+                                <div key={msg.id} draggable
+                                  onDragStart={e => { dragMsgId.current = msg.id; e.dataTransfer.effectAllowed = "move" }}
+                                  onClick={() => { setWaReplyTo(msg.from_number); setWaReplyBody(""); setSendingWaReply(false) }}
+                                  className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-grab active:cursor-grabbing active:opacity-60 active:scale-95"
+                                >
+                                  <p className="text-sm font-semibold mb-1 truncate">{msg.direction === "sent" ? `To: ${msg.to_number}` : msg.from_number}</p>
+                                  <p className="text-xs text-muted-foreground truncate mt-1">{msg.body || ""}</p>
+                                  <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground"><Phone className="h-3 w-3" /><span>{msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}</span></div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <button onClick={() => { const id = `col-${Date.now()}`; setMsgKanbanCols(prev => [...prev, { id, label: "New Column", color: COL_COLORS[msgKanbanCols.length % COL_COLORS.length] }]); setTimeout(() => setEditingMsgCol(id), 50) }}
+                        className="flex h-10 w-64 shrink-0 items-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground hover:border-emerald-500/50 hover:text-emerald-400 transition-colors px-4 self-start">
+                        <Plus className="h-4 w-4" /> Add Column
                       </button>
                     </div>
-
-                    {whatsappConnections.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
-                        <Phone className="mb-2 h-6 w-6 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">No WhatsApp account connected</p>
-                        <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">
-                          Go to Channels to connect →
-                        </Link>
-                      </div>
-                    ) : whatsappMessages.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
-                        <Phone className="mb-2 h-6 w-6 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">
-                          {whatsappFetched ? "No messages yet" : "Click Refresh to load messages"}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
+                  </div>
+                ) : (
+                  <div className="flex-1 min-h-0 overflow-y-auto p-6">
+                  <div className="mx-auto max-w-5xl">
+                {whatsappConnections.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
+                    <Phone className="mb-2 h-6 w-6 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">No WhatsApp account connected</p>
+                    <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">Go to Channels to connect →</Link>
+                  </div>
+                ) : whatsappMessages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
+                    <Phone className="mb-2 h-6 w-6 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">{whatsappFetched ? "No messages yet" : "Click Refresh to load messages"}</p>
+                  </div>
+                ) : messagesView === "table" ? (
+                  <div className="rounded-xl border overflow-x-auto" onClick={() => setMsgStatusOpen(null)}>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">From / To</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Message</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-32">Status</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-28">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
                         {[...whatsappMessages].sort((a: any, b: any) => {
                           const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
                           const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
                           return tb - ta
-                        }).map((msg: any) => (
-                          <div
+                        }).map((msg: any) => {
+                          const colId = msgCardCols[msg.id] || (msg.direction === "sent" ? "sent" : msg.read ? "read" : "unread")
+                          const col = msgKanbanCols.find(c => c.id === colId) || msgKanbanCols[0]
+                          return (
+                          <tr
                             key={msg.id}
                             onClick={() => { setWaReplyTo(msg.from_number); setWaReplyBody(""); setSendingWaReply(false) }}
-                            className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-emerald-500/30 cursor-pointer", msg.direction === "received" && !msg.read && "border-l-2 border-l-emerald-500")}
+                            className={cn("border-b last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors", msg.direction === "received" && !msg.read && "bg-emerald-500/5")}
                           >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-medium truncate max-w-[60%]">
-                                {msg.direction === "received" ? msg.from_number : `To: ${msg.to_number}`}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">
-                                {msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}
-                              </span>
-                            </div>
-                            <p className="text-sm truncate">{msg.body || ""}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* WhatsApp Reply */}
-                    {waReplyTo && (
-                      <div className="mt-4 rounded-lg border bg-card p-3">
-                        <p className="text-xs text-muted-foreground mb-2">Reply to {waReplyTo}</p>
-                        <textarea
-                          value={waReplyBody}
-                          onChange={e => setWaReplyBody(e.target.value)}
-                          placeholder="Type your message..."
-                          className="w-full rounded-lg border bg-transparent p-2 text-sm resize-none focus:outline-none focus:border-emerald-500/50"
-                          rows={3}
-                        />
-                        <div className="flex justify-end mt-2">
-                          <button
-                            onClick={async () => {
-                              if (!user || !waReplyBody.trim() || !waReplyTo) return
-                              setSendingWaReply(true)
-                              try {
-                                const res = await fetch("/api/whatsapp/send", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ userId: user.id, to: waReplyTo, body: waReplyBody }),
-                                })
-                                const data = await res.json()
-                                if (!res.ok) throw new Error(data.error || "Failed to send")
-                                const msgs = await getWhatsAppMessages(user.id)
-                                setWhatsAppMessages(msgs)
-                                setWaReplyTo(null)
-                                setWaReplyBody("")
-                              } catch (e: any) {
-                                alert(e?.message || "Failed to send WhatsApp message")
-                              } finally {
-                                setSendingWaReply(false)
-                              }
-                            }}
-                            disabled={sendingWaReply || !waReplyBody.trim()}
-                            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
-                          >
-                            {sendingWaReply ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                            {sendingWaReply ? "Sending..." : "Send"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  /* SMS / Call — Coming soon */
-                  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
-                    <span className={cn("mb-2 h-6 w-6 rounded-full", activeCh.color)} />
-                    <p className="text-sm font-semibold">{activeCh.label}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
+                            <td className="px-4 py-2.5 font-medium">{msg.direction === "received" ? msg.from_number : `To: ${msg.to_number}`}</td>
+                            <td className="px-4 py-2.5 truncate max-w-[360px] text-muted-foreground">{msg.body || ""}</td>
+                            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                              <div className="relative">
+                                <button
+                                  onClick={e => { e.stopPropagation(); setMsgStatusOpen(msgStatusOpen === msg.id ? null : msg.id) }}
+                                  className={cn("w-full rounded-lg px-3 py-1.5 text-[11px] font-semibold flex items-center justify-between gap-1.5 border transition-all hover:brightness-110", col?.color)}
+                                >
+                                  <span>{col?.label}</span>
+                                  <ChevronDown className={cn("h-3 w-3 transition-transform", msgStatusOpen === msg.id && "rotate-180")} />
+                                </button>
+                                {msgStatusOpen === msg.id && (
+                                  <div className="absolute left-0 top-full z-30 mt-1 w-full min-w-[160px] rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                                    <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Move to / Rename</p>
+                                    {msgKanbanCols.map(c => (
+                                      <div key={c.id} className={cn("flex items-center gap-1 px-2 py-1 hover:bg-white/5 transition-colors", c.id === colId && "bg-white/5")}>
+                                        {editingMsgLabel === c.id ? (
+                                          <input autoFocus defaultValue={c.label}
+                                            className={cn("flex-1 rounded-md border px-2 py-1 text-xs bg-transparent focus:outline-none", c.color)}
+                                            onClick={e => e.stopPropagation()}
+                                            onBlur={e => { const v = e.target.value.trim(); if (v) setMsgKanbanCols(prev => prev.map(col => col.id === c.id ? { ...col, label: v } : col)); setEditingMsgLabel(null) }}
+                                            onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingMsgLabel(null) }}
+                                          />
+                                        ) : (
+                                          <button onClick={e => { e.stopPropagation(); setMsgCardCols(prev => ({ ...prev, [msg.id]: c.id })); setMsgStatusOpen(null) }}
+                                            className="flex flex-1 items-center gap-2 py-1 text-left text-xs">
+                                            <span className="flex-1">{c.label}</span>
+                                            {c.id === colId && <Check className="h-3 w-3 text-emerald-400 shrink-0" />}
+                                          </button>
+                                        )}
+                                        {editingMsgLabel !== c.id && (
+                                          <button onClick={e => { e.stopPropagation(); setEditingMsgLabel(c.id) }}
+                                            className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-white transition-colors shrink-0">
+                                            <Pencil className="h-3 w-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}</td>
+                          </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
+                ) : (
+                  <div className="space-y-2">
+                    {[...whatsappMessages].sort((a: any, b: any) => {
+                      const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
+                      const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
+                      return tb - ta
+                    }).map((msg: any) => (
+                      <div
+                        key={msg.id}
+                        onClick={() => { setWaReplyTo(msg.from_number); setWaReplyBody(""); setSendingWaReply(false) }}
+                        className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-emerald-500/30 cursor-pointer", msg.direction === "received" && !msg.read && "border-l-2 border-l-emerald-500")}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium truncate max-w-[60%]">
+                            {msg.direction === "received" ? msg.from_number : `To: ${msg.to_number}`}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}
+                          </span>
+                        </div>
+                        <p className="text-sm truncate">{msg.body || ""}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* WhatsApp Reply */}
+                {waReplyTo && (
+                  <div className="mt-4 rounded-lg border bg-card p-3">
+                    <p className="text-xs text-muted-foreground mb-2">Reply to {waReplyTo}</p>
+                    <textarea
+                      value={waReplyBody}
+                      onChange={e => setWaReplyBody(e.target.value)}
+                      placeholder="Type your message..."
+                      className="w-full rounded-lg border bg-transparent p-2 text-sm resize-none focus:outline-none focus:border-emerald-500/50"
+                      rows={3}
+                    />
+                    <div className="flex justify-end mt-2">
+                      <button
+                        onClick={async () => {
+                          if (!user || !waReplyBody.trim() || !waReplyTo) return
+                          setSendingWaReply(true)
+                          try {
+                            const res = await fetch("/api/whatsapp/send", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ userId: user.id, to: waReplyTo, body: waReplyBody }),
+                            })
+                            const data = await res.json()
+                            if (!res.ok) throw new Error(data.error || "Failed to send")
+                            const msgs = await getWhatsAppMessages(user.id)
+                            setWhatsAppMessages(msgs)
+                            setWaReplyTo(null)
+                            setWaReplyBody("")
+                          } catch (e: any) {
+                            alert(e?.message || "Failed to send WhatsApp message")
+                          } finally {
+                            setSendingWaReply(false)
+                          }
+                        }}
+                        disabled={sendingWaReply || !waReplyBody.trim()}
+                        className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                      >
+                        {sendingWaReply ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                        {sendingWaReply ? "Sending..." : "Send"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                </div>
+                </div>
                 )}
               </div>
             )}
 
             {/* ── CALENDAR ── */}
             {activeTab === "Calendar" && (
-              <div className="mx-auto max-w-3xl">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold">Upcoming Events</h3>
-                  <button
-                    onClick={fetchCalendar}
-                    disabled={calendarLoading || calendarConnections.length === 0}
-                    className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
-                  >
-                    {calendarLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ClipboardList className="h-3.5 w-3.5" />}
-                    {calendarLoading ? "Syncing..." : "Sync Calendar"}
-                  </button>
+              <div className="flex flex-1 flex-col min-h-0">
+                {/* Calendar Toolbar */}
+                <div className="flex items-center justify-between px-6 py-4 border-b bg-card/50">
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-lg font-bold">Calendar</h1>
+                    <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+                      <button onClick={() => setCalendarView("kanban")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", calendarView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Kanban</button>
+                      <button onClick={() => setCalendarView("table")} className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", calendarView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Table</button>
+                    </div>
+                    {channels.filter(c => c.type === "calendar").map(ch => (
+                      <span key={ch.id} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-muted/50 px-3 py-1.5 text-xs font-medium">
+                        <span className={cn("h-2 w-2 rounded-full", ch.color)} />
+                        {ch.label}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors">
+                      <Filter className="h-3.5 w-3.5" /> Filter
+                    </button>
+                    <button
+                      onClick={fetchCalendar}
+                      disabled={calendarLoading || calendarConnections.length === 0}
+                      className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                    >
+                      {calendarLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ClipboardList className="h-3.5 w-3.5" />}
+                      {calendarLoading ? "Syncing..." : "Sync Calendar"}
+                    </button>
+                  </div>
                 </div>
-
+                {calendarView === "kanban" ? (
+                  <div className="flex flex-1 overflow-x-auto overflow-y-hidden min-h-0">
+                    <div className="flex h-full gap-5 p-6">
+                      {calKanbanCols.map(col => {
+                        const now = new Date(); const todayEnd = new Date(now); todayEnd.setHours(23,59,59,999)
+                        const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7)
+                        const naturalCol = (ev: any) => {
+                          if (!ev.start_time) return "upcoming"
+                          const t = new Date(ev.start_time)
+                          if (t >= now && t <= todayEnd) return "today"
+                          if (t > todayEnd && t <= weekEnd) return "week"
+                          return "upcoming"
+                        }
+                        const getColId = (ev: any) => calCardCols[ev.id] || naturalCol(ev)
+                        const items = calendarEvents.filter(ev => getColId(ev) === col.id)
+                        return (
+                          <div key={col.id}
+                            className={cn("group flex w-80 shrink-0 flex-col h-full rounded-xl transition-all", dragOverCalCol === col.id && "ring-2 ring-emerald-500/40 bg-emerald-500/5")}
+                            onDragOver={e => { e.preventDefault(); setDragOverCalCol(col.id) }}
+                            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverCalCol(null) }}
+                            onDrop={e => { e.preventDefault(); if (dragCalId.current) setCalCardCols(prev => ({ ...prev, [dragCalId.current!]: col.id })); dragCalId.current = null; setDragOverCalCol(null) }}
+                          >
+                            <div className="mb-3 flex items-center gap-2">
+                              {editingCalCol === col.id ? (
+                                <input autoFocus defaultValue={col.label}
+                                  className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold bg-transparent focus:outline-none flex-1", col.color)}
+                                  onBlur={e => { setCalKanbanCols(prev => prev.map(c => c.id === col.id ? { ...c, label: e.target.value || col.label } : c)); setEditingCalCol(null) }}
+                                  onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingCalCol(null) }}
+                                />
+                              ) : (
+                                <span title="Click to rename" className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer hover:opacity-75", col.color)} onClick={() => setEditingCalCol(col.id)}>{col.label}</span>
+                              )}
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">{items.length}</span>
+                              <button title="Delete column" onClick={() => calKanbanCols.length > 1 && setCalKanbanCols(prev => prev.filter(c => c.id !== col.id))}
+                                className="ml-auto p-1 rounded hover:bg-rose-500/10 hover:text-rose-400 text-muted-foreground transition-colors opacity-0 group-hover:opacity-100"><Trash2 className="h-3 w-3" /></button>
+                            </div>
+                            <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1 pb-4">
+                              {items.length === 0 ? (
+                                <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">Drop events here</p></div>
+                              ) : items.map((ev: any) => (
+                                <div key={ev.id} draggable
+                                  onDragStart={e => { dragCalId.current = ev.id; e.dataTransfer.effectAllowed = "move" }}
+                                  className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-grab active:cursor-grabbing active:opacity-60 active:scale-95"
+                                >
+                                  <a href={ev.event_link || "#"} target="_blank" rel="noopener noreferrer" className="block">
+                                    <p className="text-sm font-semibold mb-1 truncate">{ev.summary}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {ev.start_time ? new Date(ev.start_time).toLocaleDateString() : ""} {ev.start_time ? new Date(ev.start_time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
+                                      {ev.location && ` · ${ev.location}`}
+                                    </p>
+                                    {ev.attendees?.length > 0 && <p className="text-[10px] text-muted-foreground mt-1 truncate">{ev.attendees.slice(0,2).map((a: any) => a.email || a.displayName).join(", ")}{ev.attendees.length > 2 && ` +${ev.attendees.length - 2}`}</p>}
+                                    {ev.is_online && <span className="mt-2 inline-block rounded-full bg-emerald-600/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">Online</span>}
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <button onClick={() => { const id = `col-${Date.now()}`; setCalKanbanCols(prev => [...prev, { id, label: "New Column", color: COL_COLORS[calKanbanCols.length % COL_COLORS.length] }]); setTimeout(() => setEditingCalCol(id), 50) }}
+                        className="flex h-10 w-64 shrink-0 items-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground hover:border-emerald-500/50 hover:text-emerald-400 transition-colors px-4 self-start">
+                        <Plus className="h-4 w-4" /> Add Column
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 min-h-0 overflow-y-auto p-6">
+                  <div className="mx-auto max-w-5xl">
                 {calendarConnections.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <ClipboardList className="mb-2 h-6 w-6 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">No calendar connected</p>
-                    <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">
-                      Go to Channels to connect →
-                    </Link>
+                    <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">Go to Channels to connect →</Link>
                   </div>
                 ) : calendarEvents.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <ClipboardList className="mb-2 h-6 w-6 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      {calendarFetched ? "No upcoming events" : "Click Sync Calendar to load events"}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{calendarFetched ? "No upcoming events" : "Click Sync Calendar to load events"}</p>
+                  </div>
+                ) : calendarView === "table" ? (
+                  <div className="rounded-xl border overflow-x-auto" onClick={() => setCalStatusOpen(null)}>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Event</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Date &amp; Time</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Location</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-32">Status</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-20">Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {calendarEvents.map((ev: any) => {
+                          const now = new Date(); const todayEnd = new Date(now); todayEnd.setHours(23,59,59,999)
+                          const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7)
+                          const natural = (e: any) => { if (!e.start_time) return "upcoming"; const t = new Date(e.start_time); if (t >= now && t <= todayEnd) return "today"; if (t > todayEnd && t <= weekEnd) return "week"; return "upcoming" }
+                          const colId = calCardCols[ev.id] || natural(ev)
+                          const col = calKanbanCols.find(c => c.id === colId) || calKanbanCols[0]
+                          return (
+                          <tr key={ev.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-2.5 font-medium truncate max-w-[200px]">
+                              <a href={ev.event_link || "#"} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors">{ev.summary}</a>
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                              {ev.start_time ? new Date(ev.start_time).toLocaleDateString() : ""} {ev.start_time ? new Date(ev.start_time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground truncate max-w-[140px]">{ev.location || "—"}</td>
+                            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                              <div className="relative">
+                                <button
+                                  onClick={e => { e.stopPropagation(); setCalStatusOpen(calStatusOpen === ev.id ? null : ev.id) }}
+                                  className={cn("w-full rounded-lg px-3 py-1.5 text-[11px] font-semibold flex items-center justify-between gap-1.5 border transition-all hover:brightness-110", col?.color)}
+                                >
+                                  <span>{col?.label}</span>
+                                  <ChevronDown className={cn("h-3 w-3 transition-transform", calStatusOpen === ev.id && "rotate-180")} />
+                                </button>
+                                {calStatusOpen === ev.id && (
+                                  <div className="absolute left-0 top-full z-30 mt-1 w-full min-w-[160px] rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                                    <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Move to / Rename</p>
+                                    {calKanbanCols.map(c => (
+                                      <div key={c.id} className={cn("flex items-center gap-1 px-2 py-1 hover:bg-white/5 transition-colors", c.id === colId && "bg-white/5")}>
+                                        {editingCalLabel === c.id ? (
+                                          <input autoFocus defaultValue={c.label}
+                                            className={cn("flex-1 rounded-md border px-2 py-1 text-xs bg-transparent focus:outline-none", c.color)}
+                                            onClick={e => e.stopPropagation()}
+                                            onBlur={e => { const v = e.target.value.trim(); if (v) setCalKanbanCols(prev => prev.map(col => col.id === c.id ? { ...col, label: v } : col)); setEditingCalLabel(null) }}
+                                            onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingCalLabel(null) }}
+                                          />
+                                        ) : (
+                                          <button onClick={e => { e.stopPropagation(); setCalCardCols(prev => ({ ...prev, [ev.id]: c.id })); setCalStatusOpen(null) }}
+                                            className="flex flex-1 items-center gap-2 py-1 text-left text-xs">
+                                            <span className="flex-1">{c.label}</span>
+                                            {c.id === colId && <Check className="h-3 w-3 text-emerald-400 shrink-0" />}
+                                          </button>
+                                        )}
+                                        {editingCalLabel !== c.id && (
+                                          <button onClick={e => { e.stopPropagation(); setEditingCalLabel(c.id) }}
+                                            className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-white transition-colors shrink-0">
+                                            <Pencil className="h-3 w-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {ev.is_online ? <span className="rounded-full bg-emerald-600/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">Online</span> : <span className="text-muted-foreground">In-person</span>}
+                            </td>
+                          </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1133,6 +1990,9 @@ export default function CRMPage() {
                     ))}
                   </div>
                 )}
+                </div>
+                </div>
+                )}
               </div>
             )}
 
@@ -1159,7 +2019,7 @@ export default function CRMPage() {
                     </button>
                   </div>
 
-                  {activeChannel === "email" ? (
+                  {activeCh.type === "email" ? (
                     /* Email composer */
                     <div className="space-y-2">
                       <input
@@ -1267,7 +2127,8 @@ export default function CRMPage() {
                 <button
                   onClick={async () => {
                     if (!user || !replyBody.trim()) return
-                    const conn = emailConnections.find((c: any) => c.status === "connected")
+                    const providerId = openEmail?.provider || activeChannel
+                    const conn = emailConnections.find((c: any) => c.provider === providerId && c.status === "connected")
                     if (!conn) return
                     setSendingReply(true)
                     try {
@@ -1276,7 +2137,7 @@ export default function CRMPage() {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                           userId: user.id,
-                          providerId: conn.provider,
+                          providerId,
                           to: openEmail.from_address,
                           subject: `Re: ${openEmail.subject || ""}`,
                           body: replyBody,

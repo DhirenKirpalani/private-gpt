@@ -73,6 +73,16 @@ export async function POST(req: NextRequest) {
       }).join("\n\n")
     }
 
+    // Fetch recent WhatsApp messages (last 10)
+    const { data: waMsgs, error: waErr } = await supabase
+      .from("whatsapp_messages")
+      .select("from_number, to_number, body, direction, timestamp, created_at")
+      .eq("user_id", userId)
+      .order("timestamp", { ascending: false })
+      .limit(10)
+
+    if (waErr) console.error("[AI CONTEXT] WhatsApp fetch error:", waErr.message)
+
     // Format calendar context
     let calendarContext = ""
     if (events && events.length > 0) {
@@ -84,11 +94,24 @@ export async function POST(req: NextRequest) {
       }).join("\n\n")
     }
 
+    // Format WhatsApp context
+    let whatsappContext = ""
+    if (waMsgs && waMsgs.length > 0) {
+      whatsappContext = waMsgs.map((m, i) => {
+        const date = m.timestamp ? new Date(m.timestamp).toLocaleString() : ""
+        const dir = m.direction === "sent" ? "→" : "←"
+        const number = m.direction === "sent" ? (m.to_number || "") : (m.from_number || "")
+        return `${i + 1}. ${dir} ${number}\n   Time: ${date}\n   Message: ${m.body || ""}`
+      }).join("\n\n")
+    }
+
     return NextResponse.json({
       emails: emails || [],
       events: events || [],
+      waMessages: waMsgs || [],
       emailContext,
       calendarContext,
+      whatsappContext,
     })
   } catch (err: any) {
     console.error("[AI CONTEXT] Error:", err)

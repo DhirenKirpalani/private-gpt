@@ -810,6 +810,100 @@ export async function deleteWhatsAppConnection(userId: string, connectionId: str
   if (error) throw error
 }
 
+// ─── Realtime Subscriptions ───
+export function subscribeToEmailMessages(
+  userId: string,
+  callback: (payload: { eventType: string; new: any; old: any }) => void
+) {
+  const channel = supabase
+    .channel("email_messages")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "email_messages",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: any) => callback(payload)
+    )
+    .subscribe()
+
+  return channel
+}
+
+export function subscribeToCalendarEvents(
+  userId: string,
+  callback: (payload: { eventType: string; new: any; old: any }) => void
+) {
+  const channel = supabase
+    .channel("calendar_events")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "calendar_events",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: any) => callback(payload)
+    )
+    .subscribe()
+
+  return channel
+}
+
+export function subscribeToContacts(
+  userId: string,
+  callback: (payload: { eventType: string; new: any; old: any }) => void
+) {
+  const channel = supabase
+    .channel("contacts")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "contacts",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: any) => callback(payload)
+    )
+    .subscribe()
+
+  return channel
+}
+
+export function unsubscribeChannel(channel: ReturnType<typeof subscribeToEmailMessages>) {
+  supabase.removeChannel(channel)
+}
+
+// ─── CRM Kanban column persistence ───────────────────────────────────────────
+
+export async function getKanbanCols(userId: string, board: "email" | "messages" | "calendar") {
+  const { data, error } = await supabase
+    .from("crm_kanban_cols")
+    .select("col_id, label, color, position")
+    .eq("user_id", userId)
+    .eq("board", board)
+    .order("position")
+  if (error) throw error
+  return (data || []).map((r: any) => ({ id: r.col_id, label: r.label, color: r.color }))
+}
+
+export async function upsertKanbanCols(
+  userId: string,
+  board: "email" | "messages" | "calendar",
+  cols: { id: string; label: string; color: string }[]
+) {
+  await supabase.from("crm_kanban_cols").delete().eq("user_id", userId).eq("board", board)
+  if (cols.length === 0) return
+  const { error } = await supabase.from("crm_kanban_cols").insert(
+    cols.map((c, i) => ({ user_id: userId, board, col_id: c.id, label: c.label, color: c.color, position: i }))
+  )
+  if (error) throw error
+}
+
 // Support screenshots
 export async function uploadSupportScreenshot(userId: string, file: File) {
   const filePath = `${userId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`

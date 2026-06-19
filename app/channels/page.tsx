@@ -24,16 +24,19 @@ const EMAIL_PROVIDERS: EmailProvider[] = [
   { id: "godaddy", name: "GoDaddy Email", icon: <Mail className="h-6 w-6" style={{ color: "#1BDBDB" }} />, defaults: { smtp_host: "smtpout.secureserver.net", smtp_port: 465, imap_host: "imap.secureserver.net", imap_port: 993, smtp_secure: true }, note: "Use your GoDaddy Workspace Email address and password.", descKey: "channelDescGodaddy" },
 ]
 
-const OTHER_CHANNELS = [
-  { id: "whatsapp", name: "WhatsApp Business", icon: <FaWhatsapp className="h-6 w-6" style={{ color: "#25D366" }} />, descKey: "channelDescWhatsapp" },
-  { id: "googlecalendar", name: "Google Calendar", icon: <SiGooglecalendar className="h-6 w-6" style={{ color: "#4285F4" }} />, descKey: "channelDescGoogleCalendar" },
-  { id: "telegram", name: "Telegram", icon: <FaTelegram className="h-6 w-6" style={{ color: "#26A5E4" }} />, descKey: "channelDescTelegram" },
-  { id: "webchat", name: "Website Chat", icon: <MessageSquare className="h-5 w-5 text-emerald-400" />, descKey: "channelDescWebchat" },
-  { id: "slack", name: "Slack", icon: <FaSlack className="h-6 w-6" style={{ color: "#4A154B" }} />, descKey: "channelDescSlack" },
-  { id: "teams", name: "Microsoft Teams", icon: <FaMicrosoft className="h-6 w-6" style={{ color: "#6264A7" }} />, descKey: "channelDescTeams" },
-  { id: "instagram", name: "Instagram DM", icon: <FaInstagram className="h-6 w-6" style={{ color: "#E4405F" }} />, descKey: "channelDescInstagram" },
-  { id: "messenger", name: "Facebook Messenger", icon: <FaFacebookMessenger className="h-6 w-6" style={{ color: "#0084FF" }} />, descKey: "channelDescMessenger" },
-  { id: "sms", name: "SMS / Text Messages", icon: <FaSms className="h-6 w-6" style={{ color: "#34C759" }} />, descKey: "channelDescSms" },
+const MESSAGING_CHANNELS = [
+  { id: "whatsapp", name: "WhatsApp Business", icon: <FaWhatsapp className="h-6 w-6" style={{ color: "#25D366" }} />, descKey: "channelDescWhatsapp", connectable: true },
+  { id: "telegram", name: "Telegram", icon: <FaTelegram className="h-6 w-6" style={{ color: "#26A5E4" }} />, descKey: "channelDescTelegram", connectable: false },
+  { id: "webchat", name: "Website Chat", icon: <MessageSquare className="h-5 w-5 text-emerald-400" />, descKey: "channelDescWebchat", connectable: false },
+  { id: "slack", name: "Slack", icon: <FaSlack className="h-6 w-6" style={{ color: "#4A154B" }} />, descKey: "channelDescSlack", connectable: false },
+  { id: "teams", name: "Microsoft Teams", icon: <FaMicrosoft className="h-6 w-6" style={{ color: "#6264A7" }} />, descKey: "channelDescTeams", connectable: false },
+  { id: "instagram", name: "Instagram DM", icon: <FaInstagram className="h-6 w-6" style={{ color: "#E4405F" }} />, descKey: "channelDescInstagram", connectable: false },
+  { id: "messenger", name: "Facebook Messenger", icon: <FaFacebookMessenger className="h-6 w-6" style={{ color: "#0084FF" }} />, descKey: "channelDescMessenger", connectable: false },
+  { id: "sms", name: "SMS / Text Messages", icon: <FaSms className="h-6 w-6" style={{ color: "#34C759" }} />, descKey: "channelDescSms", connectable: false },
+]
+
+const CALENDAR_CHANNELS = [
+  { id: "googlecalendar", name: "Google Calendar", icon: <SiGooglecalendar className="h-6 w-6" style={{ color: "#4285F4" }} />, descKey: "channelDescGoogleCalendar", connectable: true },
 ]
 
 function getInitials(name: string): string {
@@ -120,8 +123,13 @@ export default function ChannelsPage() {
     const error = searchParams.get("error")
     const email = searchParams.get("email")
     const calendar = searchParams.get("calendar")
+    const whatsapp = searchParams.get("whatsapp")
     if (success === "connected" || calendar === "connected") {
       setOauthMsg({ type: "success", text: `Connected ${email ? email + " " : ""}successfully` })
+      loadConnections()
+      window.history.replaceState({}, "", window.location.pathname)
+    } else if (whatsapp === "1") {
+      setOauthMsg({ type: "success", text: "WhatsApp Business connected successfully" })
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (error) {
@@ -390,7 +398,7 @@ export default function ChannelsPage() {
               </div>
               <div className="mb-3 flex items-center gap-2">
                 <Mail className="h-4 w-4 text-emerald-400" />
-                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Email Accounts</span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Emails</span>
               </div>
               <div className="space-y-3">
                 {EMAIL_PROVIDERS.map(provider => {
@@ -446,22 +454,73 @@ export default function ChannelsPage() {
               </div>
             </div>
 
-            {/* Other channels */}
+            {/* Messages */}
             <div>
               <div className="mb-3 flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-emerald-400" />
-                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Integrations</span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Messages</span>
               </div>
               <div className="space-y-3">
-                {OTHER_CHANNELS.map(ch => {
-                  const isCalendar = ch.id === "googlecalendar"
+                {MESSAGING_CHANNELS.map(ch => {
                   const isWhatsApp = ch.id === "whatsapp"
-                  const calConnected = isCalendar && calendarConnections["google"]
                   const waConnected = isWhatsApp && Object.keys(whatsappConnections).length > 0
                   const waConn = waConnected ? Object.values(whatsappConnections)[0] : null
-                  const showConnect = isCalendar || isWhatsApp
                   return (
-                    <div key={ch.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", calConnected || waConn ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                    <div key={ch.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", waConn ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center">{ch.icon}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold">{ch.name}</p>
+                          {waConn && (
+                            <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
+                              <Check className="h-3 w-3" /> {t("channelsConnected")}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-sm text-muted-foreground">{t(ch.descKey as any)}</p>
+                        {waConn && (
+                          <p className="mt-0.5 text-[10px] text-emerald-400">{waConn.phone_number || waConn.phone_number_id}</p>
+                        )}
+                      </div>
+                      {isWhatsApp ? (
+                        waConn ? (
+                          <button
+                            onClick={() => handleDisconnectWhatsApp(waConn.phone_number_id)}
+                            className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-red-400 hover:border-red-500/30"
+                          >
+                            Disconnect
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (!user) return
+                              window.location.href = `/api/whatsapp/oauth/connect?userId=${user.id}`
+                            }}
+                            className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                          >
+                            Connect
+                          </button>
+                        )
+                      ) : (
+                        <span className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-muted-foreground">Coming soon</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Calendars */}
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <SiGooglecalendar className="h-4 w-4 text-emerald-400" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Calendars</span>
+              </div>
+              <div className="space-y-3">
+                {CALENDAR_CHANNELS.map(ch => {
+                  const calConnected = ch.id === "googlecalendar" && calendarConnections["google"]
+                  return (
+                    <div key={ch.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", calConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center">{ch.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -471,61 +530,29 @@ export default function ChannelsPage() {
                               <Check className="h-3 w-3" /> {t("channelsConnected")}
                             </span>
                           )}
-                          {waConn && (
-                            <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
-                              <Check className="h-3 w-3" /> {t("channelsConnected")}
-                            </span>
-                          )}
                         </div>
                         <p className="mt-0.5 text-sm text-muted-foreground">{t(ch.descKey as any)}</p>
                         {calConnected && (
                           <p className="mt-0.5 text-xs text-emerald-400/80">{calConnected.calendar_email}</p>
                         )}
-                        {waConn && (
-                          <p className="mt-0.5 text-[10px] text-emerald-400">{waConn.phone_number || waConn.phone_number_id}</p>
-                        )}
                       </div>
-                      {showConnect ? (
-                        isCalendar ? (
-                          calConnected ? (
-                            <button
-                              onClick={() => handleDisconnectCalendar("google")}
-                              className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-red-400 hover:border-red-500/30"
-                            >
-                              Disconnect
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                if (!user) return
-                                window.location.href = `/api/calendar/oauth/google/connect?userId=${user.id}`
-                              }}
-                              className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
-                            >
-                              Connect
-                            </button>
-                          )
-                        ) : isWhatsApp ? (
-                          waConn ? (
-                            <button
-                              onClick={() => handleDisconnectWhatsApp(waConn.phone_number_id)}
-                              className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-red-400 hover:border-red-500/30"
-                            >
-                              Disconnect
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setWaModalOpen(true)}
-                              className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
-                            >
-                              Connect
-                            </button>
-                          )
-                        ) : (
-                          <span className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-muted-foreground">Coming soon</span>
-                        )
+                      {calConnected ? (
+                        <button
+                          onClick={() => handleDisconnectCalendar("google")}
+                          className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-red-400 hover:border-red-500/30"
+                        >
+                          Disconnect
+                        </button>
                       ) : (
-                        <span className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-muted-foreground">Coming soon</span>
+                        <button
+                          onClick={() => {
+                            if (!user) return
+                            window.location.href = `/api/calendar/oauth/google/connect?userId=${user.id}`
+                          }}
+                          className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                        >
+                          Connect
+                        </button>
                       )}
                     </div>
                   )
