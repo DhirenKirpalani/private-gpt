@@ -79,6 +79,7 @@ function ChannelsPageContent() {
   const [waModalOpen, setWaModalOpen] = useState(false)
   const [waForm, setWaForm] = useState({ phoneNumberId: "", accessToken: "", phoneNumber: "" })
   const [waSaving, setWaSaving] = useState(false)
+  const [waConnecting, setWaConnecting] = useState(false)
 
   const loadConnections = useCallback(async () => {
     if (!user) return
@@ -117,19 +118,48 @@ function ChannelsPageContent() {
     loadConnections()
   }, [user, loadConnections])
 
-  // Handle OAuth callback query params
+  // Load Meta FB SDK for WhatsApp Embedded Signup
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if ((window as any).FB) return
+    let cancelled = false
+    async function init() {
+      try {
+        const config = await fetch("/api/meta/config").then(r => r.json())
+        if (cancelled) return
+        if (!config.appId) return
+        const script = document.createElement("script")
+        script.id = "facebook-jssdk"
+        script.src = "https://connect.facebook.net/en_US/sdk.js"
+        script.crossOrigin = "anonymous"
+        script.async = true
+        script.defer = true
+        document.body.appendChild(script)
+        script.onload = () => {
+          const FB = (window as any).FB
+          if (FB) {
+            FB.init({
+              appId: config.appId,
+              autoLogAppEvents: true,
+              xfbml: true,
+              version: "v18.0",
+            })
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    init()
+    return () => { cancelled = true }
+  }, [])
+
+  // Handle OAuth callback query params (non-WhatsApp)
   useEffect(() => {
     const success = searchParams.get("success")
     const error = searchParams.get("error")
     const email = searchParams.get("email")
     const calendar = searchParams.get("calendar")
-    const whatsapp = searchParams.get("whatsapp")
     if (success === "connected" || calendar === "connected") {
       setOauthMsg({ type: "success", text: `Connected ${email ? email + " " : ""}successfully` })
-      loadConnections()
-      window.history.replaceState({}, "", window.location.pathname)
-    } else if (whatsapp === "1") {
-      setOauthMsg({ type: "success", text: "WhatsApp Business connected successfully" })
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (error) {
@@ -246,6 +276,46 @@ function ChannelsPageContent() {
     } catch (e: any) {
       alert(e?.message || "Failed to connect WhatsApp")
     }
+  }
+
+  const handleWhatsAppEmbeddedSignup = async () => {
+    if (!user) return
+    const FB = (window as any).FB
+    if (!FB) {
+      setOauthMsg({ type: "error", text: "Meta SDK not loaded yet. Please try again in a moment." })
+      return
+    }
+    setWaConnecting(true)
+    FB.login(
+      async (response: any) => {
+        if (response.authResponse) {
+          const shortToken = response.authResponse.accessToken
+          try {
+            const res = await fetch("/api/whatsapp/embedded-signup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: user.id, token: shortToken }),
+            })
+            const data = await res.json()
+            if (!res.ok) {
+              setOauthMsg({ type: "error", text: data.error || "WhatsApp setup failed" })
+            } else {
+              setOauthMsg({ type: "success", text: `WhatsApp connected: ${data.phoneNumber || ""}` })
+              loadConnections()
+            }
+          } catch (e: any) {
+            setOauthMsg({ type: "error", text: e?.message || "Connection failed" })
+          }
+        } else {
+          setOauthMsg({ type: "error", text: "WhatsApp authorization cancelled or failed" })
+        }
+        setWaConnecting(false)
+      },
+      {
+        scope: "whatsapp_business_management,whatsapp_business_messaging",
+        config_id: process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID,
+      }
+    )
   }
 
   const handleDisconnectWhatsApp = async (phoneNumberId: string) => {
@@ -494,11 +564,13 @@ function ChannelsPageContent() {
                           <button
                             onClick={() => {
                               if (!user) return
-                              window.location.href = `/api/whatsapp/oauth/connect?userId=${user.id}`
+                              handleWhatsAppEmbeddedSignup()
                             }}
-                            className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                            disabled={waConnecting}
+                            className="shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
                           >
-                            Connect
+                            {waConnecting && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {waConnecting ? "Connecting..." : "Connect"}
                           </button>
                         )
                       ) : (
