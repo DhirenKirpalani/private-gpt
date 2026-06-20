@@ -825,9 +825,18 @@ export function subscribeToEmailMessages(
         table: "email_messages",
         filter: `user_id=eq.${userId}`,
       },
-      (payload: any) => callback(payload)
+      (payload: any) => {
+        console.log("[REALTIME] email_messages event:", payload.eventType, payload)
+        callback(payload)
+      }
     )
-    .subscribe()
+    .subscribe((status: string, err?: any) => {
+      if (err) {
+        console.error("[REALTIME] email_messages subscription error:", err)
+      } else {
+        console.log("[REALTIME] email_messages subscription status:", status)
+      }
+    })
 
   return channel
 }
