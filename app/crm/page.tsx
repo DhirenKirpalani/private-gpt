@@ -440,7 +440,7 @@ export default function CRMPage() {
       unsubscribeChannel(calendarChannel)
       unsubscribeChannel(contactsChannel)
     }
-  }, [user])
+  }, [user?.id])
 
   // ── Load kanban cols from Supabase ──────────────────────────────────────────
   useEffect(() => {
@@ -536,6 +536,30 @@ export default function CRMPage() {
       else setInboxLoading(false)
     }
   }
+
+  // ── Auto-poll for new emails every 2 minutes (client-side, no cron) ────────
+  useEffect(() => {
+    if (!user) return
+    const hasConnectedEmail = emailConnections.some((c: any) => c.status === "connected")
+    if (!hasConnectedEmail) return
+    const interval = setInterval(() => {
+      console.log("[CRM] Auto-polling emails...")
+      fetchInbox()
+    }, 120000) // 2 minutes
+    return () => clearInterval(interval)
+  }, [user?.id, emailConnections.length, activeChannel])
+
+  // ── Auto-poll for calendar events every 2 minutes (client-side) ─────────────
+  useEffect(() => {
+    if (!user) return
+    const hasConnectedCalendar = calendarConnections.some((c: any) => c.status === "connected")
+    if (!hasConnectedCalendar) return
+    const interval = setInterval(() => {
+      console.log("[CRM] Auto-polling calendar...")
+      fetchCalendar()
+    }, 120000) // 2 minutes
+    return () => clearInterval(interval)
+  }, [user?.id, calendarConnections.length])
 
   // Fetch calendar events
   const fetchCalendar = async () => {

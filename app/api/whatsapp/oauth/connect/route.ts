@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 export const dynamic = "force-dynamic"
 
 const META_APP_ID = process.env.META_APP_ID
+const META_WHATSAPP_CONFIG_ID = process.env.META_WHATSAPP_CONFIG_ID
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/whatsapp/oauth/callback`
 
 export async function GET(req: NextRequest) {
@@ -31,6 +32,11 @@ export async function GET(req: NextRequest) {
     url.searchParams.set("state", state)
     // Force re-auth so we always get a usable token for the right business
     url.searchParams.set("auth_type", "rerequest")
+
+    // If Embedded Signup config is set, trigger the guided WABA setup dialog
+    if (META_WHATSAPP_CONFIG_ID) {
+      url.searchParams.set("config_id", META_WHATSAPP_CONFIG_ID)
+    }
 
     return NextResponse.redirect(url.toString())
   } catch (err: any) {

@@ -77,9 +77,9 @@ function ChannelsPageContent() {
 
   // WhatsApp connect modal
   const [waModalOpen, setWaModalOpen] = useState(false)
+  const [waSetupOpen, setWaSetupOpen] = useState(false)
   const [waForm, setWaForm] = useState({ phoneNumberId: "", accessToken: "", phoneNumber: "" })
   const [waSaving, setWaSaving] = useState(false)
-  const [waConnecting, setWaConnecting] = useState(false)
 
   const loadConnections = useCallback(async () => {
     if (!user) return
@@ -118,52 +118,27 @@ function ChannelsPageContent() {
     loadConnections()
   }, [user, loadConnections])
 
-  // Load Meta FB SDK for WhatsApp Embedded Signup
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    if ((window as any).FB) return
-    let cancelled = false
-    async function init() {
-      try {
-        const config = await fetch("/api/meta/config").then(r => r.json())
-        if (cancelled) return
-        if (!config.appId) return
-        const script = document.createElement("script")
-        script.id = "facebook-jssdk"
-        script.src = "https://connect.facebook.net/en_US/sdk.js"
-        script.crossOrigin = "anonymous"
-        script.async = true
-        script.defer = true
-        document.body.appendChild(script)
-        script.onload = () => {
-          const FB = (window as any).FB
-          if (FB) {
-            FB.init({
-              appId: config.appId,
-              autoLogAppEvents: true,
-              xfbml: true,
-              version: "v18.0",
-            })
-          }
-        }
-      } catch { /* ignore */ }
-    }
-    init()
-    return () => { cancelled = true }
-  }, [])
-
-  // Handle OAuth callback query params (non-WhatsApp)
+  // Handle OAuth callback query params
   useEffect(() => {
     const success = searchParams.get("success")
     const error = searchParams.get("error")
     const email = searchParams.get("email")
     const calendar = searchParams.get("calendar")
+    const whatsapp = searchParams.get("whatsapp")
     if (success === "connected" || calendar === "connected") {
       setOauthMsg({ type: "success", text: `Connected ${email ? email + " " : ""}successfully` })
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
+    } else if (whatsapp === "1") {
+      setOauthMsg({ type: "success", text: "WhatsApp Business connected successfully" })
+      loadConnections()
+      window.history.replaceState({}, "", window.location.pathname)
     } else if (error) {
-      setOauthMsg({ type: "error", text: error })
+      if (error.includes("No WhatsApp phone number")) {
+        setWaSetupOpen(true)
+      } else {
+        setOauthMsg({ type: "error", text: error })
+      }
       window.history.replaceState({}, "", window.location.pathname)
     }
   }, [searchParams, loadConnections])
@@ -278,44 +253,9 @@ function ChannelsPageContent() {
     }
   }
 
-  const handleWhatsAppEmbeddedSignup = async () => {
+  const handleWhatsAppConnect = () => {
     if (!user) return
-    const FB = (window as any).FB
-    if (!FB) {
-      setOauthMsg({ type: "error", text: "Meta SDK not loaded yet. Please try again in a moment." })
-      return
-    }
-    setWaConnecting(true)
-    FB.login(
-      async (response: any) => {
-        if (response.authResponse) {
-          const shortToken = response.authResponse.accessToken
-          try {
-            const res = await fetch("/api/whatsapp/embedded-signup", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId: user.id, token: shortToken }),
-            })
-            const data = await res.json()
-            if (!res.ok) {
-              setOauthMsg({ type: "error", text: data.error || "WhatsApp setup failed" })
-            } else {
-              setOauthMsg({ type: "success", text: `WhatsApp connected: ${data.phoneNumber || ""}` })
-              loadConnections()
-            }
-          } catch (e: any) {
-            setOauthMsg({ type: "error", text: e?.message || "Connection failed" })
-          }
-        } else {
-          setOauthMsg({ type: "error", text: "WhatsApp authorization cancelled or failed" })
-        }
-        setWaConnecting(false)
-      },
-      {
-        scope: "whatsapp_business_management,whatsapp_business_messaging",
-        config_id: process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID,
-      }
-    )
+    window.location.href = `/api/whatsapp/oauth/connect?userId=${user.id}`
   }
 
   const handleDisconnectWhatsApp = async (phoneNumberId: string) => {
@@ -564,13 +504,11 @@ function ChannelsPageContent() {
                           <button
                             onClick={() => {
                               if (!user) return
-                              handleWhatsAppEmbeddedSignup()
+                              handleWhatsAppConnect()
                             }}
-                            disabled={waConnecting}
-                            className="shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                            className="shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
                           >
-                            {waConnecting && <Loader2 className="h-4 w-4 animate-spin" />}
-                            {waConnecting ? "Connecting..." : "Connect"}
+                            Connect
                           </button>
                         )
                       ) : (
@@ -922,6 +860,87 @@ function ChannelsPageContent() {
                 Connect
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Setup Helper Modal */}
+      {waSetupOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#2a3444] p-6 shadow-xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">
+                <FaWhatsapp className="h-5 w-5 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Set Up WhatsApp Business</h3>
+                <p className="text-sm text-muted-foreground">Complete these steps to connect WhatsApp</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/5 bg-background/50 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400">1</span>
+                  <div>
+                    <p className="text-sm font-medium">Go to Meta for Developers</p>
+                    <p className="text-xs text-muted-foreground">Visit developers.facebook.com and select your app</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/5 bg-background/50 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400">2</span>
+                  <div>
+                    <p className="text-sm font-medium">Add the WhatsApp product</p>
+                    <p className="text-xs text-muted-foreground">Left sidebar → Add Product → WhatsApp → Set Up</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/5 bg-background/50 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400">3</span>
+                  <div>
+                    <p className="text-sm font-medium">Create a WhatsApp Business Account</p>
+                    <p className="text-xs text-muted-foreground">Follow the prompts to create a WABA in Meta</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/5 bg-background/50 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400">4</span>
+                  <div>
+                    <p className="text-sm font-medium">Add and verify your phone number</p>
+                    <p className="text-xs text-muted-foreground">Enter your business number and verify via SMS</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setWaSetupOpen(false)}
+                className="flex-1 rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setWaSetupOpen(false)
+                  window.open("https://developers.facebook.com/apps/", "_blank")
+                }}
+                className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              >
+                Open Meta Setup
+              </button>
+            </div>
+
+            <p className="mt-4 text-center text-xs text-muted-foreground">
+              Once setup is complete, click <span className="text-emerald-400 font-medium">Connect</span> on WhatsApp Business again.
+            </p>
           </div>
         </div>
       )}
