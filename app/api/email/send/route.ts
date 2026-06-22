@@ -117,11 +117,9 @@ export async function POST(req: NextRequest) {
 
       } else if (conn.oauth_provider === "microsoft") {
         // Send via Microsoft Graph
-        const internetHeaders: { name: string; value: string }[] = []
-        if (originalMessageId) {
-          internetHeaders.push({ name: "In-Reply-To", value: `<${originalMessageId}>` })
-          internetHeaders.push({ name: "References", value: `<${originalMessageId}>` })
-        }
+        // Note: Microsoft Graph does not allow standard headers like In-Reply-To
+        // in internetMessageHeaders (only x- prefixed custom headers).
+        // Threading is handled by the message reply API instead.
         const graphRes = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
           method: "POST",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -131,7 +129,6 @@ export async function POST(req: NextRequest) {
               body: { contentType: "HTML", content: html || `<p>${body.replace(/\n/g, "<br>")}</p>` },
               toRecipients: [{ emailAddress: { address: to } }],
               from: { emailAddress: { address: conn.email_address } },
-              ...(internetHeaders.length ? { internetMessageHeaders: internetHeaders } : {}),
             },
             saveToSentItems: true,
           }),

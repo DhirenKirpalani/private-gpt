@@ -12,6 +12,7 @@ import {
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
+import { toast, Toaster } from "@/components/ui/toast"
 import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols } from "@/lib/supabase"
 
 /* ─── real data ─── */
@@ -630,7 +631,7 @@ export default function CRMPage() {
       setComposeBody("")
     } catch (e: any) {
       console.error("[SEND EMAIL]", e)
-      alert(e?.message || "Failed to send email")
+      toast({ title: "Error", description: e?.message || "Failed to send email", variant: "error" })
     } finally {
       setSendingEmail(false)
     }
@@ -1780,7 +1781,7 @@ export default function CRMPage() {
                             setWaReplyTo(null)
                             setWaReplyBody("")
                           } catch (e: any) {
-                            alert(e?.message || "Failed to send WhatsApp message")
+                            toast({ title: "Error", description: e?.message || "Failed to send WhatsApp message", variant: "error" })
                           } finally {
                             setSendingWaReply(false)
                           }
@@ -2190,7 +2191,7 @@ export default function CRMPage() {
                       setReplyBody("")
                     } catch (e: any) {
                       console.error("[REPLY]", e)
-                      alert(e?.message || "Failed to send reply")
+                      toast({ title: "Error", description: e?.message || "Failed to send reply", variant: "error" })
                     } finally {
                       setSendingReply(false)
                     }
@@ -2281,6 +2282,7 @@ export default function CRMPage() {
           </div>
         </div>
       )}
+      <Toaster />
     </div>
   )
 }

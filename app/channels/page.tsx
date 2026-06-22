@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { useI18n } from "@/lib/i18n"
 import { getProfile, getEmailConnections, saveEmailConnection, deleteEmailConnection, type EmailConnection, getCalendarConnections, deleteCalendarConnection, getWhatsAppConnections, saveWhatsAppConnection, deleteWhatsAppConnection } from "@/lib/supabase"
+import { toast, Toaster } from "@/components/ui/toast"
 
 type SmtpDefaults = { smtp_host: string; smtp_port: number; imap_host: string; imap_port: number; smtp_secure?: boolean }
 type EmailProvider = { id: string; name: string; icon: React.ReactNode; defaults: SmtpDefaults; note: string; noteLink?: string; descKey: string; isOAuth?: boolean }
@@ -249,7 +250,7 @@ function ChannelsPageContent() {
       waConns.forEach(c => { waMap[c.phone_number_id] = c })
       setWhatsAppConnections(waMap)
     } catch (e: any) {
-      alert(e?.message || "Failed to connect WhatsApp")
+      toast({ title: "Error", description: e?.message || "Failed to connect WhatsApp", variant: "error" })
     }
   }
 
@@ -975,6 +976,7 @@ function ChannelsPageContent() {
           </div>
         </div>
       )}
+      <Toaster />
     </div>
   )
 }
