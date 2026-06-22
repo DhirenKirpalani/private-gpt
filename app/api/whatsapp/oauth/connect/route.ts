@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const userId = searchParams.get("userId")
+    const popup = searchParams.get("popup") === "1"
     if (!userId) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 })
     }
@@ -17,11 +18,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "META_APP_ID not configured" }, { status: 500 })
     }
 
-    const state = Buffer.from(JSON.stringify({ userId })).toString("base64url")
+    const state = Buffer.from(JSON.stringify({ userId, popup })).toString("base64url")
 
     const scopes = [
       "whatsapp_business_management",
       "whatsapp_business_messaging",
+      "business_management",
     ].join(",")
 
     const url = new URL("https://www.facebook.com/v18.0/dialog/oauth")

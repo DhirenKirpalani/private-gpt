@@ -355,9 +355,15 @@ export default function CRMPage() {
     const emailChannel = subscribeToEmailMessages(user.id, (payload) => {
       if (payload.eventType === "INSERT") {
         const msg = payload.new
-        setEmailMessages((prev) => [msg, ...prev])
+        setEmailMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev
+          return [msg, ...prev]
+        })
         if (msg.direction === "received") {
-          setInboxMessages((prev) => [msg, ...prev])
+          setInboxMessages((prev) => {
+            if (prev.some((m) => m.id === msg.id)) return prev
+            return [msg, ...prev]
+          })
           setInboxFetched(true)
         }
       } else if (payload.eventType === "UPDATE") {
@@ -376,7 +382,10 @@ export default function CRMPage() {
     const calendarChannel = subscribeToCalendarEvents(user.id, (payload) => {
       if (payload.eventType === "INSERT") {
         const evt = payload.new
-        setCalendarEvents((prev) => [...prev, evt].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()))
+        setCalendarEvents((prev) => {
+          if (prev.some((e) => e.id === evt.id)) return prev
+          return [...prev, evt].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+        })
         setCalendarFetched(true)
       } else if (payload.eventType === "UPDATE") {
         const evt = payload.new
@@ -390,23 +399,26 @@ export default function CRMPage() {
     const contactsChannel = subscribeToContacts(user.id, (payload) => {
       if (payload.eventType === "INSERT") {
         const c = payload.new
-        setContacts((prev) => [
-          {
-            id: c.id,
-            name: c.name,
-            company: c.company || "",
-            role: c.role || "",
-            email: c.email || "",
-            phone: c.phone || "",
-            location: c.location || "",
-            tags: c.tags || [],
-            starred: c.starred,
-            lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
-            dealValue: c.deal_value || 0,
-            dealStage: c.deal_stage || "",
-          },
-          ...prev,
-        ])
+        setContacts((prev) => {
+          if (prev.some((contact) => contact.id === c.id)) return prev
+          return [
+            {
+              id: c.id,
+              name: c.name,
+              company: c.company || "",
+              role: c.role || "",
+              email: c.email || "",
+              phone: c.phone || "",
+              location: c.location || "",
+              tags: c.tags || [],
+              starred: c.starred,
+              lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+              dealValue: c.deal_value || 0,
+              dealStage: c.deal_stage || "",
+            },
+            ...prev,
+          ]
+        })
       } else if (payload.eventType === "UPDATE") {
         const c = payload.new
         setContacts((prev) =>

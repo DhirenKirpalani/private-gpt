@@ -178,7 +178,7 @@ function ChannelsPageContent() {
         smtp_pass: smtpForm.smtp_pass,
         imap_host: smtpForm.imap_host,
         imap_port: parseInt(smtpForm.imap_port),
-        status: "pending",
+        status: "connected",
       }
       console.log(`[CHANNELS SAVE] Saving connection:`, { provider: connPayload.provider, email: connPayload.email_address, smtp_host: connPayload.smtp_host, imap_host: connPayload.imap_host })
       await saveEmailConnection(connPayload)
@@ -255,8 +255,39 @@ function ChannelsPageContent() {
 
   const handleWhatsAppConnect = () => {
     if (!user) return
-    window.location.href = `/api/whatsapp/oauth/connect?userId=${user.id}`
+    const width = 600
+    const height = 700
+    const left = window.screenX + (window.outerWidth - width) / 2
+    const top = window.screenY + (window.outerHeight - height) / 2
+    const popup = window.open(
+      `/api/whatsapp/oauth/connect?userId=${user.id}&popup=1`,
+      "whatsapp-embedded-signup",
+      `width=${width},height=${height},top=${top},left=${left},popup=1,toolbar=no,menubar=no`
+    )
+    if (!popup) {
+      setOauthMsg({ type: "error", text: "Popup blocked. Please allow popups for this site." })
+    }
   }
+
+  // Listen for WhatsApp OAuth completion from popup
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== "WHATSAPP_OAUTH") return
+      const { success, error, phoneNumber } = event.data
+      if (success) {
+        setOauthMsg({ type: "success", text: `WhatsApp Business connected${phoneNumber ? `: ${phoneNumber}` : ""}` })
+        loadConnections()
+      } else {
+        if (error?.includes("No WhatsApp phone number")) {
+          setWaSetupOpen(true)
+        } else {
+          setOauthMsg({ type: "error", text: error || "WhatsApp connection failed" })
+        }
+      }
+    }
+    window.addEventListener("message", handler)
+    return () => window.removeEventListener("message", handler)
+  }, [loadConnections])
 
   const handleDisconnectWhatsApp = async (phoneNumberId: string) => {
     if (!user) return

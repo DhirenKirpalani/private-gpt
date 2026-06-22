@@ -23,22 +23,40 @@ async function fbGet(path: string, token: string) {
 }
 
 export async function GET(req: NextRequest) {
+  let popup = false
   try {
     const { searchParams } = new URL(req.url)
     const code = searchParams.get("code")
     const state = searchParams.get("state")
     const error = searchParams.get("error")
 
+    // Parse state first so we know if this is a popup flow
+    let userId = ""
+    try {
+      if (state) {
+        const stateData = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"))
+        popup = !!stateData.popup
+        userId = stateData.userId
+      }
+    } catch { /* ignore parse errors */ }
+
     if (error) {
+      if (popup) {
+        return new NextResponse(
+          `<script>window.opener?.postMessage({type:"WHATSAPP_OAUTH",success:false,error:${JSON.stringify(error)}},"*");window.close();</script>`,
+          { headers: { "Content-Type": "text/html" } }
+        )
+      }
       return NextResponse.redirect(`${APP_URL}/channels?error=${encodeURIComponent(error)}`)
     }
-    if (!code || !state) {
+    if (!code || !state || !userId) {
+      if (popup) {
+        return new NextResponse(
+          `<script>window.opener?.postMessage({type:"WHATSAPP_OAUTH",success:false,error:"Missing OAuth parameters"},"*");window.close();</script>`,
+          { headers: { "Content-Type": "text/html" } }
+        )
+      }
       return NextResponse.redirect(`${APP_URL}/channels?error=Missing OAuth parameters`)
-    }
-
-    const { userId } = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"))
-    if (!userId) {
-      return NextResponse.redirect(`${APP_URL}/channels?error=Invalid state`)
     }
 
     // 1. Exchange code for short-lived access token
@@ -119,7 +137,14 @@ export async function GET(req: NextRequest) {
     }
 
     if (!phoneNumberId) {
-      return NextResponse.redirect(`${APP_URL}/channels?error=No WhatsApp phone number found. Please set up a WhatsApp Business Account in Meta and add a phone number.`)
+      const errMsg = "No WhatsApp phone number found. Please set up a WhatsApp Business Account in Meta and add a phone number."
+      if (popup) {
+        return new NextResponse(
+          `<script>window.opener?.postMessage({type:"WHATSAPP_OAUTH",success:false,error:${JSON.stringify(errMsg)}},"*");window.close();</script>`,
+          { headers: { "Content-Type": "text/html" } }
+        )
+      }
+      return NextResponse.redirect(`${APP_URL}/channels?error=${encodeURIComponent(errMsg)}`)
     }
 
     // 4. Store connection
@@ -138,13 +163,32 @@ export async function GET(req: NextRequest) {
 
     if (dbErr) {
       console.error("[WHATSAPP OAUTH] DB error:", dbErr.message)
+      if (popup) {
+        return new NextResponse(
+          `<script>window.opener?.postMessage({type:"WHATSAPP_OAUTH",success:false,error:${JSON.stringify(dbErr.message)}},"*");window.close();</script>`,
+          { headers: { "Content-Type": "text/html" } }
+        )
+      }
       return NextResponse.redirect(`${APP_URL}/channels?error=${encodeURIComponent(dbErr.message)}`)
     }
 
     console.log("[WHATSAPP OAUTH] Connected:", { phoneNumberId, phoneNumber, displayName })
+    if (popup) {
+      return new NextResponse(
+        `<script>window.opener?.postMessage({type:"WHATSAPP_OAUTH",success:true,phoneNumber:${JSON.stringify(phoneNumber)},phoneNumberId:${JSON.stringify(phoneNumberId)},displayName:${JSON.stringify(displayName)}},"*");window.close();</script>`,
+        { headers: { "Content-Type": "text/html" } }
+      )
+    }
     return NextResponse.redirect(`${APP_URL}/channels?success=connected&whatsapp=1`)
   } catch (err: any) {
     console.error("[WHATSAPP OAUTH CALLBACK] Error:", err)
-    return NextResponse.redirect(`${APP_URL}/channels?error=${encodeURIComponent(err?.message || "WhatsApp OAuth failed")}`)
+    const errMsg = err?.message || "WhatsApp OAuth failed"
+    if (popup) {
+      return new NextResponse(
+        `<script>window.opener?.postMessage({type:"WHATSAPP_OAUTH",success:false,error:${JSON.stringify(errMsg)}},"*");window.close();</script>`,
+        { headers: { "Content-Type": "text/html" } }
+      )
+    }
+    return NextResponse.redirect(`${APP_URL}/channels?error=${encodeURIComponent(errMsg)}`)
   }
 }
