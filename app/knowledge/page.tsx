@@ -414,18 +414,18 @@ export default function KnowledgePage() {
           <div className="flex-1 overflow-y-auto px-3 py-3">
             <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("knowledgeCategories")}</p>
             {allCategories.map(cat => (
-              <div key={cat} className="group relative flex items-center">
+              <div key={cat} className="group relative flex items-center min-w-0">
                 <button
                   onClick={() => setActiveCategory(cat)}
                   className={cn(
-                    "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 pr-7 text-sm transition-colors",
+                    "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 pr-7 text-sm transition-colors overflow-hidden",
                     activeCategory === cat
                       ? "bg-emerald-600/15 text-emerald-400 font-medium"
                       : "text-muted-foreground hover:bg-muted/50"
                   )}
                 >
                   <FileText className="h-3.5 w-3.5 shrink-0" />
-                  <span className="flex-1 truncate text-left">{categoryDisplay(cat, t as unknown as (k: string) => string)}</span>
+                  <span className="flex-1 min-w-0 truncate text-left" title={categoryDisplay(cat, t as unknown as (k: string) => string)}>{categoryDisplay(cat, t as unknown as (k: string) => string)}</span>
                   <span className={cn(
                     "ml-1 shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] tabular-nums leading-none transition-opacity",
                     (categoryCounts[cat] ?? 0) > 0 ? "opacity-100" : "opacity-0"

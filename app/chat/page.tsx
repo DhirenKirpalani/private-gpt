@@ -41,6 +41,33 @@ function getInitials(name: string): string {
   return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
 }
 
+function injectCitationLinks(content: string, sources?: string[]): string {
+  if (!sources || sources.length === 0) return content
+  return content.replace(/\[(\d+)\](?!\()/g, (match, nums) => {
+    // Try as a single citation first
+    const singleIdx = parseInt(nums) - 1
+    if (singleIdx >= 0 && singleIdx < sources.length && sources[singleIdx]) {
+      return `[${nums}](${sources[singleIdx]})`
+    }
+
+    // If invalid as single, try splitting digits (e.g. [34] with 5 sources → [3][4])
+    if (nums.length > 1) {
+      const links: string[] = []
+      for (const digit of nums) {
+        const idx = parseInt(digit) - 1
+        if (idx >= 0 && idx < sources.length && sources[idx]) {
+          links.push(`[${digit}](${sources[idx]})`)
+        } else {
+          break // invalid digit, don't split
+        }
+      }
+      if (links.length === nums.length) return links.join("")
+    }
+
+    return match
+  })
+}
+
 function timeAgo(dateStr: string): string {
   const date = new Date(dateStr)
   const now = new Date()
@@ -474,10 +501,11 @@ export default function ChatPage() {
         `- Be accurate, direct, and practical — no hype language`,
         `- You are an AI assistant powered by DeepSeek. You do NOT have native internet access, web browsing, or real-time search capabilities.`,
         `- However, when the user enables Web Search, live search results are injected into your prompt as context.`,
-        `- CITATION DISCIPLINE — WEB SEARCH: When web search results are provided, base your answer primarily on those sources. Cite every web fact with [1], [2], etc. matching the source numbers.`,
+        `- CITATION DISCIPLINE — WEB SEARCH (MANDATORY): When web search results are provided, you MUST cite EVERY fact, statistic, claim, or piece of information that comes from those sources. Place [1], [2], etc. immediately after the relevant sentence or clause. Do NOT save all citations for the end. Do NOT skip citations for "obvious" facts. If you use the web search context, citations are NOT optional — they are REQUIRED.`,
         `- DATE FLEXIBILITY: If the user asks about "2026" or "current" trends, do NOT refuse to answer just because the search results are dated 2024–2025. Information from the past 1–2 years is still highly relevant unless explicitly outdated. Use the sources and present them as the current state of the industry.`,
-        `- CITATION DISCIPLINE — KNOWLEDGE BASE: When Knowledge Base documents are provided, cite every internal fact with #1, #2, etc. matching the document numbers in the KB context.`,
-        `- WHEN BOTH KB AND WEB SEARCH ARE ACTIVE: You may combine both sources in your answer. Use [1], [2] for web sources and #1, #2 for KB sources. Clearly distinguish between internal company knowledge (KB) and external web information. Prioritize KB docs for company-specific answers; use web results for current/external data.`,
+        `- CITATION DISCIPLINE — KNOWLEDGE BASE (MANDATORY): When Knowledge Base documents are provided, you MUST cite every internal fact with #1, #2, etc. matching the document numbers in the KB context. Place citations inline, not at the end.`,
+        `- WHEN BOTH KB AND WEB SEARCH ARE ACTIVE: You may combine both sources in your answer. Use [1], [2] for web sources and #1, #2 for KB sources. Clearly distinguish between internal company knowledge (KB) and external web information. Prioritize KB docs for company-specific answers; use web results for current/external data. Every single fact from either source MUST have an inline citation.`,
+        `- CITATION FORMAT: Citations must be inline like this: "The market grew 12% [1] and continues expanding [2]." NOT: "The market grew 12% and continues expanding. [1] [2]" — the citation belongs to the specific claim.`,
         `- NEVER fabricate data, statistics, or quotes that are not in the provided sources. If the sources genuinely do not contain relevant information (e.g., the topic is completely unrelated), say so clearly. Do not refuse to answer just because the sources lack a specific year or date.`,
         `- When NO web search results are provided in the prompt, you cannot look up current news, prices, or events.`,
         `- You do NOT know the current date or time. If asked, say you do not have access to real-time information.`,
@@ -1354,9 +1382,33 @@ export default function ChatPage() {
                             tr: ({ children }) => <tr className="border-b border-white/8 last:border-0">{children}</tr>,
                             th: ({ children }) => <th className="px-3 py-2 text-left font-semibold text-white whitespace-nowrap">{children}</th>,
                             td: ({ children }) => <td className="px-3 py-2 text-slate-200 align-top">{children}</td>,
+                            a: ({ href, children }) => {
+                              const text = String(children).trim()
+                              const citationMatch = text.match(/^(\d+)$/)
+                              if (citationMatch && href && /^https?:\/\//.test(href)) {
+                                const n = citationMatch[1]
+                                return (
+                                  <a
+                                    href={href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="relative -top-1 ml-1 mr-0.5 inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-[4px] text-[9px] font-bold leading-none text-emerald-400 shadow-sm transition-colors hover:bg-emerald-500/30 hover:text-emerald-200"
+                                    style={{ textDecoration: "none" }}
+                                    title={`Open source ${n}`}
+                                  >
+                                    {n}
+                                  </a>
+                                )
+                              }
+                              return (
+                                <a href={href} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline hover:text-emerald-300">
+                                  {children}
+                                </a>
+                              )
+                            },
                           }}
                         >
-                          {msg.content}
+                          {injectCitationLinks(msg.content, msg.sources)}
                         </ReactMarkdown>
                       ) : (
                         msg.content.split('\n').filter(line => line.trim() !== '').map((line, i) => (
@@ -1411,10 +1463,12 @@ export default function ChatPage() {
                               href={url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex max-w-[200px] items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[11px] text-emerald-300 transition-colors hover:bg-white/15 hover:text-emerald-200"
+                              className="inline-flex max-w-[200px] items-center gap-1.5 rounded-md bg-white/10 px-2 py-1 text-[11px] text-emerald-300 transition-colors hover:bg-white/15 hover:text-emerald-200"
                               title={url}
                             >
-                              <Globe className="h-3 w-3 shrink-0" />
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-[9px] font-bold text-emerald-400">
+                                {i + 1}
+                              </span>
                               <span className="truncate">{new URL(url).hostname.replace(/^www\./, "")}</span>
                             </a>
                           ))}
