@@ -172,8 +172,10 @@ export async function POST(req: NextRequest) {
       } else if (conn.oauth_provider === "microsoft") {
         // Fetch via Microsoft Graph with pagination
         const url = pageToken || `https://graph.microsoft.com/v1.0/me/messages?$top=50`
+        console.log(`[EMAIL FETCH] Microsoft Graph URL: ${url}`)
         const listRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
         const listData = await listRes.json()
+        console.log(`[EMAIL FETCH] Microsoft Graph status: ${listRes.status}, messages count: ${listData.value?.length || 0}, error: ${listData.error?.message || "none"}`)
         if (!listRes.ok) throw new Error(listData.error?.message || "Graph list failed")
 
         nextPageToken = listData["@odata.nextLink"] || null
