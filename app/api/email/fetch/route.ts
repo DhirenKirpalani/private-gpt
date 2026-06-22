@@ -170,6 +170,11 @@ export async function POST(req: NextRequest) {
         }
 
       } else if (conn.oauth_provider === "microsoft") {
+        // Debug: list folders first to see what's available
+        const folderRes = await fetch("https://graph.microsoft.com/v1.0/me/mailFolders", { headers: { Authorization: `Bearer ${accessToken}` } })
+        const folderData = await folderRes.json()
+        console.log(`[EMAIL FETCH] Folders: ${folderData.value?.map((f: any) => `${f.displayName}(${f.totalItemCount})`).join(", ") || "none"}`)
+
         // Fetch via Microsoft Graph with pagination
         const url = pageToken || `https://graph.microsoft.com/v1.0/me/messages?$top=50`
         console.log(`[EMAIL FETCH] Microsoft Graph URL: ${url}`)
