@@ -410,8 +410,14 @@ export default function ChatPage() {
         : ""
       const p = aiProfile
       const arr = (v: any) => Array.isArray(v) ? v.join(", ") : (v ? String(v) : "")
+      const userLanguages = p?.languages
+        ? p.languages.split(",").map((s: string) => s.trim()).filter(Boolean)
+        : ["English"]
+      const primaryLang = userLanguages[0] || "English"
+      const langList = userLanguages.join(", ")
+
       const systemPrompt = [
-        `LANGUAGE RULE — HIGHEST PRIORITY: You must respond in ${lang === "es" ? "Spanish" : "English"} only. The user wrote in ${lang === "es" ? "Spanish" : "English"}. Ignore any other language cues from the profile context. NEVER mix languages.`,
+        `LANGUAGE RULE — HIGHEST PRIORITY: The user has selected the following languages: ${langList}. Detect the language of the user's latest message. If the detected language is one of the selected languages, you MUST respond in that exact language. If the detected language is NOT in the selected list, respond in ${primaryLang}. NEVER respond in a language outside the selected list. NEVER mix languages.`,
         ``,
         `# Identity`,
         `You are ${p?.ai_name || "Nira"}, an AI business operations assistant. You have been fully briefed on the user's profile, business, and goals before this conversation began. Treat this as context you already know — do not ask the user to re-explain it.`,
@@ -584,7 +590,7 @@ export default function ChatPage() {
         return {
           role: m.role,
           content: isLastUser
-            ? `${m.content}\n\n[INSTRUCTION: Respond in ${lang === "es" ? "Spanish" : "English"} only.]`
+            ? `${m.content}\n\n[INSTRUCTION: Detect the language of this message. If it is one of these languages — ${langList} — respond in that exact language. Otherwise respond in ${primaryLang}.]`
             : m.content,
         }
       })

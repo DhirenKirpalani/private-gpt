@@ -5,10 +5,10 @@ export const dynamic = "force-dynamic"
 const SCOPES = [
   "openid",
   "https://www.googleapis.com/auth/userinfo.email",
-  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/drive.file",
 ]
 
-const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/calendar/oauth/callback`
+const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/drive/oauth/callback`
 
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get("userId")
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing userId" }, { status: 400 })
   }
 
-  const state = Buffer.from(JSON.stringify({ userId, provider: "googlecalendar" })).toString("base64url")
+  const state = Buffer.from(JSON.stringify({ userId, provider: "googledrive" })).toString("base64url")
 
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth")
   url.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID!)

@@ -35,7 +35,7 @@ async function refreshIfNeeded(conn: any): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, title, description, start, end, attendees, location } = await req.json()
+    const { userId, title, description, start, end, attendees, location, addGoogleMeet } = await req.json()
     if (!userId || !title || !start || !end) {
       return NextResponse.json({ error: "Missing required fields: userId, title, start, end" }, { status: 400 })
     }
@@ -64,8 +64,16 @@ export async function POST(req: NextRequest) {
     if (attendees && Array.isArray(attendees) && attendees.length > 0) {
       body.attendees = attendees.map((a: string) => ({ email: a }))
     }
+    if (addGoogleMeet) {
+      body.conferenceData = {
+        createRequest: {
+          requestId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      }
+    }
 
-    const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+    const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -80,6 +88,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: data.error?.message || "Failed to create event" }, { status: 500 })
     }
 
+    // Extract Google Meet link if created
+    const meetLink = data.conferenceData?.entryPoints?.find((ep: any) => ep.entryPointType === "video")?.uri
+    const eventLink = meetLink || data.htmlLink || null
+    const isOnline = !!meetLink
+
     // Store in local DB
     await supabase.from("calendar_events").insert({
       user_id: userId,
@@ -91,7 +104,8 @@ export async function POST(req: NextRequest) {
       end_time: new Date(end).toISOString(),
       attendees: attendees || [],
       location: location || null,
-      event_link: data.htmlLink || null,
+      event_link: eventLink,
+      is_online: isOnline,
     })
 
     console.log(`[CALENDAR CREATE] Event created: ${data.id} - ${title}`)
