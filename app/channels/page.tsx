@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Search, Check, X, MessageSquare, User, Globe, Mail, Eye, EyeOff, Loader2, AlertCircle, ExternalLink } from "lucide-react"
+import { Search, Check, X, MessageSquare, User, Globe, Mail, Eye, EyeOff, Loader2, AlertCircle, ExternalLink, CalendarDays } from "lucide-react"
 import { FaWhatsapp, FaTelegram, FaSlack, FaInstagram, FaFacebookMessenger, FaSms, FaMicrosoft } from "react-icons/fa"
-import { SiGmail, SiIcloud, SiGooglecalendar, SiZoho } from "react-icons/si"
+import { SiGmail, SiIcloud, SiGooglecalendar, SiZoho, SiGoogledrive, SiGooglemeet } from "react-icons/si"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
@@ -37,7 +37,16 @@ const MESSAGING_CHANNELS = [
 ]
 
 const CALENDAR_CHANNELS = [
-  { id: "googlecalendar", name: "Google Calendar", icon: <SiGooglecalendar className="h-6 w-6" style={{ color: "#4285F4" }} />, descKey: "channelDescGoogleCalendar", connectable: true },
+  { id: "googlecalendar", name: "Google Calendar", provider: "google", icon: <SiGooglecalendar className="h-6 w-6" style={{ color: "#4285F4" }} />, descKey: "channelDescGoogleCalendar", connectable: true, oauthPath: "/api/calendar/oauth/google/connect" },
+  { id: "calendly", name: "Calendly", provider: "calendly", icon: <CalendarDays className="h-6 w-6" style={{ color: "#006BFF" }} />, descKey: "channelDescCalendly", connectable: true, oauthPath: "/api/calendly/oauth/connect" },
+]
+
+const VIDEO_CHANNELS = [
+  { id: "googlemeet", name: "Google Meet", provider: "google", icon: <SiGooglemeet className="h-6 w-6" style={{ color: "#00832d" }} />, descKey: "channelDescGoogleMeet", connectable: true, usesCalendarConnection: true },
+]
+
+const FILE_CHANNELS = [
+  { id: "googledrive", name: "Google Drive", provider: "googledrive", icon: <SiGoogledrive className="h-6 w-6" style={{ color: "#4285F4" }} />, descKey: "channelDescGoogleDrive", connectable: true, oauthPath: "/api/drive/oauth/google/connect" },
 ]
 
 function getInitials(name: string): string {
@@ -125,9 +134,14 @@ function ChannelsPageContent() {
     const error = searchParams.get("error")
     const email = searchParams.get("email")
     const calendar = searchParams.get("calendar")
+    const drive = searchParams.get("drive")
     const whatsapp = searchParams.get("whatsapp")
     if (success === "connected" || calendar === "connected") {
       setOauthMsg({ type: "success", text: `Connected ${email ? email + " " : ""}successfully` })
+      loadConnections()
+      window.history.replaceState({}, "", window.location.pathname)
+    } else if (drive === "connected") {
+      setOauthMsg({ type: "success", text: "Google Drive connected successfully" })
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (whatsapp === "1") {
@@ -560,7 +574,7 @@ function ChannelsPageContent() {
               </div>
               <div className="space-y-3">
                 {CALENDAR_CHANNELS.map(ch => {
-                  const calConnected = ch.id === "googlecalendar" && calendarConnections["google"]
+                  const calConnected = calendarConnections[ch.provider]
                   return (
                     <div key={ch.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", calConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center">{ch.icon}</div>
@@ -580,7 +594,7 @@ function ChannelsPageContent() {
                       </div>
                       {calConnected ? (
                         <button
-                          onClick={() => handleDisconnectCalendar("google")}
+                          onClick={() => handleDisconnectCalendar(ch.provider)}
                           className="shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
                         >
                           Disconnect
@@ -589,7 +603,94 @@ function ChannelsPageContent() {
                         <button
                           onClick={() => {
                             if (!user) return
-                            window.location.href = `/api/calendar/oauth/google/connect?userId=${user.id}`
+                            window.location.href = `${ch.oauthPath}?userId=${user.id}`
+                          }}
+                          className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                        >
+                          Connect
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Video Meetings */}
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <SiGooglemeet className="h-4 w-4 text-emerald-400" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Video Meetings</span>
+              </div>
+              <div className="space-y-3">
+                {VIDEO_CHANNELS.map(ch => {
+                  const meetConnected = calendarConnections[ch.provider]
+                  return (
+                    <div key={ch.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", meetConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center">{ch.icon}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold">{ch.name}</p>
+                          {meetConnected && (
+                            <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
+                              <Check className="h-3 w-3" /> {t("channelsConnected")}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-sm text-muted-foreground">{t(ch.descKey as any)}</p>
+                        {meetConnected && (
+                          <p className="mt-0.5 text-xs text-emerald-400/80">{meetConnected.calendar_email}</p>
+                        )}
+                      </div>
+                      {meetConnected ? (
+                        <span className="shrink-0 rounded-full border border-emerald-500/30 px-3 py-1 text-xs font-medium text-emerald-400">Active</span>
+                      ) : (
+                        <span className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-muted-foreground">Connect Calendar first</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Files & Storage */}
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <SiGoogledrive className="h-4 w-4 text-emerald-400" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Files & Storage</span>
+              </div>
+              <div className="space-y-3">
+                {FILE_CHANNELS.map(ch => {
+                  const fileConnected = calendarConnections[ch.provider]
+                  return (
+                    <div key={ch.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", fileConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center">{ch.icon}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold">{ch.name}</p>
+                          {fileConnected && (
+                            <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
+                              <Check className="h-3 w-3" /> {t("channelsConnected")}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-sm text-muted-foreground">{t(ch.descKey as any)}</p>
+                        {fileConnected && (
+                          <p className="mt-0.5 text-xs text-emerald-400/80">{fileConnected.calendar_email}</p>
+                        )}
+                      </div>
+                      {fileConnected ? (
+                        <button
+                          onClick={() => handleDisconnectCalendar(ch.provider)}
+                          className="shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                        >
+                          Disconnect
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (!user) return
+                            window.location.href = `${ch.oauthPath}?userId=${user.id}`
                           }}
                           className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
                         >

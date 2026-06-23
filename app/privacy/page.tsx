@@ -84,12 +84,12 @@ const sections = {
     {
       icon: KeyRound,
       title: "16. Google Data Access",
-      body: `Exploro allows users to connect Google services such as Gmail and Google Calendar to provide AI-powered business assistance. When users authorize Google services, Exploro may access email messages, calendar events, and related account information required for these features.`,
+      body: `Exploro allows users to connect Google services such as Gmail, Google Calendar, Google Meet, and Google Drive to provide AI-powered business assistance. Specific scopes requested are limited to: gmail.send, gmail.readonly, calendar.events (event read/write), and drive.file (app-created files only). When users authorize Google services, Exploro may access email messages, calendar events, Drive files created through the app, and related account information required for these features.`,
     },
     {
       icon: Eye,
       title: "17. How Google Data Is Used",
-      body: `Google data is used only to provide requested functionality such as displaying emails, organizing conversations, creating summaries, and managing calendar information inside the user's Exploro workspace.`,
+      body: `Google data is used only to provide requested functionality such as displaying emails, organizing conversations, creating summaries, managing calendar information, creating video meetings, listing and uploading Drive files, and other AI-powered features inside the user's Exploro workspace.`,
     },
     {
       icon: Server,
@@ -181,12 +181,12 @@ const sections = {
     {
       icon: KeyRound,
       title: "16. Acceso a Datos de Google",
-      body: `Exploro permite a los usuarios conectar servicios de Google como Gmail y Google Calendar para proporcionar asistencia comercial impulsada por IA. Cuando los usuarios autorizan los servicios de Google, Exploro puede acceder a mensajes de correo electrónico, eventos de calendario e información relacionada de la cuenta requerida para estas funciones.`,
+      body: `Exploro permite a los usuarios conectar servicios de Google como Gmail, Google Calendar, Google Meet y Google Drive para proporcionar asistencia comercial impulsada por IA. Los alcances específicos solicitados se limitan a: gmail.send, gmail.readonly, calendar.events (lectura/escritura de eventos) y drive.file (solo archivos creados por la aplicación). Cuando los usuarios autorizan los servicios de Google, Exploro puede acceder a mensajes de correo electrónico, eventos de calendario, archivos de Drive creados a través de la aplicación e información relacionada de la cuenta requerida para estas funciones.`,
     },
     {
       icon: Eye,
       title: "17. Cómo se Usan los Datos de Google",
-      body: `Los datos de Google se utilizan únicamente para proporcionar la funcionalidad solicitada, como mostrar correos electrónicos, organizar conversaciones, crear resúmenes y gestionar información de calendario dentro del espacio de trabajo Exploro del usuario.`,
+      body: `Los datos de Google se utilizan únicamente para proporcionar la funcionalidad solicitada, como mostrar correos electrónicos, organizar conversaciones, crear resúmenes, gestionar información de calendario, crear videollamadas, listar y subir archivos de Drive, y otras funciones impulsadas por IA dentro del espacio de trabajo Exploro del usuario.`,
     },
     {
       icon: Server,
