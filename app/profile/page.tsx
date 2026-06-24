@@ -623,6 +623,7 @@ export default function ProfilePage() {
                     <p className="text-sm text-emerald-400">{form.companyName}</p>
                   )}
                   <p className="mt-1 text-sm text-muted-foreground">{form.email}</p>
+                  <p className="mt-0.5 text-xs text-white/40 font-mono">User ID: {user?.id}</p>
                   <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                     <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400">{t("profileSoloPlan")}</span>
                     <span className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{form.location}</span>

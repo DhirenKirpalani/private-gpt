@@ -47,6 +47,18 @@ async function refreshIfNeeded(conn: any): Promise<string> {
   return newAccess
 }
 
+const BUSINESS_KEYWORDS = [
+  "proposal","invoice","contract","quote","order","purchase","payment","receipt",
+  "agreement","deal","lead","client","project","billing","estimate","PO","due",
+  "refund","sales","opportunity","milestone","deliverable","deadline","status",
+  "update","approval","sign","legal",
+]
+
+function matchesBusinessKeywords(text: string): boolean {
+  const lower = text.toLowerCase()
+  return BUSINESS_KEYWORDS.some(k => lower.includes(k.toLowerCase()))
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { userId, providerId, pageToken } = await req.json()
@@ -66,6 +78,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
+    // 15-day window since connection
+    const connectionDate = new Date(conn.created_at)
+    const cutoffDate = new Date(connectionDate)
+    cutoffDate.setDate(cutoffDate.getDate() - 15)
+    const afterTimestamp = Math.floor(cutoffDate.getTime() / 1000)
+    const cutoffISO = cutoffDate.toISOString()
+
     const results: any[] = []
     let nextPageToken: string | null = null
 
@@ -74,10 +93,12 @@ export async function POST(req: NextRequest) {
       const accessToken = await refreshIfNeeded(conn)
 
       if (conn.oauth_provider === "google") {
-        // Fetch via Gmail API with pagination
+        // Fetch via Gmail API with pagination + keyword filter + 15-day window
+        const keywordQuery = BUSINESS_KEYWORDS.map(k => `"${k}"`).join(" OR ")
         const pageTokenParam = pageToken ? `&pageToken=${pageToken}` : ""
+        const qParam = encodeURIComponent(`after:${afterTimestamp} (${keywordQuery})`)
         const listRes = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50${pageTokenParam}`,
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${qParam}${pageTokenParam}`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         )
         const listData = await listRes.json()
@@ -175,8 +196,10 @@ export async function POST(req: NextRequest) {
         const folderData = await folderRes.json()
         console.log(`[EMAIL FETCH] Folders: ${folderData.value?.map((f: any) => `${f.displayName}(${f.totalItemCount})`).join(", ") || "none"}`)
 
-        // Fetch via Microsoft Graph with pagination
-        const url = pageToken || `https://graph.microsoft.com/v1.0/me/messages?$top=50`
+        // Fetch via Microsoft Graph with pagination + keyword filter + 15-day window
+        const keywordFilter = BUSINESS_KEYWORDS.map(k => `"${k}"`).join(" OR ")
+        const baseUrl = `https://graph.microsoft.com/v1.0/me/messages?$top=50&$filter=receivedDateTime ge ${cutoffISO}&$search=${encodeURIComponent(keywordFilter)}`
+        const url = pageToken || baseUrl
         console.log(`[EMAIL FETCH] Microsoft Graph URL: ${url}`)
         const listRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
         const listData = await listRes.json()
@@ -260,7 +283,9 @@ export async function POST(req: NextRequest) {
         console.log(`[IMAP FETCH] Opening INBOX...`)
         await connection.openBox("INBOX")
         console.log(`[IMAP FETCH] INBOX opened`)
-        const searchCriteria = [["ALL"]]
+        // IMAP: search since 15 days before connection
+        const imapDate = cutoffDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-")
+        const searchCriteria = [["SINCE", imapDate]]
         const fetchOptions = { bodies: ["HEADER", "TEXT"], struct: true }
 
         console.log(`[IMAP FETCH] Searching messages with criteria ALL...`)
@@ -281,6 +306,13 @@ export async function POST(req: NextRequest) {
           const from = parsed.from?.text || parsed.from?.value?.[0]?.address || ""
           const to = parsed.to?.text || parsed.to?.value?.map((v: any) => v.address).join(", ") || ""
           console.log(`[IMAP FETCH] Parsed: from="${from}" to="${to}" subject="${parsed.subject || "(no subject)"}"`)
+
+          // Keyword filter for IMAP
+          const combinedText = `${parsed.subject || ""} ${parsed.text || ""}`.toLowerCase()
+          if (!matchesBusinessKeywords(combinedText)) {
+            console.log(`[IMAP FETCH] Skipping uid=${msg.attributes?.uid} — no business keywords`)
+            continue
+          }
 
           const uid = msg.attributes.uid.toString()
           console.log(`[IMAP FETCH] Checking if message uid=${uid} already exists in DB...`)
