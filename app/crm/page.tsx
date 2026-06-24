@@ -673,7 +673,7 @@ export default function CRMPage() {
             <Shield className="h-4 w-4" />
             <span className="hidden sm:inline">Privacy</span>
           </button>
-          <Link href="/profile" className="relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full bg-emerald-600 text-[10px] md:text-xs font-bold text-white hover:bg-emerald-500 transition-colors overflow-hidden">
+          <Link href="/profile" className={cn("relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden", avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
             <span className={avatarUrl ? "hidden" : ""}>{getInitials(userName) || <User className="h-4 w-4 text-white" />}</span>
             {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
           </Link>
@@ -2278,6 +2278,11 @@ export default function CRMPage() {
             </div>
             <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-600/5 p-4">
               <p className="text-sm text-emerald-400">By continuing to use this CRM dashboard, you confirm acceptance of these legal terms.</p>
+            </div>
+            <div className="mt-3 flex items-center justify-center gap-3 text-xs text-muted-foreground">
+              <Link href="/privacy" className="underline hover:text-emerald-400 transition-colors">Privacy Policy</Link>
+              <span className="text-white/20">|</span>
+              <Link href="/terms" className="underline hover:text-emerald-400 transition-colors">Terms of Service</Link>
             </div>
           </div>
         </div>
