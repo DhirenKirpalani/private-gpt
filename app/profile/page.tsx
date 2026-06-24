@@ -1221,15 +1221,17 @@ export default function ProfilePage() {
                       "Korean", "Arabic", "Hindi", "Indonesian", "Turkish",
                       "Thai", "Vietnamese", "Polish", "Swedish", "Danish",
                     ]
-                    const selectedSet = new Set(form.languages.split(",").map(s => s.trim()).filter(Boolean))
+                    const rawLangs: any = form.languages
+                    const langValue = typeof rawLangs === "string" ? rawLangs : (Array.isArray(rawLangs) ? rawLangs.join(", ") : "")
+                    const selectedSet = new Set(langValue.split(",").map((s: string) => s.trim()).filter(Boolean))
                     const toggle = (key: string) => {
                       const next = new Set(selectedSet)
                       if (next.has(key)) next.delete(key)
                       else next.add(key)
                       update("languages", Array.from(next).join(", "))
                     }
-                    const displayText = form.languages.trim()
-                      ? form.languages.split(",").map(s => s.trim()).filter(Boolean).join(", ")
+                    const displayText = langValue.trim()
+                      ? langValue.split(",").map((s: string) => s.trim()).filter(Boolean).join(", ")
                       : t("profilePlaceholderLanguages") || "Select languages..."
                     return (
                       <>
@@ -1239,7 +1241,7 @@ export default function ProfilePage() {
                           onClick={() => setLanguagesDropdownOpen(o => !o)}
                           className={cn(
                             "flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
-                            !form.languages.trim() && "text-muted-foreground"
+                            !langValue.trim() && "text-muted-foreground"
                           )}
                         >
                           <span className="min-w-0 truncate">{displayText}</span>
