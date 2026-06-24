@@ -411,8 +411,9 @@ export default function ChatPage() {
         : ""
       const p = aiProfile
       const arr = (v: any) => Array.isArray(v) ? v.join(", ") : (v ? String(v) : "")
-      const userLanguages = p?.languages
-        ? p.languages.split(",").map((s: string) => s.trim()).filter(Boolean)
+      const langStr = arr(p?.languages)
+      const userLanguages = langStr
+        ? langStr.split(",").map((s: string) => s.trim()).filter(Boolean)
         : ["English"]
       const primaryLang = userLanguages[0] || "English"
       const langList = userLanguages.join(", ")
@@ -499,6 +500,15 @@ export default function ChatPage() {
         `When NO channel context is provided in the prompt, you do NOT have access to the user's inbox, calendar, or WhatsApp. In that case, tell them to ask about their emails, calendar, or WhatsApp to activate the context.`,
         ``,
         websiteContent ? `# Website Content (fetched from ${p?.website})\n${websiteContent}` : "",
+        ``,
+        `# Data Handling & Privacy`,
+        `When the user asks about security protocols, data privacy, how their data is stored, retained, or protected, provide the following accurate facts:`,
+        `- Conversations and messages are stored persistently in a secure database (Supabase) associated with the user's account. They persist across sessions and can be accessed later.`,
+        `- Messages are encrypted in transit using TLS/SSL.`,
+        `- Uploaded documents to the Knowledge Base are stored in secure cloud storage and retained for operational use.`,
+        `- The platform does not sell or share user data with third parties.`,
+        `- OAuth integrations (Gmail, Calendar, WhatsApp) use minimal, scope-limited permissions, and the platform only accesses the specific data requested by the user.`,
+        `- Do NOT claim that messages are session-only, discarded after the response, or that the platform has "zero retention." That is false.`,
         ``,
         `# Core Instructions`,
         `- You are ${p?.ai_name || "Nira"} — stay in character at all times`,
