@@ -78,13 +78,14 @@ export function Navbar() {
       <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between overflow-visible px-4 sm:px-6">
 
         {/* Brand */}
-        <Link href="/" className="flex shrink-0 items-center overflow-visible" onClick={() => { setMobileOpen(false); setActiveSection("") }}>
+        <Link href="/" className="flex shrink-0 items-center gap-2 overflow-visible" onClick={() => { setMobileOpen(false); setActiveSection("") }}>
           <img
             src="/assets/images/exploro-logo.png"
             alt="Exploro"
             className="w-auto object-contain transition-transform duration-300 hover:scale-105"
             style={{ height: "44px", transformOrigin: "left center" }}
           />
+          <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
 
         {/* Desktop nav — hidden on mobile */}

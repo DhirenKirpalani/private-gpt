@@ -6,7 +6,7 @@ import {
   Plus, MessageSquare, Search, Send, BookOpen, Globe, Radio,
   Bot, Copy, RefreshCw, Share2, Sparkles,
   PanelLeftClose, X, User, Paperclip, File, CheckCircle2, ChevronDown,
-  Mail, Phone, CalendarDays, Check, Loader2,
+  Mail, Phone, CalendarDays, Check, Loader2, Menu,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
@@ -87,6 +87,7 @@ export default function ChatPage() {
   const { user, avatarUrl, loading: authLoading } = useAuth()
   const { t, lang, setLang } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [navOpen, setNavOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -992,6 +993,13 @@ export default function ChatPage() {
       >
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setNavOpen(true)}
+            className="flex md:hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <button
             onClick={toggleSidebar}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-muted transition-colors"
           >
@@ -1004,6 +1012,7 @@ export default function ChatPage() {
               className="w-auto object-contain"
               style={{ height: "40px" }}
             />
+            <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
           </Link>
         </div>
         <div className="hidden flex-1 justify-center md:flex">
@@ -1017,7 +1026,7 @@ export default function ChatPage() {
         </div>
         <div className="flex flex-1 justify-end items-center gap-2 md:gap-3 md:flex-none">
           {/* Language toggle */}
-          <div className="hidden items-center rounded-lg border border-white/10 bg-white/5 p-0.5 md:inline-flex">
+          <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
             <button
               onClick={() => setLang("en")}
               className={cn(
@@ -1071,9 +1080,7 @@ export default function ChatPage() {
         )}
 
         {/* ── NAV RAIL (desktop only) ── */}
-        <div className="relative z-10 hidden md:block">
-          <NavRail />
-        </div>
+        <NavRail mobileOpen={navOpen} onClose={() => setNavOpen(false)} />
 
         {/* Mobile sidebar backdrop */}
         {sidebarOpen && (

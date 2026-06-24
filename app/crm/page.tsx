@@ -7,11 +7,12 @@ import {
   Search, Plus, Phone, Mail, MapPin, Building2,
   Filter, CircleDollarSign, ChevronDown, X,
   ClipboardList, FileText, Send, Inbox,
-  Star, StarOff, Shield, User, Loader2, Reply, Trash2, Check, Pencil,
+  Star, StarOff, Shield, User, Loader2, Reply, Trash2, Check, Pencil, Menu, PanelLeft,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
+import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
 import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols } from "@/lib/supabase"
 
@@ -46,6 +47,9 @@ type Contact = { id: string; name: string; company: string | null; role: string 
 
 export default function CRMPage() {
   const { user } = useAuth()
+  const { t, lang, setLang } = useI18n()
+  const [navOpen, setNavOpen] = useState(false)
+  const [crmSidebarOpen, setCrmSidebarOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("Overview")
   const [search, setSearch] = useState("")
@@ -643,6 +647,13 @@ export default function CRMPage() {
       {/* ── HEADER ── */}
       <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setNavOpen(true)}
+            className="flex md:hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
           <Link href="/" className="flex shrink-0 items-center gap-2 overflow-visible">
             <Image
               src="/assets/images/exploro-logo.png"
@@ -653,6 +664,7 @@ export default function CRMPage() {
               className="w-auto object-contain"
               style={{ height: "40px" }}
             />
+            <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
           </Link>
         </div>
         <div className="hidden flex-1 justify-center md:flex">
@@ -660,18 +672,43 @@ export default function CRMPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               className="w-full rounded-full border bg-muted/50 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-              placeholder="Search contacts, deals, companies..."
+              placeholder={t("crmSearchPlaceholder")}
             />
           </div>
         </div>
         <div className="flex flex-1 justify-end items-center gap-2 md:gap-3 md:flex-none">
+          {/* Language toggle */}
+          <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
+            <button
+              onClick={() => setLang("en")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                lang === "en"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-muted-foreground hover:text-white"
+              )}
+            >
+              EN
+            </button>
+            <button
+              onClick={() => setLang("es")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                lang === "es"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-muted-foreground hover:text-white"
+              )}
+            >
+              ES
+            </button>
+          </div>
           <button
             onClick={() => setPrivacyOpen(true)}
             className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="Privacy Notice"
           >
             <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">Privacy</span>
+            <span className="hidden sm:inline">{t("crmPrivacy")}</span>
           </button>
           <Link href="/profile" className={cn("relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden", avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
             <span className={avatarUrl ? "hidden" : ""}>{getInitials(userName) || <User className="h-4 w-4 text-white" />}</span>
@@ -682,26 +719,43 @@ export default function CRMPage() {
 
       {/* ── BODY ── */}
       <div className="flex flex-1 overflow-hidden">
-        <NavRail />
+        <NavRail mobileOpen={navOpen} onClose={() => setNavOpen(false)} />
+
+        {/* Mobile CRM sidebar backdrop */}
+        {crmSidebarOpen && (
+          <div className="fixed inset-0 z-20 bg-black/50 md:hidden" onClick={() => setCrmSidebarOpen(false)} />
+        )}
 
         {/* ── CRM OBJECT NAV + CONTACTS ── */}
-        <aside className="flex w-64 shrink-0 flex-col border-r bg-card/30">
+        <aside className={cn(
+          "flex w-64 shrink-0 flex-col border-r bg-[#1e2533] md:bg-card/30 shadow-2xl md:shadow-none",
+          "absolute inset-y-0 left-0 z-30 md:static md:z-auto",
+          !crmSidebarOpen && "hidden md:flex"
+        )}>
           {/* Object nav */}
           <div className="flex flex-1 flex-col p-4">
-            <h2 className="mb-4 text-sm font-semibold">CRM</h2>
+            <div className="mb-4 flex items-center justify-between md:block">
+              <h2 className="text-sm font-semibold">CRM</h2>
+              <button
+                onClick={() => setCrmSidebarOpen(false)}
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors md:hidden"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
             {/* Sidebar nav tabs */}
             <div className="flex-1 space-y-1">
               {tabs.map(tab => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => { setActiveTab(tab); setCrmSidebarOpen(false) }}
                   className={cn(
                     "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
                     activeTab === tab ? "bg-emerald-600/10 text-emerald-400 font-medium" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                   )}
                 >
-                  <span>{tab}</span>
+                  <span>{tab === "Overview" ? t("crmOverviewTab") : tab === "Email" ? t("crmEmailTab") : tab === "Messages" ? t("crmMessages") : tab === "Calendar" ? t("crmCalendarTab") : tab}</span>
                   {tab === "Email" && unreadCount > 0 && (
                     <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
                       {unreadCount > 99 ? "99+" : unreadCount}
@@ -762,8 +816,8 @@ export default function CRMPage() {
                     <div className="fixed inset-0 z-10" onClick={() => setShowChannelMenu(false)} />
                     <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
                       <div className="border-b border-white/5 px-3 py-2">
-                        <p className="text-xs font-semibold text-white">Channels</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">Select a channel to view messages</p>
+                        <p className="text-xs font-semibold text-white">{t("crmChannels")}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{t("crmSelectChannel")}</p>
                       </div>
                       <div className="py-1">
                         {channels.map((ch, i) => (
@@ -777,7 +831,7 @@ export default function CRMPage() {
                             </span>
                             <span className="flex-1 truncate text-white">{ch.label}</span>
                             <span className={cn("shrink-0 text-[10px] font-medium", ch.connected ? "text-emerald-400" : "text-muted-foreground")}>
-                              {ch.connected ? "Connected" : ch.id === "email" ? "Connect" : "Soon"}
+                              {ch.connected ? t("crmConnected") : ch.id === "email" ? t("crmConnect") : t("crmSoon")}
                             </span>
                           </button>
                         ))}
@@ -795,7 +849,7 @@ export default function CRMPage() {
                 }}
                 className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
               >
-                <Send className="h-3.5 w-3.5" /> Send
+                <Send className="h-3.5 w-3.5" /> {t("crmSend")}
               </button>
             </div>
           </div>
@@ -809,7 +863,7 @@ export default function CRMPage() {
               >
                 <div className="flex items-center gap-2">
                   <span className={cn("h-2 w-2 rounded-full", activeCh.color)} />
-                  {activeCh.label}
+                  {activeCh.label === "No channels" ? t("crmNoChannels") : activeCh.label}
                 </div>
                 <ChevronDown className="h-3 w-3 text-muted-foreground" />
               </button>
@@ -818,8 +872,8 @@ export default function CRMPage() {
                   <div className="fixed inset-0 z-10" onClick={() => setShowChannelMenu(false)} />
                   <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
                     <div className="border-b border-white/5 px-3 py-2">
-                      <p className="text-xs font-semibold text-white">Channels</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Select a channel to view messages</p>
+                      <p className="text-xs font-semibold text-white">{t("crmChannels")}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{t("crmSelectChannel")}</p>
                     </div>
                     <div className="py-1">
                       {channels.map((ch, i) => (
@@ -829,7 +883,7 @@ export default function CRMPage() {
                           className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
                         >
                           <span className="flex-1 truncate text-white">{ch.label}</span>
-                          <span className="shrink-0 text-[10px] font-medium text-emerald-400">Connected</span>
+                          <span className="shrink-0 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
                         </button>
                       ))}
                     </div>
@@ -846,7 +900,7 @@ export default function CRMPage() {
               }}
               className="flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white"
             >
-              <Send className="h-3.5 w-3.5" /> Send
+              <Send className="h-3.5 w-3.5" /> {t("crmSend")}
             </button>
           </div>
           </>
@@ -854,53 +908,64 @@ export default function CRMPage() {
 
 
           {/* Tab content */}
-          <div className={cn("flex-1", (activeTab === "Email" || activeTab === "Messages" || activeTab === "Calendar") ? "flex flex-col overflow-hidden" : "overflow-y-auto p-4 md:p-6")}>
+          <div className={cn("flex-1", (activeTab === "Email" || activeTab === "Messages" || activeTab === "Calendar") ? "flex flex-col overflow-hidden" : "overflow-y-auto p-4 sm:p-6")}>
+
+            {/* Mobile CRM sidebar toggle */}
+            <div className="flex md:hidden items-center gap-2 pb-3">
+              <button
+                onClick={() => setCrmSidebarOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+              >
+                <PanelLeft className="h-3.5 w-3.5" />
+                {t("crmTabs")}
+              </button>
+            </div>
 
             {/* Empty state for overview when no contact selected */}
             {activeTab === "Overview" && !contact && (
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                 <div className="mx-auto max-w-4xl space-y-6">
 
                   {/* Header */}
                   <div>
-                    <h1 className="text-xl font-bold tracking-tight">CRM Overview</h1>
-                    <p className="mt-0.5 text-sm text-muted-foreground">Summary of your connected channels and activity</p>
+                    <h1 className="text-xl font-bold tracking-tight">{t("crmOverviewTitle")}</h1>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{t("crmOverviewSubtitle")}</p>
                   </div>
 
                   {/* Stats */}
-                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
                     {[
                       {
-                        label: "Inbox",
+                        label: "crmInbox",
                         value: inboxMessages.length,
-                        sub: `${inboxMessages.filter((m: any) => !m.read).length} unread`,
+                        sub: `${inboxMessages.filter((m: any) => !m.read).length} ${t("crmUnread")}`,
                         icon: Mail,
                         color: "text-blue-400",
                         bg: "bg-blue-500/10",
                         action: () => setActiveTab("Email"),
                       },
                       {
-                        label: "Messages",
+                        label: "crmMessages",
                         value: whatsappMessages.length,
-                        sub: `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length} unread`,
+                        sub: `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")}`,
                         icon: Phone,
                         color: "text-emerald-400",
                         bg: "bg-emerald-500/10",
                         action: () => setActiveTab("Messages"),
                       },
                       {
-                        label: "Events",
+                        label: "crmEvents",
                         value: calendarEvents.length,
-                        sub: "upcoming",
+                        sub: t("crmUpcoming"),
                         icon: ClipboardList,
                         color: "text-amber-400",
                         bg: "bg-amber-500/10",
                         action: () => setActiveTab("Calendar"),
                       },
                       {
-                        label: "Contacts",
+                        label: "crmContacts",
                         value: contacts.length,
-                        sub: `${contacts.filter((c: any) => c.starred).length} starred`,
+                        sub: `${contacts.filter((c: any) => c.starred).length} ${t("crmStarred")}`,
                         icon: User,
                         color: "text-purple-400",
                         bg: "bg-purple-500/10",
@@ -908,16 +973,16 @@ export default function CRMPage() {
                       },
                     ].map(({ label, value, sub, icon: Icon, color, bg, action }) => (
                       <button key={label} onClick={action}
-                        className="group rounded-xl border bg-card p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                        className="group rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
                         <div className="flex items-start justify-between">
-                          <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", bg)}>
-                            <Icon className={cn("h-4 w-4", color)} />
+                          <div className={cn("flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg", bg)}>
+                            <Icon className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4", color)} />
                           </div>
-                          <span className="text-2xl font-bold tabular-nums">{value >= 99 ? "99+" : value}</span>
+                          <span className="text-xl sm:text-2xl font-bold tabular-nums">{value >= 99 ? "99+" : value}</span>
                         </div>
-                        <div className="mt-3">
-                          <p className="text-sm font-semibold">{label}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
+                        <div className="mt-2 sm:mt-3">
+                          <p className="text-xs sm:text-sm font-semibold">{t(label as any)}</p>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{sub}</p>
                         </div>
                       </button>
                     ))}
@@ -925,27 +990,27 @@ export default function CRMPage() {
 
                   {/* Connected Channels */}
                   <div>
-                    <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider">Connected Channels</h2>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider">{t("crmConnectedChannels")}</h2>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 min-w-0">
                       {/* Email */}
                       {(() => {
                         const conn = emailConnections.find((c: any) => c.status === "connected")
                         return (
                           <button onClick={() => setActiveTab("Email")}
-                            className="flex items-center gap-3 rounded-xl border bg-card p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-                              <Mail className="h-5 w-5 text-blue-400" />
+                            className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
+                              <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-semibold">Gmail</p>
                                 {conn
-                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Connected</span>
-                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Not connected</span>
+                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
+                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{t("crmNotConnected")}</span>
                                 }
                               </div>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {conn ? `${inboxMessages.filter((m: any) => !m.read).length} unread · ${inboxMessages.length} total` : "Go to Channels to connect"}
+                                {conn ? `${inboxMessages.filter((m: any) => !m.read).length} ${t("crmUnread")} · ${inboxMessages.length} ${t("crmTotal")}` : t("crmGoToChannels")}
                               </p>
                             </div>
                           </button>
@@ -956,20 +1021,20 @@ export default function CRMPage() {
                         const conn = whatsappConnections.length > 0 ? whatsappConnections[0] : null
                         return (
                           <button onClick={() => setActiveTab("Messages")}
-                            className="flex items-center gap-3 rounded-xl border bg-card p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
-                              <Phone className="h-5 w-5 text-emerald-400" />
+                            className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+                              <Phone className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-semibold">WhatsApp</p>
                                 {conn
-                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Connected</span>
-                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Not connected</span>
+                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
+                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{t("crmNotConnected")}</span>
                                 }
                               </div>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {conn ? `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length} unread · ${whatsappMessages.length} total` : "Go to Channels to connect"}
+                                {conn ? `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")} · ${whatsappMessages.length} ${t("crmTotal")}` : t("crmGoToChannels")}
                               </p>
                             </div>
                           </button>
@@ -981,20 +1046,20 @@ export default function CRMPage() {
                         const nextEvent = [...calendarEvents].sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
                         return (
                           <button onClick={() => setActiveTab("Calendar")}
-                            className="flex items-center gap-3 rounded-xl border bg-card p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
-                              <ClipboardList className="h-5 w-5 text-amber-400" />
+                            className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+                              <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-semibold">Google Calendar</p>
                                 {conn
-                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Connected</span>
-                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Not connected</span>
+                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
+                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{t("crmNotConnected")}</span>
                                 }
                               </div>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {conn && nextEvent ? `Next: ${nextEvent.summary?.slice(0, 28) || "—"}` : conn ? `${calendarEvents.length} events` : "Go to Channels to connect"}
+                                {conn && nextEvent ? `${t("crmNext")} ${nextEvent.summary?.slice(0, 28) || "—"}` : conn ? `${calendarEvents.length} ${t("crmEventsCount")}` : t("crmGoToChannels")}
                               </p>
                             </div>
                           </button>
@@ -1008,13 +1073,13 @@ export default function CRMPage() {
                     {/* Recent emails */}
                     <div className="rounded-xl border bg-card overflow-hidden">
                       <div className="flex items-center justify-between border-b px-4 py-3">
-                        <h3 className="text-sm font-semibold">Recent Emails</h3>
-                        <button onClick={() => setActiveTab("Email")} className="text-xs text-emerald-400 hover:underline">View all →</button>
+                        <h3 className="text-sm font-semibold">{t("crmRecentEmails")}</h3>
+                        <button onClick={() => setActiveTab("Email")} className="text-xs text-emerald-400 hover:underline">{t("crmViewAll")}</button>
                       </div>
                       {inboxMessages.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center">
                           <Mail className="mb-2 h-5 w-5 text-muted-foreground opacity-40" />
-                          <p className="text-xs text-muted-foreground">No emails yet</p>
+                          <p className="text-xs text-muted-foreground">{t("crmNoEmailsYet")}</p>
                         </div>
                       ) : (
                         <div className="divide-y">
@@ -1038,13 +1103,13 @@ export default function CRMPage() {
                     {/* Upcoming events */}
                     <div className="rounded-xl border bg-card overflow-hidden">
                       <div className="flex items-center justify-between border-b px-4 py-3">
-                        <h3 className="text-sm font-semibold">Upcoming Events</h3>
-                        <button onClick={() => setActiveTab("Calendar")} className="text-xs text-emerald-400 hover:underline">View all →</button>
+                        <h3 className="text-sm font-semibold">{t("crmUpcomingEvents")}</h3>
+                        <button onClick={() => setActiveTab("Calendar")} className="text-xs text-emerald-400 hover:underline">{t("crmViewAll")}</button>
                       </div>
                       {calendarEvents.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center">
                           <ClipboardList className="mb-2 h-5 w-5 text-muted-foreground opacity-40" />
-                          <p className="text-xs text-muted-foreground">No upcoming events</p>
+                          <p className="text-xs text-muted-foreground">{t("crmNoUpcomingEvents")}</p>
                         </div>
                       ) : (
                         <div className="divide-y">
@@ -1904,13 +1969,13 @@ export default function CRMPage() {
                 {calendarConnections.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <ClipboardList className="mb-2 h-6 w-6 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">No calendar connected</p>
-                    <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">Go to Channels to connect →</Link>
+                    <p className="text-sm text-muted-foreground">{t("crmNotConnected")}</p>
+                    <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">{t("crmGoToChannels")} →</Link>
                   </div>
                 ) : calendarEvents.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <ClipboardList className="mb-2 h-6 w-6 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">{calendarFetched ? "No upcoming events" : "Click Sync Calendar to load events"}</p>
+                    <p className="text-sm text-muted-foreground">{calendarFetched ? t("crmNoUpcomingEvents") : t("crmSyncCalendar")}</p>
                   </div>
                 ) : calendarView === "table" ? (
                   <div className="rounded-xl border overflow-x-auto" onClick={() => setCalStatusOpen(null)}>
@@ -2109,7 +2174,7 @@ export default function CRMPage() {
                           disabled={!messageText.trim() || !activeCh.connected}
                           className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-40"
                         >
-                          <Send className="h-3.5 w-3.5" /> Send {activeCh.label}
+                          <Send className="h-3.5 w-3.5" /> {t("crmSend")} {activeCh.label}
                         </button>
                       </div>
                     </>

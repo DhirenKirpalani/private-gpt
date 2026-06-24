@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Search, Check, X, MessageSquare, User, Globe, Mail, Eye, EyeOff, Loader2, AlertCircle, ExternalLink, CalendarDays } from "lucide-react"
+import { Search, Check, X, MessageSquare, User, Globe, Mail, Eye, EyeOff, Loader2, AlertCircle, ExternalLink, CalendarDays, Menu } from "lucide-react"
 import { FaWhatsapp, FaTelegram, FaSlack, FaInstagram, FaFacebookMessenger, FaSms, FaMicrosoft } from "react-icons/fa"
 import { SiGmail, SiIcloud, SiGooglecalendar, SiZoho, SiGoogledrive, SiGooglemeet } from "react-icons/si"
 import { NavRail } from "@/components/nav-rail"
@@ -59,6 +59,7 @@ type SmtpForm = { email_address: string; smtp_host: string; smtp_port: string; s
 function ChannelsPageContent() {
   const { user, avatarUrl, loading: authLoading } = useAuth()
   const { t, lang, setLang } = useI18n()
+  const [navOpen, setNavOpen] = useState(false)
   const searchParams = useSearchParams()
   const [userInitials, setUserInitials] = useState("")
   const [emailConnections, setEmailConnections] = useState<Record<string, EmailConnection>>({})
@@ -407,8 +408,16 @@ function ChannelsPageContent() {
 
       {/* Header */}
       <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
-        <Link href="/" className="flex shrink-0 items-center overflow-hidden">
+        <button
+          onClick={() => setNavOpen(true)}
+          className="flex md:hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <Link href="/" className="flex shrink-0 items-center gap-2 overflow-hidden">
           <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "40px" }} />
+          <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
         <div className="hidden flex-1 justify-center md:flex">
           <div className="relative w-full max-w-lg">
@@ -417,7 +426,7 @@ function ChannelsPageContent() {
           </div>
         </div>
         <div className="flex flex-1 justify-end items-center gap-2 md:gap-3 md:flex-none">
-          <div className="hidden items-center rounded-lg border border-white/10 bg-white/5 p-0.5 md:inline-flex">
+          <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
             {(["en", "es"] as const).map(l => (
               <button key={l} onClick={() => setLang(l)} className={cn("rounded-md px-2.5 py-1 text-xs font-semibold transition-all", lang === l ? "bg-emerald-600 text-white shadow-sm" : "text-muted-foreground hover:text-white")}>
                 {l.toUpperCase()}
@@ -442,15 +451,15 @@ function ChannelsPageContent() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <NavRail />
-        <main className="flex-1 overflow-y-auto p-6 md:p-8">
-          <div className="mx-auto max-w-2xl space-y-10">
+        <NavRail mobileOpen={navOpen} onClose={() => setNavOpen(false)} />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+          <div className="mx-auto max-w-2xl space-y-6 sm:space-y-10">
 
             {/* Email providers */}
             <div>
               <div className="mb-6">
-                <h1 className="text-2xl font-bold tracking-tight">{t("channelsTitle")}</h1>
-                <p className="mt-1 text-muted-foreground">{t("channelsSubtitle")}</p>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{t("channelsTitle")}</h1>
+                <p className="mt-1 text-sm sm:text-base text-muted-foreground">{t("channelsSubtitle")}</p>
               </div>
               <div className="mb-3 flex items-center gap-2">
                 <Mail className="h-4 w-4 text-emerald-400" />
@@ -462,8 +471,8 @@ function ChannelsPageContent() {
                   const connected = !!conn
                   const hasError = connected && conn.status === "error"
                   return (
-                    <div key={provider.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", connected ? (hasError ? "border-red-500/30 bg-[#2a3444]" : "border-emerald-500/30 bg-[#2a3444]") : "border-white/5 bg-[#2a3444]")}>
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center">{provider.icon}</div>
+                    <div key={provider.id} className={cn("card-3d flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5", connected ? (hasError ? "border-red-500/30 bg-[#2a3444]" : "border-emerald-500/30 bg-[#2a3444]") : "border-white/5 bg-[#2a3444]")}>
+                      <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{provider.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold">{provider.name}</p>
@@ -483,22 +492,22 @@ function ChannelsPageContent() {
                           <p className={cn("mt-0.5 text-xs", hasError ? "text-red-400/80" : "text-emerald-400/80")}>{conn.email_address}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
                         {provider.isOAuth && !connected && (
                           <button
                             onClick={() => {
                               if (!user) return
                               window.location.href = `/api/email/oauth/${provider.id}/connect?userId=${user.id}`
                             }}
-                            className="rounded-lg px-4 py-2 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                            className="w-full sm:w-auto rounded-lg px-4 py-2 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
                           >
-                            Sign In
+                            {t("signIn")}
                           </button>
                         )}
                         {(!provider.isOAuth || connected) && (
                           <button
                             onClick={() => connected ? handleDisconnect(provider.id) : openModal(provider)}
-                            className={cn("rounded-lg px-4 py-2 text-sm font-semibold transition-colors", connected ? "border border-red-500/30 text-red-400 hover:bg-red-500/10" : "bg-emerald-600 text-white hover:bg-emerald-700")}
+                            className={cn("w-full sm:w-auto rounded-lg px-4 py-2 text-sm font-semibold transition-colors", connected ? "border border-red-500/30 text-red-400 hover:bg-red-500/10" : "bg-emerald-600 text-white hover:bg-emerald-700")}
                           >
                             {connected ? t("channelsDisconnect") : t("channelsConnect")}
                           </button>
@@ -522,8 +531,8 @@ function ChannelsPageContent() {
                   const waConnected = isWhatsApp && Object.keys(whatsappConnections).length > 0
                   const waConn = waConnected ? Object.values(whatsappConnections)[0] : null
                   return (
-                    <div key={ch.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", waConn ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center">{ch.icon}</div>
+                    <div key={ch.id} className={cn("card-3d flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5", waConn ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                      <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold">{ch.name}</p>
@@ -542,7 +551,7 @@ function ChannelsPageContent() {
                         waConn ? (
                           <button
                             onClick={() => handleDisconnectWhatsApp(waConn.phone_number_id)}
-                            className="shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
                           >
                             Disconnect
                           </button>
@@ -552,13 +561,13 @@ function ChannelsPageContent() {
                               if (!user) return
                               handleWhatsAppConnect()
                             }}
-                            className="shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+                            className="w-full sm:w-auto shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
                           >
                             Connect
                           </button>
                         )
                       ) : (
-                        <span className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-muted-foreground">Coming soon</span>
+                        <span className="w-full sm:w-auto text-center shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-muted-foreground">Coming soon</span>
                       )}
                     </div>
                   )
@@ -576,8 +585,8 @@ function ChannelsPageContent() {
                 {CALENDAR_CHANNELS.map(ch => {
                   const calConnected = calendarConnections[ch.provider]
                   return (
-                    <div key={ch.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", calConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center">{ch.icon}</div>
+                    <div key={ch.id} className={cn("card-3d flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5", calConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                      <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold">{ch.name}</p>
@@ -595,7 +604,7 @@ function ChannelsPageContent() {
                       {calConnected ? (
                         <button
                           onClick={() => handleDisconnectCalendar(ch.provider)}
-                          className="shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                          className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
                         >
                           Disconnect
                         </button>
@@ -605,7 +614,7 @@ function ChannelsPageContent() {
                             if (!user) return
                             window.location.href = `${ch.oauthPath}?userId=${user.id}`
                           }}
-                          className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                          className="w-full sm:w-auto shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
                         >
                           Connect
                         </button>
@@ -626,8 +635,8 @@ function ChannelsPageContent() {
                 {VIDEO_CHANNELS.map(ch => {
                   const meetConnected = calendarConnections[ch.provider]
                   return (
-                    <div key={ch.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", meetConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center">{ch.icon}</div>
+                    <div key={ch.id} className={cn("card-3d flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5", meetConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                      <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold">{ch.name}</p>
@@ -663,8 +672,8 @@ function ChannelsPageContent() {
                 {FILE_CHANNELS.map(ch => {
                   const fileConnected = calendarConnections[ch.provider]
                   return (
-                    <div key={ch.id} className={cn("card-3d flex items-center gap-4 rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5", fileConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center">{ch.icon}</div>
+                    <div key={ch.id} className={cn("card-3d flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5", fileConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                      <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold">{ch.name}</p>
