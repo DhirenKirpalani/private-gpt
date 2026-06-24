@@ -3,14 +3,14 @@
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Search, Save, Info, X, ChevronDown, Check, Loader2, User, LogOut } from "lucide-react"
+import { Search, Save, Info, X, ChevronDown, Check, Loader2, User, LogOut, Menu } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/app/auth-provider"
 import { useI18n } from "@/lib/i18n"
-import { getProfile, upsertProfile, uploadAvatar, uploadLogo, signOut, type Profile } from "@/lib/supabase"
+import { getProfile, upsertProfile, uploadAvatar, uploadLogo, signOut, type Profile, getEmailConnections, getWhatsAppConnections, getCalendarConnections } from "@/lib/supabase"
 import { toast, Toaster } from "@/components/ui/toast"
 import { Calendar } from "@/components/ui/calendar"
 
@@ -242,6 +242,10 @@ export default function ProfilePage() {
   const [languagesDropdownOpen, setLanguagesDropdownOpen] = useState(false)
   const [form, setForm] = useState(defaultForm)
   const [originalForm, setOriginalForm] = useState(defaultForm)
+  const [navOpen, setNavOpen] = useState(false)
+  const [emailConnections, setEmailConnections] = useState<any[]>([])
+  const [whatsappConnections, setWhatsappConnections] = useState<any[]>([])
+  const [calendarConnections, setCalendarConnections] = useState<any[]>([])
 
   useEffect(() => {
     if (authLoading) return
@@ -252,7 +256,15 @@ export default function ProfilePage() {
       }
       try {
         setLoadError(null)
-        const profile = await getProfile(user.id)
+        const [profile, emailConns, waConns, calConns] = await Promise.all([
+          getProfile(user.id),
+          getEmailConnections(user.id),
+          getWhatsAppConnections(user.id),
+          getCalendarConnections(user.id),
+        ])
+        setEmailConnections(emailConns)
+        setWhatsappConnections(waConns)
+        setCalendarConnections(calConns)
         console.log("[AVATAR DEBUG] Raw profile from DB:", profile)
         console.log("[AVATAR DEBUG] avatar_url field:", profile?.avatar_url)
         const loaded = profileToForm(profile)
@@ -482,8 +494,16 @@ export default function ProfilePage() {
 
       {/* Header */}
       <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
-        <Link href="/" className="flex shrink-0 items-center overflow-hidden">
+        <button
+          onClick={() => setNavOpen(true)}
+          className="flex md:hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <Link href="/" className="flex shrink-0 items-center gap-2 overflow-hidden">
           <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "40px" }} />
+          <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
         <div className="flex flex-1 justify-end items-center gap-2 md:gap-3">
           {/* Language toggle */}
@@ -529,19 +549,19 @@ export default function ProfilePage() {
 
       <div className="flex flex-1 overflow-hidden">
 
-        <NavRail />
+        <NavRail mobileOpen={navOpen} onClose={() => setNavOpen(false)} />
 
         {/* Main */}
         <main className="flex-1 overflow-y-auto">
-          <div className="sticky top-0 z-30 flex items-center justify-between border-b border-white/5 bg-background/95 backdrop-blur-md px-8 py-4">
+          <div className="sticky top-0 z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 bg-background/95 backdrop-blur-md px-4 py-3 sm:px-8 sm:py-4">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">{t("profileTitle")}</h1>
-                <p className="mt-1 text-sm text-muted-foreground">{t("profileSubtitle")}</p>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{t("profileTitle")}</h1>
+                <p className="mt-0.5 sm:mt-1 text-sm text-muted-foreground">{t("profileSubtitle")}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-400"
+                  className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs sm:text-sm font-semibold text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-400 sm:px-4"
                 >
                   <LogOut className="h-4 w-4" />
                   {t("profileLogout")}
@@ -550,7 +570,7 @@ export default function ProfilePage() {
                   onClick={() => handleSave()}
                   disabled={saveLoading || !hasChanges}
                   className={cn(
-                    "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-colors sm:px-4",
                     saved ? "bg-emerald-600/20 text-emerald-400" : hasChanges ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-muted text-muted-foreground cursor-not-allowed",
                     saveLoading && "opacity-70 cursor-not-allowed"
                   )}
@@ -561,7 +581,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="mx-auto max-w-2xl space-y-8 px-8 pt-8 pb-8">
+            <div className="mx-auto max-w-2xl space-y-6 sm:space-y-8 px-4 pt-6 pb-6 sm:px-8 sm:pt-8 sm:pb-8">
 
             {loading && (
               <div className="flex items-center justify-center py-12">
@@ -575,10 +595,10 @@ export default function ProfilePage() {
               </div>
             )}
 
-            <div className={cn("space-y-8", loading && "hidden")}>
+            <div className={cn("space-y-6 sm:space-y-8", loading && "hidden")}>
 
             {/* Account Profile Card */}
-            <section className="card-3d mb-8 rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
+            <section className="card-3d mb-6 sm:mb-8 rounded-2xl border border-white/5 bg-[#2a3444] p-4 sm:p-6 shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
                 <div className="relative">
                   {(() => {
@@ -623,7 +643,7 @@ export default function ProfilePage() {
                     <p className="text-sm text-emerald-400">{form.companyName}</p>
                   )}
                   <p className="mt-1 text-sm text-muted-foreground">{form.email}</p>
-                  <p className="mt-0.5 text-xs text-white/40 font-mono">User ID: {user?.id}</p>
+                  <p className="mt-0.5 text-xs text-white/40 font-mono break-all">User ID: {user?.id}</p>
                   <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                     <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400">{t("profileSoloPlan")}</span>
                     <span className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{form.location}</span>
@@ -633,9 +653,9 @@ export default function ProfilePage() {
             </section>
 
             {/* Personal */}
-            <section className="relative z-20 card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
+            <section className="relative z-20 card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-4 sm:p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionPersonal")}</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="fullName">{t("profileLabelFullName")}</Label>
                   <Input id="fullName" value={form.fullName} onChange={e => update("fullName", e.target.value)} />
@@ -743,12 +763,12 @@ export default function ProfilePage() {
                       id="locationDropdownBtn"
                       onClick={() => setLocationDropdownOpen(o => !o)}
                       className={cn(
-                        "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
+                        "flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
                         !form.location && "text-muted-foreground"
                       )}
                     >
-                      {form.location || "Select a country..."}
-                      <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", locationDropdownOpen && "rotate-180")} />
+                      <span className="min-w-0 truncate">{form.location || "Select a country..."}</span>
+                      <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", locationDropdownOpen && "rotate-180")} />
                     </button>
                     {locationDropdownOpen && (
                       <div
@@ -809,9 +829,9 @@ export default function ProfilePage() {
             </section>
 
             {/* Company */}
-            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
+            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-4 sm:p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionCompany")}</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="companyName">{t("profileLabelCompanyName")}</Label>
                   <Input id="companyName" value={form.companyName} onChange={e => update("companyName", e.target.value)} />
@@ -845,12 +865,12 @@ export default function ProfilePage() {
                             id="industryDropdownBtn"
                             onClick={() => setIndustryDropdownOpen(o => !o)}
                             className={cn(
-                              "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
+                              "flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
                               !form.industry && "text-muted-foreground"
                             )}
                           >
-                            {industryLabels[form.industry] || form.industry}
-                            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", industryDropdownOpen && "rotate-180")} />
+                            <span className="min-w-0 truncate">{industryLabels[form.industry] || form.industry}</span>
+                            <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", industryDropdownOpen && "rotate-180")} />
                           </button>
                           {industryDropdownOpen && (
                             <div
@@ -886,11 +906,11 @@ export default function ProfilePage() {
                       id="companySizeDropdownBtn"
                       onClick={() => setCompanySizeDropdownOpen(o => !o)}
                       className={cn(
-                        "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                        "flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                       )}
                     >
-                      {form.companySize}
-                      <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", companySizeDropdownOpen && "rotate-180")} />
+                      <span className="min-w-0 truncate">{form.companySize}</span>
+                      <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", companySizeDropdownOpen && "rotate-180")} />
                     </button>
                     {companySizeDropdownOpen && (
                       <div
@@ -922,17 +942,17 @@ export default function ProfilePage() {
                     id="datePickerBtn"
                     onClick={() => setDatePickerOpen(o => !o)}
                     className={cn(
-                      "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
+                      "flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
                       form.yearFounded ? "text-white" : "text-muted-foreground"
                     )}
                   >
-                    {form.yearFounded
+                    <span className="min-w-0 truncate">{form.yearFounded
                       ? (() => {
                           const d = new Date(form.yearFounded)
                           return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, "/")
                         })()
-                      : "dd/mm/yyyy"}
-                    <svg className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                      : "dd/mm/yyyy"}</span>
+                    <svg className="h-4 w-4 shrink-0 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   </button>
                   {datePickerOpen && (
                     <div id="datePickerPanel" className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border border-white/10 bg-[#2a3444] p-3 shadow-2xl">
@@ -954,7 +974,7 @@ export default function ProfilePage() {
                   <Label htmlFor="email">{t("profileLabelContactEmail")}</Label>
                   <Input id="email" type="email" value={form.email} onChange={e => update("email", e.target.value)} />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <div className="flex items-center gap-2">
                     <Label htmlFor="businessDescription">{t("profileLabelBusinessDesc")}</Label>
                     <button type="button" onClick={() => setTooltipOpen("businessDescription")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
@@ -970,7 +990,7 @@ export default function ProfilePage() {
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <Label htmlFor="targetAudience">{t("profileLabelTargetAudience")}</Label>
                   <textarea
                     id="targetAudience"
@@ -981,11 +1001,11 @@ export default function ProfilePage() {
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <Label htmlFor="keyProducts">{t("profileLabelKeyProducts")}</Label>
                   <Input id="keyProducts" value={form.keyProducts} onChange={e => update("keyProducts", e.target.value)} />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <Label htmlFor="competitors">{t("profileLabelCompetitors")}</Label>
                   <Input id="competitors" value={form.competitors} onChange={e => update("competitors", e.target.value)} />
                 </div>
@@ -993,9 +1013,9 @@ export default function ProfilePage() {
             </section>
 
             {/* AI Configuration */}
-            <section className="relative z-10 card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
+            <section className="relative z-10 card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-4 sm:p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionAI")}</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="aiName">{t("profileLabelAIName")}</Label>
                   <Input id="aiName" value={form.aiName} onChange={e => update("aiName", e.target.value)} placeholder={t("profilePlaceholderAIName")} />
@@ -1019,11 +1039,11 @@ export default function ProfilePage() {
                             id="commStyleDropdownBtn"
                             onClick={() => setCommStyleDropdownOpen(o => !o)}
                             className={cn(
-                              "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                              "flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                             )}
                           >
-                            {commStyleLabels[form.communicationStyle] || form.communicationStyle}
-                            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", commStyleDropdownOpen && "rotate-180")} />
+                            <span className="min-w-0 truncate">{commStyleLabels[form.communicationStyle] || form.communicationStyle}</span>
+                            <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", commStyleDropdownOpen && "rotate-180")} />
                           </button>
                           {commStyleDropdownOpen && (
                             <div
@@ -1051,7 +1071,7 @@ export default function ProfilePage() {
                     })()}
                   </div>
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <div className="flex items-center gap-2">
                     <Label htmlFor="aiRole">{t("profileLabelAIRole")}</Label>
                     <button type="button" onClick={() => setTooltipOpen("aiRole")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
@@ -1067,7 +1087,7 @@ export default function ProfilePage() {
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <Label htmlFor="brandVoice">{t("profileLabelBrandVoice")}</Label>
                   <textarea
                     id="brandVoice"
@@ -1078,7 +1098,7 @@ export default function ProfilePage() {
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <div className="flex items-center gap-2">
                     <Label htmlFor="toneExamples">{t("profileLabelToneExamples")}</Label>
                     <button type="button" onClick={() => setTooltipOpen("toneExamples")} className="text-muted-foreground hover:text-emerald-400 transition-colors">
@@ -1094,11 +1114,11 @@ export default function ProfilePage() {
                     className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                   />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <Label htmlFor="wordsToAvoid">{t("profileLabelWordsToAvoid")}</Label>
                   <Input id="wordsToAvoid" value={form.wordsToAvoid} onChange={e => update("wordsToAvoid", e.target.value)} placeholder={t("profilePlaceholderWordsToAvoid")} />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <Label htmlFor="clarificationPrompt">{t("profileLabelClarificationPrompt")}</Label>
                   <textarea
                     id="clarificationPrompt"
@@ -1112,7 +1132,7 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Prompt Use Case Examples */}
-                <div className="space-y-2 sm:col-span-2">
+                <div className="min-w-0 space-y-2 sm:col-span-2">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("profilePromptExamplesTitle")}</p>
                   <div className="flex flex-wrap gap-2">
                     {[
@@ -1218,12 +1238,12 @@ export default function ProfilePage() {
                           id="languagesDropdownBtn"
                           onClick={() => setLanguagesDropdownOpen(o => !o)}
                           className={cn(
-                            "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
+                            "flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
                             !form.languages.trim() && "text-muted-foreground"
                           )}
                         >
-                          <span className="truncate">{displayText}</span>
-                          <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", languagesDropdownOpen && "rotate-180")} />
+                          <span className="min-w-0 truncate">{displayText}</span>
+                          <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", languagesDropdownOpen && "rotate-180")} />
                         </button>
                         {languagesDropdownOpen && (
                           <div
@@ -1254,9 +1274,9 @@ export default function ProfilePage() {
             </section>
 
             {/* Brand Identity */}
-            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
+            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-4 sm:p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionBrand")}</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
                     <Label>{t("profileLabelUploadLogo")}</Label>
@@ -1409,14 +1429,14 @@ export default function ProfilePage() {
                   {/* Style */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Style Preference</Label>
-                    <div className="flex rounded-lg border border-white/10 p-0.5">
+                    <div className="grid grid-cols-3 gap-0.5 rounded-lg border border-white/10 p-0.5">
                       {(["minimal", "editorial", "cinematic"] as const).map(s => (
                         <button
                           key={s}
                           type="button"
                           onClick={() => update("brandStyle", s)}
                           className={cn(
-                            "flex-1 rounded-md py-1.5 text-xs font-medium capitalize transition-colors",
+                            "rounded-md py-1.5 text-xs font-medium capitalize transition-colors",
                             form.brandStyle === s
                               ? "bg-emerald-600 text-white"
                               : "text-muted-foreground hover:text-white"
@@ -1431,14 +1451,14 @@ export default function ProfilePage() {
                   {/* Mood */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Mood (optional)</Label>
-                    <div className="flex rounded-lg border border-white/10 p-0.5">
+                    <div className="grid grid-cols-2 gap-0.5 rounded-lg border border-white/10 p-0.5 sm:grid-cols-4">
                       {(["calm", "bold", "luxury", "futuristic"] as const).map(m => (
                         <button
                           key={m}
                           type="button"
                           onClick={() => update("brandMood", m)}
                           className={cn(
-                            "flex-1 rounded-md py-1.5 text-[11px] font-medium capitalize transition-colors",
+                            "rounded-md py-1.5 text-[11px] font-medium capitalize transition-colors",
                             form.brandMood === m
                               ? "bg-emerald-600 text-white"
                               : "text-muted-foreground hover:text-white"
@@ -1453,7 +1473,7 @@ export default function ProfilePage() {
                   {/* Input Style */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Chat Input Style</Label>
-                    <div className="flex w-48 rounded-lg border border-white/10 p-0.5">
+                    <div className="grid grid-cols-2 w-48 rounded-lg border border-white/10 p-0.5">
                       {(["dark", "light"] as const).map(s => (
                         <button
                           key={s}
@@ -1463,7 +1483,7 @@ export default function ProfilePage() {
                             localStorage.setItem("exploro_input_dark", s === "dark" ? "true" : "false")
                           }}
                           className={cn(
-                            "flex-1 rounded-md py-1.5 text-xs font-medium capitalize transition-colors",
+                            "rounded-md py-1.5 text-xs font-medium capitalize transition-colors",
                             form.inputStyle === s
                               ? "bg-emerald-600 text-white"
                               : "text-muted-foreground hover:text-white"
@@ -1475,7 +1495,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <Label htmlFor="slogan">{t("profileLabelSlogan")}</Label>
                   <Input id="slogan" value={form.slogan} onChange={e => update("slogan", e.target.value)} />
                 </div>
@@ -1483,10 +1503,10 @@ export default function ProfilePage() {
             </section>
 
             {/* Knowledge & Content */}
-            <section className="relative z-20 card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
+            <section className="relative z-20 card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-4 sm:p-6 shadow-lg shadow-emerald-900/5 space-y-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionKnowledge")}</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5 sm:col-span-2">
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <Label htmlFor="docCategories">{t("profileLabelDocCategories")}</Label>
                   <div className="relative">
                     {(() => {
@@ -1514,12 +1534,12 @@ export default function ProfilePage() {
                             id="docCategoriesDropdownBtn"
                             onClick={() => setDocCategoriesDropdownOpen(o => !o)}
                             className={cn(
-                              "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
+                              "flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
                               !form.docCategories.trim() && "text-muted-foreground"
                             )}
                           >
-                            <span className="truncate">{displayText}</span>
-                            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", docCategoriesDropdownOpen && "rotate-180")} />
+                            <span className="min-w-0 truncate">{displayText}</span>
+                            <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", docCategoriesDropdownOpen && "rotate-180")} />
                           </button>
                           {docCategoriesDropdownOpen && (
                             <div
@@ -1547,7 +1567,7 @@ export default function ProfilePage() {
                     })()}
                   </div>
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="min-w-0 space-y-1.5 sm:col-span-2">
                   <Label htmlFor="preferredSources">{t("profileLabelPreferredSources")}</Label>
                   <div className="relative">
                     {(() => {
@@ -1582,12 +1602,12 @@ export default function ProfilePage() {
                             id="preferredSourcesDropdownBtn"
                             onClick={() => setPreferredSourcesDropdownOpen(o => !o)}
                             className={cn(
-                              "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
+                              "flex h-10 w-full min-w-0 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-white transition-colors hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
                               !form.preferredSources.trim() && "text-muted-foreground"
                             )}
                           >
-                            <span className="truncate">{displayText}</span>
-                            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", preferredSourcesDropdownOpen && "rotate-180")} />
+                            <span className="min-w-0 truncate">{displayText}</span>
+                            <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", preferredSourcesDropdownOpen && "rotate-180")} />
                           </button>
                           {preferredSourcesDropdownOpen && (
                             <div
@@ -1619,33 +1639,46 @@ export default function ProfilePage() {
             </section>
 
             {/* Connected Channels summary */}
-            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-lg shadow-emerald-900/5 space-y-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
+            <section className="card-3d rounded-2xl border border-white/5 bg-[#2a3444] p-4 sm:p-6 shadow-lg shadow-emerald-900/5 space-y-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/10">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("profileSectionChannels")}</h2>
                 <Link href="/channels" className="text-xs text-emerald-400 hover:underline">{t("profileManage")}</Link>
               </div>
               <div className="flex flex-wrap gap-2">
-                {[
-                  { name: "WhatsApp Business", connected: true },
-                  { name: "Gmail", connected: false },
-                  { name: "Outlook", connected: false },
-                  { name: "Website Chat", connected: false },
-                  { name: "Telegram", connected: false },
-                  { name: "Slack", connected: false },
-                  { name: "iCloud", connected: false },
-                ].map(ch => (
-                  <span
-                    key={ch.name}
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-xs font-medium",
-                      ch.connected
-                        ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-400"
-                        : "text-muted-foreground"
-                    )}
-                  >
-                    {ch.name}{ch.connected ? " ✓" : ""}
-                  </span>
-                ))}
+                {(() => {
+                  const channels: { name: string; connected: boolean }[] = []
+                  if (whatsappConnections.length > 0) {
+                    channels.push({ name: "WhatsApp Business", connected: true })
+                  }
+                  for (const conn of emailConnections) {
+                    if (conn.status === "connected") {
+                      const name = conn.provider === "gmail" ? "Gmail" : conn.provider === "outlook" ? "Outlook" : conn.provider === "zoho" ? "Zoho Mail" : conn.provider === "icloud" ? "iCloud" : conn.provider
+                      if (!channels.find(c => c.name === name)) channels.push({ name, connected: true })
+                    }
+                  }
+                  for (const conn of calendarConnections) {
+                    if (conn.status === "connected") {
+                      const name = conn.provider === "google" ? "Google Calendar" : conn.provider === "outlook" ? "Outlook Calendar" : "Calendar"
+                      if (!channels.find(c => c.name === name)) channels.push({ name, connected: true })
+                    }
+                  }
+                  if (channels.length === 0) {
+                    channels.push({ name: "No channels connected", connected: false })
+                  }
+                  return channels.map(ch => (
+                    <span
+                      key={ch.name}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[11px] sm:text-xs font-medium",
+                        ch.connected
+                          ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-400"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {ch.name}{ch.connected ? " ✓" : ""}
+                    </span>
+                  ))
+                })()}
               </div>
             </section>
 

@@ -93,12 +93,21 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/channels?error=${encodeURIComponent(tokenData.error_description || tokenData.error || "Microsoft token exchange failed")}`)
       }
 
-      // Get user email from Microsoft Graph
+      // Get user email from Microsoft Graph (requires User.Read scope)
       const profileRes = await fetch("https://graph.microsoft.com/v1.0/me", {
         headers: { Authorization: `Bearer ${tokenData.access_token}` },
       })
-      const profile = await profileRes.json()
-      email = profile.mail || profile.userPrincipalName || ""
+      if (profileRes.ok) {
+        const profile = await profileRes.json()
+        email = profile.mail || profile.userPrincipalName || ""
+      }
+      // Fallback: decode id_token JWT if /me failed or returned no email
+      if (!email && tokenData.id_token) {
+        try {
+          const payload = JSON.parse(Buffer.from(tokenData.id_token.split(".")[1], "base64url").toString("utf-8"))
+          email = payload.email || payload.preferred_username || ""
+        } catch {}
+      }
 
       // Store tokens
       await supabase
