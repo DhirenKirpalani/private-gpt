@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     const scopes = [
       "https://graph.microsoft.com/Mail.Send",
       "https://graph.microsoft.com/Mail.Read",
+      "https://graph.microsoft.com/User.Read",
       "openid",
       "email",
       "offline_access",

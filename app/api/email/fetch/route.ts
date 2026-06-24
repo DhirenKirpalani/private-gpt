@@ -93,10 +93,9 @@ export async function POST(req: NextRequest) {
       const accessToken = await refreshIfNeeded(conn)
 
       if (conn.oauth_provider === "google") {
-        // Fetch via Gmail API with pagination + keyword filter + 15-day window
-        const keywordQuery = BUSINESS_KEYWORDS.map(k => `"${k}"`).join(" OR ")
+        // Fetch via Gmail API with pagination + 15-day window (keyword filter applied client-side below)
         const pageTokenParam = pageToken ? `&pageToken=${pageToken}` : ""
-        const qParam = encodeURIComponent(`after:${afterTimestamp} (${keywordQuery})`)
+        const qParam = encodeURIComponent(`after:${afterTimestamp}`)
         const listRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${qParam}${pageTokenParam}`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -164,6 +163,12 @@ export async function POST(req: NextRequest) {
             body = Buffer.from(d.payload.body.data, "base64url").toString("utf-8")
           }
 
+          const subject = getHeader("Subject")
+          const combinedText = `${subject} ${body || html}`.toLowerCase()
+          if (!matchesBusinessKeywords(combinedText)) {
+            continue
+          }
+
           payloads.push({
             user_id: userId,
             connection_id: conn.id,
@@ -171,7 +176,7 @@ export async function POST(req: NextRequest) {
             direction: "received",
             from_address: getHeader("From"),
             to_address: getHeader("To"),
-            subject: getHeader("Subject"),
+            subject: subject,
             body: body || html,
             html_body: html || null,
             message_id: d.id,
@@ -196,9 +201,8 @@ export async function POST(req: NextRequest) {
         const folderData = await folderRes.json()
         console.log(`[EMAIL FETCH] Folders: ${folderData.value?.map((f: any) => `${f.displayName}(${f.totalItemCount})`).join(", ") || "none"}`)
 
-        // Fetch via Microsoft Graph with pagination + keyword filter + 15-day window
-        const keywordFilter = BUSINESS_KEYWORDS.map(k => `"${k}"`).join(" OR ")
-        const baseUrl = `https://graph.microsoft.com/v1.0/me/messages?$top=50&$filter=receivedDateTime ge ${cutoffISO}&$search=${encodeURIComponent(keywordFilter)}`
+        // Fetch via Microsoft Graph with pagination + 15-day window (keyword filter applied client-side below)
+        const baseUrl = `https://graph.microsoft.com/v1.0/me/messages?$top=50&$filter=receivedDateTime ge ${cutoffISO}`
         const url = pageToken || baseUrl
         console.log(`[EMAIL FETCH] Microsoft Graph URL: ${url}`)
         const listRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
@@ -228,22 +232,29 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
         }
 
-        const payloads = newMsgs.map((msg: any) => ({
-          user_id: userId,
-          connection_id: conn.id,
-          provider: providerId,
-          direction: "received",
-          from_address: msg.from?.emailAddress?.address || "",
-          to_address: msg.toRecipients?.map((r: any) => r.emailAddress?.address).join(", ") || "",
-          subject: msg.subject || "",
-          body: msg.bodyPreview || msg.body?.content || "",
-          html_body: msg.body?.contentType === "html" ? msg.body?.content : null,
-          message_id: msg.id,
-          message_id_header: msg.internetMessageId || null,
-          thread_id: msg.conversationId || msg.id,
-          read: msg.isRead || false,
-          received_at: msg.receivedDateTime || new Date().toISOString(),
-        }))
+        const payloads: any[] = []
+        for (const msg of newMsgs) {
+          const combinedText = `${msg.subject || ""} ${msg.bodyPreview || msg.body?.content || ""}`.toLowerCase()
+          if (!matchesBusinessKeywords(combinedText)) {
+            continue
+          }
+          payloads.push({
+            user_id: userId,
+            connection_id: conn.id,
+            provider: providerId,
+            direction: "received",
+            from_address: msg.from?.emailAddress?.address || "",
+            to_address: msg.toRecipients?.map((r: any) => r.emailAddress?.address).join(", ") || "",
+            subject: msg.subject || "",
+            body: msg.bodyPreview || msg.body?.content || "",
+            html_body: msg.body?.contentType === "html" ? msg.body?.content : null,
+            message_id: msg.id,
+            message_id_header: msg.internetMessageId || null,
+            thread_id: msg.conversationId || msg.id,
+            read: msg.isRead || false,
+            received_at: msg.receivedDateTime || new Date().toISOString(),
+          })
+        }
 
         const { data: inserted } = await supabase
           .from("email_messages")
