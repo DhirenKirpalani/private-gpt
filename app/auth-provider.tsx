@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react"
 import { supabase, getUser, getSession, signOut, getProfile, type Profile } from "@/lib/supabase"
+import { getSubscription, type Subscription } from "@/lib/subscription"
 import type { User, Session } from "@supabase/supabase-js"
 
 type AuthContextType = {
@@ -12,6 +13,8 @@ type AuthContextType = {
   avatarUrl: string
   profile: Profile | null
   refreshProfile: () => Promise<void>
+  subscription: Subscription | null
+  refreshSubscription: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -22,6 +25,8 @@ const AuthContext = createContext<AuthContextType>({
   avatarUrl: "",
   profile: null,
   refreshProfile: async () => {},
+  subscription: null,
+  refreshSubscription: async () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -30,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [avatarUrl, setAvatarUrl] = useState("")
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [subscription, setSubscription] = useState<Subscription | null>(null)
 
   const loadProfile = useCallback(async (userId: string) => {
     try {
@@ -49,6 +55,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadProfile(user.id)
   }, [user, loadProfile])
 
+  const loadSubscription = useCallback(async (userId: string) => {
+    try {
+      const sub = await getSubscription(userId)
+      setSubscription(sub)
+    } catch {
+      setSubscription(null)
+    }
+  }, [])
+
+  const refreshSubscription = useCallback(async () => {
+    if (!user) return
+    await loadSubscription(user.id)
+  }, [user, loadSubscription])
+
   // Pre-populate avatarUrl from cache so children don't flash before async load
   useEffect(() => {
     const cached = localStorage.getItem("exploro_avatar_url")
@@ -63,7 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (currentSession) {
           const currentUser = await getUser()
           setUser(currentUser)
-          if (currentUser) await loadProfile(currentUser.id)
+          if (currentUser) {
+            await loadProfile(currentUser.id)
+            await loadSubscription(currentUser.id)
+          }
         }
       } catch {
         // No session = not logged in
@@ -80,9 +103,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(newUser)
       if (newUser) {
         await loadProfile(newUser.id)
+        await loadSubscription(newUser.id)
       } else {
         setProfile(null)
         setAvatarUrl("")
+        setSubscription(null)
       }
       setLoading(false)
     })
@@ -90,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [loadProfile])
+  }, [loadProfile, loadSubscription])
 
   const logout = async () => {
     await signOut()
@@ -98,10 +123,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null)
     setProfile(null)
     setAvatarUrl("")
+    setSubscription(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, logout, avatarUrl, profile, refreshProfile }}>
+    <AuthContext.Provider value={{ user, session, loading, logout, avatarUrl, profile, refreshProfile, subscription, refreshSubscription }}>
       {children}
     </AuthContext.Provider>
   )

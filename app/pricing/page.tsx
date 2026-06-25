@@ -5,6 +5,8 @@ import { Check, Zap, ArrowRight, Star, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
+import { useAuth } from "@/app/auth-provider"
+import { StripeCheckoutButton, StripePortalButton } from "@/components/stripe-checkout-button"
 
 function usePricingData() {
   const { t } = useI18n()
@@ -71,6 +73,8 @@ function usePricingData() {
 
 export default function PricingPage() {
   const { t, plans, comparisonFeatures, comingSoon } = usePricingData()
+  const { user } = useAuth()
+  const userId = user?.id
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:py-16">
       {/* Header */}
@@ -126,18 +130,28 @@ export default function PricingPage() {
             </ul>
 
             <div className="mt-8 sm:mt-10">
-              {plan.ctaStyle === "primary" ? (
-                <Link href={plan.href}>
-                  <Button className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-sm py-4 sm:text-base sm:py-6">
-                    {plan.cta} <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-              ) : (
+              {plan.key === "Enterprise" ? (
                 <a href={plan.href}>
                   <Button variant="outline" className="w-full border-white/10 text-sm py-4 sm:text-base sm:py-6">
                     {plan.cta}
                   </Button>
                 </a>
+              ) : plan.key === "Solo" ? (
+                <StripeCheckoutButton
+                  plan="solo"
+                  userId={userId}
+                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-sm py-4 sm:text-base sm:py-6"
+                >
+                  {plan.cta} <ArrowRight className="h-4 w-4" />
+                </StripeCheckoutButton>
+              ) : (
+                <StripeCheckoutButton
+                  plan="team"
+                  userId={userId}
+                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-sm py-4 sm:text-base sm:py-6"
+                >
+                  {plan.cta} <ArrowRight className="h-4 w-4" />
+                </StripeCheckoutButton>
               )}
               {plan.trialNote && (
                 <p className="mt-3 text-center text-sm text-muted-foreground">

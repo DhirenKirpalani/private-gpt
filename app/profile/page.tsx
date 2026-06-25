@@ -3,16 +3,19 @@
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Search, Save, Info, X, ChevronDown, Check, Loader2, User, LogOut, Menu } from "lucide-react"
+import { Search, Save, Info, X, ChevronDown, Check, Loader2, User, LogOut, Menu, CreditCard, ArrowRight } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
 import { useAuth } from "@/app/auth-provider"
 import { useI18n } from "@/lib/i18n"
 import { getProfile, upsertProfile, uploadAvatar, uploadLogo, signOut, type Profile, getEmailConnections, getWhatsAppConnections, getCalendarConnections } from "@/lib/supabase"
 import { toast, Toaster } from "@/components/ui/toast"
 import { Calendar } from "@/components/ui/calendar"
+import { StripePortalButton } from "@/components/stripe-checkout-button"
+import { isPaid, planName } from "@/lib/subscription"
 
 const countries = [
   "Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda","Argentina","Armenia","Australia","Austria","Azerbaijan",
@@ -219,7 +222,7 @@ function formToProfile(form: typeof defaultForm): Partial<Profile> {
 }
 
 export default function ProfilePage() {
-  const { user, loading: authLoading, refreshProfile } = useAuth()
+  const { user, loading: authLoading, refreshProfile, subscription } = useAuth()
   const { t, lang, setLang } = useI18n()
   const router = useRouter()
   const [saved, setSaved] = useState(false)
@@ -1681,6 +1684,48 @@ export default function ProfilePage() {
                     </span>
                   ))
                 })()}
+              </div>
+            </section>
+
+            {/* Billing & Subscription */}
+            <section className="rounded-2xl border border-white/10 bg-[#2a3444] p-5 sm:p-8">
+              <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
+                <CreditCard className="h-5 w-5 text-emerald-400" /> Billing & Subscription
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Current Plan</p>
+                    <p className="text-base font-semibold text-white">{planName(subscription)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <p className={cn(
+                      "text-base font-semibold",
+                      isPaid(subscription) ? "text-emerald-400" : "text-muted-foreground"
+                    )}>
+                      {isPaid(subscription) ? "Active" : "Free"}
+                    </p>
+                  </div>
+                </div>
+                {subscription?.current_period_end && (
+                  <p className="text-sm text-muted-foreground">
+                    Renews on {new Date(subscription.current_period_end).toLocaleDateString()}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-3">
+                  {isPaid(subscription) ? (
+                    <StripePortalButton userId={user?.id} className="border-white/10">
+                      Manage Billing
+                    </StripePortalButton>
+                  ) : (
+                    <Link href="/pricing">
+                      <Button className="bg-emerald-600 hover:bg-emerald-700 gap-2">
+                        Upgrade Plan <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  )}
+                </div>
               </div>
             </section>
 
