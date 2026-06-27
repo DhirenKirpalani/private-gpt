@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { PDFDocument } from "pdf-lib"
 import mammoth from "mammoth"
+import { getFileExt } from "@/lib/file-types"
 
 export const runtime = "nodejs"
 
@@ -21,13 +22,17 @@ export async function POST(req: NextRequest) {
 
     let pageCount = 0
 
-    if (file.type === "application/pdf") {
+    const ext = getFileExt(file.name)
+    if (file.type === "application/pdf" || ext === "pdf") {
       const buffer = Buffer.from(await file.arrayBuffer())
       const pdfDoc = await PDFDocument.load(buffer)
       pageCount = pdfDoc.getPageCount()
     } else if (
       file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-      file.type === "application/msword"
+      file.type === "application/msword" ||
+      ext === "docx" ||
+      ext === "doc" ||
+      (file.type === "application/octet-stream" && (ext === "docx" || ext === "doc"))
     ) {
       const buffer = Buffer.from(await file.arrayBuffer())
       const result = await mammoth.extractRawText({ buffer })

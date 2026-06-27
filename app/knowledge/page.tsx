@@ -11,27 +11,11 @@ import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { useI18n } from "@/lib/i18n"
+import { ACCEPTED_MIME_TYPES, isAcceptedFile, isCountableDocument } from "@/lib/file-types"
 import { getProfile, uploadDocument, fetchUserDocuments, fetchUserCategories, insertCategory, deleteCategory, deleteDocument, getDocumentPublicUrl, updateDocumentText } from "@/lib/supabase"
 import { toast, Toaster } from "@/components/ui/toast"
 
 const DEFAULT_CATEGORIES = ["SOPs", "FAQs", "Training Material", "Policies", "Reports"]
-
-const ACCEPTED_MIME_TYPES = [
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/msword",
-  "text/plain",
-  "text/markdown",
-  "text/x-markdown",
-  "text/html",
-  "application/json",
-  "text/csv",
-  "application/xml",
-  "text/xml",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/epub+zip",
-]
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 B"
@@ -225,9 +209,10 @@ export default function KnowledgePage() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
-    const invalid = files.filter(f => !ACCEPTED_MIME_TYPES.includes(f.type))
+    const invalid = files.filter(f => !isAcceptedFile(f))
     if (invalid.length > 0) {
-      toast({ title: "Invalid file type", description: t("knowledgeFileTypeError", { type: invalid[0].type || "unknown" }), variant: "error" })
+      const first = invalid[0]
+      toast({ title: "Invalid file type", description: t("knowledgeFileTypeError", { type: `${first.type || "unknown"} (${first.name})` }), variant: "error" })
       if (fileInputRef.current) fileInputRef.current.value = ""
       return
     }
@@ -247,12 +232,7 @@ export default function KnowledgePage() {
       for (const { file, category } of uploadPreview) {
         // Count pages server-side
         let pageCount = 0
-        const countableTypes = [
-          "application/pdf",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "application/msword",
-        ]
-        if (countableTypes.includes(file.type)) {
+        if (isCountableDocument(file)) {
           const formData = new FormData()
           formData.append("file", file)
           const res = await fetch("/api/count-pages", { method: "POST", body: formData })

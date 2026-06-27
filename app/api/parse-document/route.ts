@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import mammoth from "mammoth"
 import { createClient } from "@supabase/supabase-js"
+import { getFileExt } from "@/lib/file-types"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
@@ -58,10 +59,6 @@ async function extractPptxText(buffer: Buffer): Promise<string> {
     }
   }
   return text.trim() || "[No text found in presentation]"
-}
-
-function getExt(filename: string): string {
-  return filename.split(".").pop()?.toLowerCase() || ""
 }
 
 function isTextFile(mimeType: string, ext: string): boolean {
@@ -139,7 +136,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Detect type
-    const ext = getExt(filename)
+    const ext = getFileExt(filename)
     console.log("[PARSE-DOC] Detected extension:", ext, "| Provided mimeType:", mimeType)
 
     let text = ""
@@ -157,12 +154,13 @@ export async function POST(req: NextRequest) {
         text = "[PDF text extraction failed — document may be scanned/image-based]"
       }
     }
-    // Word (DOCX / DOC)
+    // Word (DOCX / DOC) — Microsoft Office and Google Docs exports
     else if (
       mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
       mimeType === "application/msword" ||
       ext === "docx" ||
-      ext === "doc"
+      ext === "doc" ||
+      (mimeType === "application/octet-stream" && (ext === "docx" || ext === "doc"))
     ) {
       extractionMethod = "mammoth"
       console.log("[PARSE-DOC] Route: DOCX extraction via", extractionMethod)
@@ -174,14 +172,15 @@ export async function POST(req: NextRequest) {
         text = "[DOCX text extraction failed]"
       }
     }
-    // Excel (XLSX / XLS / CSV)
+    // Excel (XLSX / XLS / CSV) — Microsoft Office and Google Sheets exports
     else if (
       mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
       mimeType === "application/vnd.ms-excel" ||
       mimeType === "text/csv" ||
       ext === "xlsx" ||
       ext === "xls" ||
-      ext === "csv"
+      ext === "csv" ||
+      (mimeType === "application/octet-stream" && (ext === "xlsx" || ext === "xls" || ext === "csv"))
     ) {
       if (ext === "csv" || mimeType === "text/csv") {
         extractionMethod = "raw-csv"
@@ -199,12 +198,13 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-    // PowerPoint (PPTX / PPT)
+    // PowerPoint (PPTX / PPT) — Microsoft Office and Google Slides exports
     else if (
       mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
       mimeType === "application/vnd.ms-powerpoint" ||
       ext === "pptx" ||
-      ext === "ppt"
+      ext === "ppt" ||
+      (mimeType === "application/octet-stream" && (ext === "pptx" || ext === "ppt"))
     ) {
       extractionMethod = "jszip-pptx"
       console.log("[PARSE-DOC] Route: PPTX extraction via", extractionMethod)
