@@ -19,6 +19,7 @@ import {
   getEmailConnections, getCalendarConnections, getWhatsAppConnections,
 } from "@/lib/supabase"
 import { useI18n } from "@/lib/i18n"
+import { ACCEPTED_MIME_TYPES, isAcceptedFile, isCountableDocument } from "@/lib/file-types"
 import { CinematicBackground } from "@/components/cinematic-background"
 import { compileTheme, type ThemeStyle, type ThemeMood, getBrandInputColors } from "@/lib/theme-engine"
 import { AnimatedPlaceholder } from "@/components/animated-placeholder"
@@ -149,22 +150,6 @@ export default function ChatPage() {
   const [executingActions, setExecutingActions] = useState<Set<string>>(new Set())
 
   const DEFAULT_CATEGORIES = ["SOPs", "FAQs", "Training Material", "Policies", "Reports"]
-  const ACCEPTED_MIME_TYPES = [
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/msword",
-    "text/plain",
-    "text/markdown",
-    "text/x-markdown",
-    "text/html",
-    "application/json",
-    "text/csv",
-    "application/xml",
-    "text/xml",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/epub+zip",
-  ]
 
   function formatFileSize(bytes: number): string {
     if (bytes === 0) return "0 B"
@@ -650,9 +635,10 @@ export default function ChatPage() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
-    const invalid = files.filter(f => !ACCEPTED_MIME_TYPES.includes(f.type))
+    const invalid = files.filter(f => !isAcceptedFile(f))
     if (invalid.length > 0) {
-      toast({ title: "Invalid file type", description: `File type "${invalid[0].type || "unknown"}" is not supported.`, variant: "error" })
+      const first = invalid[0]
+      toast({ title: "Invalid file type", description: `File type "${first.type || "unknown"}" is not supported for "${first.name}". Please upload a supported format (PDF, DOCX, XLSX, TXT, CSV, etc.).`, variant: "error" })
       if (fileInputRef.current) fileInputRef.current.value = ""
       return
     }
@@ -670,12 +656,7 @@ export default function ChatPage() {
     try {
       for (const { file, category } of uploadPreview) {
         let pageCount = 0
-        const countableTypes = [
-          "application/pdf",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "application/msword",
-        ]
-        if (countableTypes.includes(file.type)) {
+        if (isCountableDocument(file)) {
           const formData = new FormData()
           formData.append("file", file)
           const res = await fetch("/api/count-pages", { method: "POST", body: formData })
