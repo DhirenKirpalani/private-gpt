@@ -47,12 +47,12 @@ export default function DisclaimerPage() {
         <section>
           <h2 className="mb-2 text-lg font-semibold">Liability</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Exploro and Us+AI Bureau are not liable for decisions made based on AI-generated content. Users assume full responsibility for how outputs are used, shared, or acted upon within their organization.
+            Exploro and Secretes Corp DBA Urbanseed are not liable for decisions made based on AI-generated content. Users assume full responsibility for how outputs are used, shared, or acted upon within their organization.
           </p>
         </section>
 
         <div className="mt-6 border-t border-white/10 pt-6 text-center text-xs text-muted-foreground">
-          Last updated: June 2026 · Exploro OS by Us+AI Bureau
+          Last updated: June 2026 · Exploro OS – A Product of Secretes Corp DBA Urbanseed
         </div>
       </div>
     </div>
