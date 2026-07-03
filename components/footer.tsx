@@ -40,12 +40,12 @@ export function Footer() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center transition-colors hover:opacity-80"
-                aria-label="Us+AI Bureau LinkedIn"
+                aria-label="LinkedIn"
               >
                 <FaLinkedin className="h-8 w-8" style={{ color: "#0077b5" }} />
               </a>
             </div>
-            <p className="mt-2 text-sm font-medium text-emerald-400">by Us+AI Bureau</p>
+            <p className="mt-2 text-sm font-medium text-emerald-400">A Product of Secretes Corp DBA Urbanseed</p>
             <p className="mt-2 max-w-xs text-sm leading-relaxed text-muted-foreground">
               {t("brandTagline")}
             </p>

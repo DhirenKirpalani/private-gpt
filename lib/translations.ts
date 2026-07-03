@@ -21,7 +21,7 @@ export const translations = {
     startBuilding: "Start building your Private AI today",
     footerTagline: "Train an AI on your business knowledge and deploy it across your team.",
     getStartedFree: "Unlock Free Trial",
-    copyright: "© {year} Exploro OS. All rights reserved.",
+    copyright: "© {year} Secretes Corp. All rights reserved.",
     privacy: "Privacy",
     terms: "Terms",
     brandTagline: "Your business. Your knowledge. Your AI.",
@@ -277,7 +277,7 @@ export const translations = {
     pillarBrandSubtitle: "Your Logo. Your Voice. Your Name.",
     pillarBrandDesc: "Your Private GPT carries your name. Your business logo. Your tone. Your templates. The client never sees 'Exploro.' They see your brand, your intelligence, your customized AI agent.",
     aboutUsP2: "The objective of Exploro OS Private is to create an operating system where trust is demonstrated — basing its structure, logic, and reasoning within a reliable perimeter, built on these pillars and everyday experiences.",
-    aboutUsByline: "Exploro OS – by Us+AI Bureau",
+    aboutUsByline: "Exploro OS – A Product of Secretes Corp DBA Urbanseed",
 
     // FAQ
     faqTitle: "FAQ - Exploro OS Private",
@@ -691,7 +691,7 @@ export const translations = {
     startBuilding: "Empieza a construir tu IA Privada hoy",
     footerTagline: "Entrena una IA con el conocimiento de tu negocio y despliégala en tu equipo.",
     getStartedFree: "Desbloquear Prueba Gratis",
-    copyright: "© {year} Exploro OS. Todos los derechos reservados.",
+    copyright: "© {year} Secretes Corp. Todos los derechos reservados.",
     privacy: "Privacidad",
     terms: "Términos",
     brandTagline: "Tu negocio. Tu conocimiento. Tu IA.",
@@ -947,7 +947,7 @@ export const translations = {
     pillarBrandSubtitle: "Tu Logotipo. Tu Voz. Tu Nombre.",
     pillarBrandDesc: "Tu GPT Privado lleva tu nombre. El logotipo de tu negocio. Tu tono. Tus plantillas. El cliente nunca ve 'Exploro.' Ven tu marca, tu inteligencia, tu agente personalizado de IA.",
     aboutUsP2: "El objetivo de Exploro OS Privado es crear un sistema operativo, donde la confianza se demuestra, basando su estructura, lógica y razonamiento dentro de un contorno confiable, construido sobre estos pilares y experiencias cotidianas.",
-    aboutUsByline: "Exploro OS – por Us+AI Bureau Team",
+    aboutUsByline: "Exploro OS – Un Producto de Secretes Corp DBA Urbanseed",
 
     // FAQ
     faqTitle: "FAQ - Exploro OS Private",

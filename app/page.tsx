@@ -80,7 +80,7 @@ export default function HomePage() {
           {t("heroSubtitle")}
         </p>
         <p className="animate-fade-in-up mb-6 text-sm font-medium text-emerald-400 sm:mb-10 [animation-delay:280ms]">
-          by Us+AI Bureau
+          A Product of Secretes Corp DBA Urbanseed
         </p>
         <div className="animate-fade-in-up flex flex-wrap items-center justify-center gap-4 [animation-delay:360ms]">
           {user ? (
