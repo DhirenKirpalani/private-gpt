@@ -336,17 +336,17 @@ export default function KnowledgePage() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* Header */}
-      <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
+      <header className="flex h-14 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-2 sm:px-3 md:px-4">
         <button
           onClick={() => setNavOpen(true)}
-          className="flex md:hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          className="flex md:hidden h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           aria-label="Open menu"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
         </button>
-        <Link href="/" className="flex shrink-0 items-center gap-2 overflow-hidden">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "40px" }} />
-          <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
+        <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
+          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[32px] w-auto object-contain sm:h-[36px] md:h-[40px]" />
+          <span className="hidden sm:inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
         <div className="hidden flex-1 justify-center md:flex">
           <div className="relative w-full max-w-lg">
@@ -359,13 +359,13 @@ export default function KnowledgePage() {
             />
           </div>
         </div>
-        <div className="flex flex-1 justify-end items-center gap-2 md:gap-3 md:flex-none">
+        <div className="flex flex-1 justify-end items-center gap-1.5 sm:gap-2 md:gap-3 md:flex-none">
           {/* Language toggle */}
           <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
             <button
               onClick={() => setLang("en")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                "rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all sm:px-2.5 sm:text-xs",
                 lang === "en"
                   ? "bg-emerald-600 text-white shadow-sm"
                   : "text-muted-foreground hover:text-white"
@@ -376,7 +376,7 @@ export default function KnowledgePage() {
             <button
               onClick={() => setLang("es")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                "rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all sm:px-2.5 sm:text-xs",
                 lang === "es"
                   ? "bg-emerald-600 text-white shadow-sm"
                   : "text-muted-foreground hover:text-white"
@@ -531,34 +531,35 @@ export default function KnowledgePage() {
 
         {/* Main content */}
         <main className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex shrink-0 items-center justify-between border-b px-3 py-2 sm:px-4 sm:py-3 md:px-6 md:py-4">
             <div className="flex items-center gap-2">
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-lg font-semibold">{categoryDisplay(activeCategory, t as unknown as (k: string) => string)}</h1>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <h1 className="text-base font-semibold sm:text-lg">{categoryDisplay(activeCategory, t as unknown as (k: string) => string)}</h1>
                   <button type="button" onClick={() => setDocsTooltipOpen(true)} className="text-muted-foreground hover:text-emerald-400 transition-colors">
-                    <Info className="h-4 w-4" />
+                    <Info className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </button>
                 </div>
-                <p className="text-sm text-muted-foreground">{t("knowledgeDocumentsCount", { count: filtered.length })}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">{t("knowledgeDocumentsCount", { count: filtered.length })}</p>
               </div>
             </div>
-            <div className="relative flex items-center gap-2" ref={filterRef}>
+            <div className="relative flex items-center gap-1.5 sm:gap-2" ref={filterRef}>
               <button
                 onClick={() => setCatSidebarOpen(true)}
-                className="flex md:hidden items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
+                className="flex md:hidden items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted sm:px-3 sm:py-1.5"
               >
-                <PanelLeft className="h-3.5 w-3.5" />
-                {t("knowledgeCategories")}
+                <PanelLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">{t("knowledgeCategories")}</span>
+                <span className="sm:hidden">{t("knowledgeCategoryLabel")}</span>
               </button>
               <button
                 className={cn(
-                  "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors hover:bg-muted",
+                  "flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition-colors hover:bg-muted sm:px-3 sm:py-1.5 sm:text-sm",
                   statusFilter !== "all" ? "border-emerald-500/30 text-emerald-400" : "text-muted-foreground"
                 )}
                 onClick={() => setFilterOpen(!filterOpen)}
               >
-                <Filter className="h-3.5 w-3.5" />
+                <Filter className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 {statusFilter === "all" ? t("knowledgeFilter") : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
               </button>
               {filterOpen && (
@@ -610,9 +611,9 @@ export default function KnowledgePage() {
                 return (
                   <div
                   key={doc.id}
-                  className="card-3d flex flex-col gap-2 rounded-xl border border-white/5 bg-[#2a3444] px-3 py-2.5 shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10 sm:flex-row sm:items-center sm:gap-4 sm:px-4 sm:py-3"
+                  className="card-3d flex flex-col gap-2 rounded-xl border border-white/5 bg-[#2a3444] px-3 py-3 shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10 sm:flex-row sm:items-center sm:gap-4 sm:px-4 sm:py-3"
                 >
-                  <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="flex items-start gap-3 sm:items-center sm:gap-4">
                     <div className="relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
                       <File className="h-5 w-5 text-muted-foreground" />
                       <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-bold text-white leading-none">
@@ -621,7 +622,7 @@ export default function KnowledgePage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <button
-                        className="truncate text-sm font-medium text-left hover:text-emerald-400 transition-colors"
+                        className="block w-full truncate text-left text-sm font-medium hover:text-emerald-400 transition-colors"
                         onClick={() => {
                           if (!user) return
                           const url = getDocumentPublicUrl(user.id, doc.filename)
@@ -642,59 +643,59 @@ export default function KnowledgePage() {
                     </div>
                     <p className="hidden text-xs text-muted-foreground sm:block">{doc.uploaded}</p>
                     <div className="relative flex items-center gap-1">
-                    <button
-                      className={cn(
-                        "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-emerald-400",
-                        parsingDocId === doc.id && "opacity-50 cursor-not-allowed"
-                      )}
-                      disabled={parsingDocId === doc.id}
-                      title="Parse document text"
-                      onClick={() => handleParseDocument(doc)}
-                    >
-                      {parsingDocId === doc.id ? (
-                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-                      ) : (
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    <button
-                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-red-400"
-                      onClick={async () => {
-                        if (!user) return
-                        setDeleteConfirmId(doc.id)
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                    {deleteConfirmId === doc.id && (
-                      <div className="fixed right-4 top-1/2 z-[100] -translate-y-1/2 w-52 rounded-xl border border-emerald-500/30 bg-[#1e2533] p-3 shadow-2xl">
-                        <p className="mb-3 text-xs font-medium text-white">Delete this document?</p>
-                        <div className="flex gap-2">
-                          <button
-                            className="flex-1 rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/30 transition-colors"
-                            onClick={async () => {
-                              try {
-                                await deleteDocument(doc.id)
-                                setDocList(prev => prev.filter(d => d.id !== doc.id))
-                                toast({ title: "Deleted", description: doc.name, variant: "default" })
-                              } catch (err: any) {
-                                toast({ title: "Delete failed", description: err.message || "Delete failed", variant: "error" })
-                              }
-                              setDeleteConfirmId(null)
-                            }}
-                          >
-                            Delete
-                          </button>
-                          <button
-                            className="flex-1 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 transition-colors"
-                            onClick={() => setDeleteConfirmId(null)}
-                          >
-                            Cancel
-                          </button>
+                      <button
+                        className={cn(
+                          "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-emerald-400",
+                          parsingDocId === doc.id && "opacity-50 cursor-not-allowed"
+                        )}
+                        disabled={parsingDocId === doc.id}
+                        title="Parse document text"
+                        onClick={() => handleParseDocument(doc)}
+                      >
+                        {parsingDocId === doc.id ? (
+                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <button
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-red-400"
+                        onClick={async () => {
+                          if (!user) return
+                          setDeleteConfirmId(doc.id)
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                      {deleteConfirmId === doc.id && (
+                        <div className="fixed left-4 right-4 top-1/2 z-[100] mx-auto max-w-xs -translate-y-1/2 rounded-xl border border-emerald-500/30 bg-[#1e2533] p-3 shadow-2xl">
+                          <p className="mb-3 text-xs font-medium text-white">Delete this document?</p>
+                          <div className="flex gap-2">
+                            <button
+                              className="flex-1 rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/30 transition-colors"
+                              onClick={async () => {
+                                try {
+                                  await deleteDocument(doc.id)
+                                  setDocList(prev => prev.filter(d => d.id !== doc.id))
+                                  toast({ title: "Deleted", description: doc.name, variant: "default" })
+                                } catch (err: any) {
+                                  toast({ title: "Delete failed", description: err.message || "Delete failed", variant: "error" })
+                                }
+                                setDeleteConfirmId(null)
+                              }}
+                            >
+                              Delete
+                            </button>
+                            <button
+                              className="flex-1 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 transition-colors"
+                              onClick={() => setDeleteConfirmId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 )

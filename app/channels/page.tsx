@@ -407,17 +407,17 @@ function ChannelsPageContent() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* Header */}
-      <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
+      <header className="flex h-14 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-2 sm:px-3 md:px-4">
         <button
           onClick={() => setNavOpen(true)}
-          className="flex md:hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          className="flex md:hidden h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           aria-label="Open menu"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
         </button>
-        <Link href="/" className="flex shrink-0 items-center gap-2 overflow-hidden">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "40px" }} />
-          <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
+        <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
+          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[32px] w-auto object-contain sm:h-[36px] md:h-[40px]" />
+          <span className="hidden sm:inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
         <div className="hidden flex-1 justify-center md:flex">
           <div className="relative w-full max-w-lg">
@@ -425,10 +425,10 @@ function ChannelsPageContent() {
             <input className="w-full rounded-full border bg-muted/50 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30" placeholder={t("channelsSearchPlaceholder")} />
           </div>
         </div>
-        <div className="flex flex-1 justify-end items-center gap-2 md:gap-3 md:flex-none">
+        <div className="flex flex-1 justify-end items-center gap-1.5 sm:gap-2 md:gap-3 md:flex-none">
           <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
             {(["en", "es"] as const).map(l => (
-              <button key={l} onClick={() => setLang(l)} className={cn("rounded-md px-2.5 py-1 text-xs font-semibold transition-all", lang === l ? "bg-emerald-600 text-white shadow-sm" : "text-muted-foreground hover:text-white")}>
+              <button key={l} onClick={() => setLang(l)} className={cn("rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all sm:px-2.5 sm:text-xs", lang === l ? "bg-emerald-600 text-white shadow-sm" : "text-muted-foreground hover:text-white")}>
                 {l.toUpperCase()}
               </button>
             ))}

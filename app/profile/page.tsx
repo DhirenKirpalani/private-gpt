@@ -496,25 +496,25 @@ export default function ProfilePage() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* Header */}
-      <header className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
+      <header className="flex h-14 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-2 sm:px-3 md:px-4">
         <button
           onClick={() => setNavOpen(true)}
-          className="flex md:hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          className="flex md:hidden h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           aria-label="Open menu"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
         </button>
-        <Link href="/" className="flex shrink-0 items-center gap-2 overflow-hidden">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="w-auto object-contain" style={{ height: "40px" }} />
-          <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
+        <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
+          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[32px] w-auto object-contain sm:h-[36px] md:h-[40px]" />
+          <span className="hidden sm:inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
-        <div className="flex flex-1 justify-end items-center gap-2 md:gap-3">
+        <div className="flex flex-1 justify-end items-center gap-1.5 sm:gap-2 md:gap-3">
           {/* Language toggle */}
           <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
             <button
               onClick={() => setLang("en")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                "rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all sm:px-2.5 sm:text-xs",
                 lang === "en"
                   ? "bg-emerald-600 text-white shadow-sm"
                   : "text-muted-foreground hover:text-white"
@@ -525,7 +525,7 @@ export default function ProfilePage() {
             <button
               onClick={() => setLang("es")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                "rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all sm:px-2.5 sm:text-xs",
                 lang === "es"
                   ? "bg-emerald-600 text-white shadow-sm"
                   : "text-muted-foreground hover:text-white"
@@ -534,7 +534,7 @@ export default function ProfilePage() {
               ES
             </button>
           </div>
-          <Link href="/chat" className={cn("relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-xs font-bold text-white transition-colors overflow-hidden", form.avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
+          <Link href="/chat" className={cn("relative flex h-7 w-7 sm:h-8 sm:w-8 cursor-pointer items-center justify-center rounded-full text-xs font-bold text-white transition-colors overflow-hidden", form.avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
             {!form.avatarUrl && (form.fullName.trim()
               ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
               : <User className="h-4 w-4 text-white" />)}
