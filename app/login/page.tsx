@@ -82,27 +82,27 @@ function LoginContent() {
       </div>
 
       {/* ── Right form panel ── */}
-      <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
+      <div className="flex flex-1 flex-col items-center justify-center px-3 py-6 sm:px-4 sm:py-10">
 
         {/* Mobile logo */}
-        <Link href="/" className="mb-8 flex items-center justify-center gap-2 md:hidden">
+        <Link href="/" className="mb-5 flex items-center justify-center gap-2 md:hidden sm:mb-8">
           <Image
             src="/assets/images/exploro-logo.png"
             alt="Exploro"
             width={200}
             height={200}
-            className="h-28 w-auto object-contain"
+            className="h-16 w-auto object-contain sm:h-20"
           />
           <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
 
         <div className="w-full max-w-sm">
-          <div className="mb-8 text-center md:text-left">
-            <h1 className="gradient-text-shimmer text-3xl font-bold tracking-tight pb-1">{t("welcomeBack")}</h1>
+          <div className="mb-6 text-center md:text-left sm:mb-8">
+            <h1 className="gradient-text-shimmer text-2xl font-bold tracking-tight pb-1 sm:text-3xl">{t("welcomeBack")}</h1>
             <p className="mt-2 text-sm text-muted-foreground">{t("signInAccount")}</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-white/5 bg-[#2a3444] p-6 shadow-2xl shadow-emerald-900/10">
+          <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-white/5 bg-[#2a3444] p-4 shadow-2xl shadow-emerald-900/10 sm:p-6">
             <div className="space-y-1.5">
               <Label htmlFor="email">{t("email")}</Label>
               <Input id="email" type="email" placeholder="name@company.com" value={email} onChange={e => setEmail(e.target.value)} required />

@@ -27,7 +27,7 @@ function usePricingData() {
     {
       name: t("pricingPlanTeam"),
       key: "Team" as const,
-      price: "$49",
+      price: "$50",
       period: "/mo",
       desc: t("pricingDescTeam"),
       features: t("pricingFeaturesTeam").split(","),

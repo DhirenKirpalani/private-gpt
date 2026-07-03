@@ -976,34 +976,33 @@ export default function ChatPage() {
 
       {/* ── HEADER ── */}
       <header
-        className="relative z-10 flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b border-white/5 px-3 md:px-4"
+        className="relative z-10 flex h-14 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b border-white/5 px-2 sm:px-3 md:px-4"
         style={{
           backgroundColor: theme.ui.surfaceBg,
           backdropFilter: `blur(${theme.ui.glassBlur}px)`,
         }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             onClick={() => setNavOpen(true)}
-            className="flex md:hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="flex md:hidden h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             aria-label="Open menu"
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
           <button
             onClick={toggleSidebar}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted transition-colors"
+            className="hidden md:block rounded-md p-1.5 text-muted-foreground hover:bg-muted transition-colors"
           >
             <PanelLeftClose className="h-5 w-5" />
           </button>
-          <Link href="/" className="flex shrink-0 items-center gap-2 overflow-hidden">
+          <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
             <img
               src="/assets/images/exploro-logo.png"
               alt="Exploro"
-              className="w-auto object-contain"
-              style={{ height: "40px" }}
+              className="h-[32px] w-auto object-contain sm:h-[36px] md:h-[40px]"
             />
-            <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
+            <span className="hidden sm:inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
           </Link>
         </div>
         <div className="hidden flex-1 justify-center md:flex">
@@ -1015,13 +1014,13 @@ export default function ChatPage() {
             />
           </div>
         </div>
-        <div className="flex flex-1 justify-end items-center gap-2 md:gap-3 md:flex-none">
+        <div className="flex flex-1 justify-end items-center gap-1.5 sm:gap-2 md:gap-3 md:flex-none">
           {/* Language toggle */}
           <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
             <button
               onClick={() => setLang("en")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                "rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all sm:px-2.5 sm:text-xs",
                 lang === "en"
                   ? "bg-emerald-600 text-white shadow-sm"
                   : "text-muted-foreground hover:text-white"
@@ -1032,7 +1031,7 @@ export default function ChatPage() {
             <button
               onClick={() => setLang("es")}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-semibold transition-all",
+                "rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all sm:px-2.5 sm:text-xs",
                 lang === "es"
                   ? "bg-emerald-600 text-white shadow-sm"
                   : "text-muted-foreground hover:text-white"

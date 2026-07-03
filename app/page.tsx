@@ -69,17 +69,17 @@ export default function HomePage() {
     <div className="flex flex-col">
 
       {/* ── HERO ── */}
-      <section className="relative flex flex-col items-center justify-center overflow-hidden px-4 py-28 text-center sm:py-40">
-        <div className="animate-fade-in-up mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-400 [animation-delay:0ms]">
+      <section className="relative flex flex-col items-center justify-center overflow-hidden px-4 pt-20 pb-16 text-center sm:py-40">
+        <div className="animate-fade-in-up mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-400 sm:mb-5 [animation-delay:0ms]">
           {t("heroBadge")}
         </div>
-        <h1 className="animate-fade-in-up mb-6 max-w-5xl pb-2 text-4xl font-extrabold tracking-tight text-white sm:text-6xl md:text-7xl [animation-delay:120ms]">
+        <h1 className="animate-fade-in-up mb-4 max-w-5xl pb-2 text-3xl font-extrabold tracking-tight text-white sm:mb-6 sm:text-5xl md:text-7xl [animation-delay:120ms]">
           {t("heroTitle")}
         </h1>
-        <p className="animate-fade-in-up mb-2 max-w-2xl text-lg text-muted-foreground sm:text-xl [animation-delay:240ms]">
+        <p className="animate-fade-in-up mb-2 max-w-2xl text-base text-muted-foreground sm:text-xl [animation-delay:240ms]">
           {t("heroSubtitle")}
         </p>
-        <p className="animate-fade-in-up mb-10 text-sm font-medium text-emerald-400 [animation-delay:280ms]">
+        <p className="animate-fade-in-up mb-6 text-sm font-medium text-emerald-400 sm:mb-10 [animation-delay:280ms]">
           by Us+AI Bureau
         </p>
         <div className="animate-fade-in-up flex flex-wrap items-center justify-center gap-4 [animation-delay:360ms]">

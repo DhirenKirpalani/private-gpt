@@ -117,6 +117,13 @@ export default function SupportPage() {
             <p className="text-sm text-muted-foreground">
               Tell us what went wrong and we will fix it for you.
             </p>
+            <a
+              href="mailto:support@exploro-os.com"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-400 hover:underline"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              support@exploro-os.com
+            </a>
           </div>
 
           {/* Form */}

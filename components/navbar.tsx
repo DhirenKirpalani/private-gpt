@@ -75,17 +75,17 @@ export function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 overflow-visible border-b border-white/8 bg-background/90 backdrop-blur-xl">
       {/* Main bar */}
-      <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between overflow-visible px-4 sm:px-6">
+      <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between overflow-visible px-3 sm:px-4 lg:px-6">
 
         {/* Brand */}
-        <Link href="/" className="flex shrink-0 items-center gap-2 overflow-visible" onClick={() => { setMobileOpen(false); setActiveSection("") }}>
+        <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-visible" onClick={() => { setMobileOpen(false); setActiveSection("") }}>
           <img
             src="/assets/images/exploro-logo.png"
             alt="Exploro"
-            className="w-auto object-contain transition-transform duration-300 hover:scale-105"
-            style={{ height: "44px", transformOrigin: "left center" }}
+            className="h-[34px] w-auto object-contain transition-transform duration-300 hover:scale-105 sm:h-[38px] lg:h-[44px]"
+            style={{ transformOrigin: "left center" }}
           />
-          <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
+          <span className="hidden rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30 sm:inline-block">BETA</span>
         </Link>
 
         {/* Desktop nav — hidden on mobile */}
@@ -110,7 +110,7 @@ export function Navbar() {
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-5 sm:gap-8">
+        <div className="flex items-center gap-2 sm:gap-4 lg:gap-8">
           {/* Language toggle — segmented pill */}
           <div className="hidden items-center rounded-lg border border-white/10 bg-white/5 p-0.5 md:inline-flex">
             <button
@@ -152,7 +152,7 @@ export function Navbar() {
               <Link href="/login" className="hidden text-sm font-medium text-muted-foreground hover:text-foreground transition-colors md:block">
                 {t("logIn")}
               </Link>
-              <button onClick={handleCTA} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white whitespace-nowrap transition-colors hover:bg-emerald-700 sm:px-4">
+              <button onClick={handleCTA} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white whitespace-nowrap transition-colors hover:bg-emerald-700 sm:px-3 sm:py-2 sm:text-sm lg:px-4">
                 {t("getStarted")}
               </button>
             </>
