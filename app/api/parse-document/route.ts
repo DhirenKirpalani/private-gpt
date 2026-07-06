@@ -3,6 +3,9 @@ import mammoth from "mammoth"
 import { createClient } from "@supabase/supabase-js"
 import { getFileExt } from "@/lib/file-types"
 
+// Force Node.js runtime — pdf-parse/pdfjs-dist need Node.js APIs (not Edge)
+export const runtime = "nodejs"
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
@@ -11,7 +14,8 @@ const XLSX = require("xlsx")
 const JSZip = require("jszip")
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  // pdf-parse v1.1.1: require returns the function directly, no workers needed
+  // pdf-parse v1.1.1: use eval("require") to avoid webpack bundling
+  // (webpack bundling pdf-parse breaks the ./test/data/05-versions-space.pdf path)
   const pdfParse = eval("require")("pdf-parse")
   console.log("[PARSE-DOC PDF] pdf-parse loaded, type:", typeof pdfParse)
   if (typeof pdfParse !== "function") {
@@ -146,6 +150,7 @@ export async function POST(req: NextRequest) {
     if (mimeType === "application/pdf" || ext === "pdf") {
       extractionMethod = "pdfjs-dist"
       console.log("[PARSE-DOC] Route: PDF extraction via", extractionMethod)
+      console.log("[PARSE-DOC] Runtime:", process.env.NEXT_RUNTIME || "nodejs")
       try {
         text = await extractPdfText(buffer)
         console.log("[PARSE-DOC] PDF extracted. Length:", text.length)
