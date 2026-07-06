@@ -9,14 +9,15 @@ import { useAuth } from "@/app/auth-provider"
 import { StripeCheckoutButton, StripePortalButton } from "@/components/stripe-checkout-button"
 
 function usePricingData() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
+  const isEs = lang === "es"
 
   const plans = [
     {
       name: t("pricingPlanSolo"),
       key: "Solo" as const,
-      price: "$30",
-      period: "/mo",
+      price: isEs ? "$525 mx" : "$30",
+      period: isEs ? "/mes" : "/mo",
       desc: t("pricingDescSolo"),
       features: t("pricingFeaturesSolo").split(","),
       trialNote: t("pricingTrialNoteSolo"),
@@ -27,8 +28,8 @@ function usePricingData() {
     {
       name: t("pricingPlanTeam"),
       key: "Team" as const,
-      price: "$50",
-      period: "/mo",
+      price: isEs ? "$875 mx" : "$50",
+      period: isEs ? "/mes" : "/mo",
       desc: t("pricingDescTeam"),
       features: t("pricingFeaturesTeam").split(","),
       cta: t("pricingCTATeam"),
