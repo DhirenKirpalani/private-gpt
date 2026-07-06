@@ -6,6 +6,9 @@ export type Subscription = {
   stripe_customer_id: string | null
   stripe_subscription_id: string | null
   stripe_price_id: string | null
+  fastspring_subscription_id: string | null
+  fastspring_customer_id: string | null
+  fastspring_product_path: string | null
   status: "active" | "canceled" | "incomplete" | "incomplete_expired" | "past_due" | "paused" | "trialing" | "unpaid" | null
   plan: "solo" | "team" | "enterprise" | null
   current_period_start: string | null
