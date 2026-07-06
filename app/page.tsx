@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -92,9 +91,11 @@ export default function HomePage() {
               <Button size="lg" onClick={handleCTA} className="pulse-ring gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
                 {t("heroStartFree")} <ArrowRight className="h-4 w-4" />
               </Button>
-              <Button size="lg" variant="outline" className="gap-2 px-8 transition-all duration-200 hover:scale-105">
-                <Play className="h-4 w-4" /> {t("heroWatchDemo")}
-              </Button>
+              <a href="https://yellow-rabbit-520973.hostingersite.com/Videos/Exploro%20Walkthrough%20Video%201.mp4" target="_blank" rel="noopener noreferrer">
+                <Button size="lg" variant="outline" className="gap-2 px-8 transition-all duration-200 hover:scale-105">
+                  <Play className="h-4 w-4" /> {t("heroWatchDemo")}
+                </Button>
+              </a>
             </>
           )}
         </div>
@@ -504,11 +505,11 @@ export default function HomePage() {
               {user ? "Go to Chat" : t("ctaStartFree")}
             </Button>
             {!user && (
-              <Link href="/exploro">
+              <a href="https://calendly.com/exploro-os-support/30min" target="_blank" rel="noopener noreferrer">
                 <Button size="lg" variant="outline" className="px-10">
                   {t("ctaBookDemo")}
                 </Button>
-              </Link>
+              </a>
             )}
           </div>
         </div>
