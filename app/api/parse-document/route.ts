@@ -14,22 +14,15 @@ const XLSX = require("xlsx")
 const JSZip = require("jszip")
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  // pdfjs-dist v6.0.227: use the legacy ES-module build (works in Node.js without a worker)
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
-  const data = await pdfjs.getDocument({ data: buffer }).promise
-  const numPages = data.numPages
-  console.log("[PARSE-DOC PDF] pdfjs-dist loaded. Pages:", numPages)
-
-  let text = ""
-  for (let i = 1; i <= numPages; i++) {
-    const page = await data.getPage(i)
-    const content = await page.getTextContent()
-    const pageText = content.items.map((item: any) => item.str).join(" ")
-    text += pageText + "\n\n"
+  // pdf-parse v1.1.1: treated as external package via serverComponentsExternalPackages
+  const pdfParse = require("pdf-parse")
+  console.log("[PARSE-DOC PDF] pdf-parse loaded, type:", typeof pdfParse)
+  if (typeof pdfParse !== "function") {
+    throw new Error("pdf-parse did not export a function, got: " + typeof pdfParse)
   }
-
-  console.log("[PARSE-DOC PDF] Extracted text length:", text.length)
-  return text.trim()
+  const data = await pdfParse(buffer)
+  console.log("[PARSE-DOC PDF] Extracted pages:", data.numpages, "text length:", data.text?.length)
+  return data.text.trim()
 }
 
 async function extractDocxText(buffer: Buffer): Promise<string> {
