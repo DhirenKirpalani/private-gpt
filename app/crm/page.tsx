@@ -370,6 +370,19 @@ export default function CRMPage() {
             return [msg, ...prev]
           })
           setInboxFetched(true)
+          // Auto-import the sender as a contact
+          importContactsFromEmails(user.id).then(async (imported) => {
+            if (imported > 0) {
+              const contactList = await getContacts(user.id)
+              setContacts(contactList.map((c: any) => ({
+                id: c.id, name: c.name, company: c.company || "", role: c.role || "",
+                email: c.email || "", phone: c.phone || "", location: c.location || "",
+                tags: c.tags || [], starred: c.starred,
+                lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+                dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
+              })))
+            }
+          }).catch(() => {})
         }
       } else if (payload.eventType === "UPDATE") {
         const msg = payload.new
@@ -458,6 +471,20 @@ export default function CRMPage() {
       unsubscribeChannel(contactsChannel)
     }
   }, [user?.id])
+
+  // ── Auto-poll inbox every 2 minutes ──────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return
+    const POLL_INTERVAL = 2 * 60 * 1000 // 2 minutes
+    const interval = setInterval(() => {
+      const providerId = activeChannel || emailConnections.find((c: any) => c.status === "connected")?.provider
+      if (providerId && !inboxLoading) {
+        console.log("[AUTO-POLL] Fetching inbox for new emails...")
+        fetchInbox()
+      }
+    }, POLL_INTERVAL)
+    return () => clearInterval(interval)
+  }, [user?.id, activeChannel, emailConnections, inboxLoading])
 
   // ── Load kanban cols from Supabase ──────────────────────────────────────────
   useEffect(() => {
