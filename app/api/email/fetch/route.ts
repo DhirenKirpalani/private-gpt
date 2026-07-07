@@ -296,66 +296,98 @@ export async function POST(req: NextRequest) {
         console.log(`[IMAP FETCH] INBOX opened`)
         // IMAP: search since 15 days before connection
         const imapDate = cutoffDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-")
-        const searchCriteria = [["SINCE", imapDate]]
-        const fetchOptions = { bodies: ["HEADER", "TEXT"], struct: true }
 
-        console.log(`[IMAP FETCH] Searching messages with criteria ALL...`)
-        const messages = await connection.search(searchCriteria, fetchOptions)
-        console.log(`[IMAP FETCH] Found ${messages.length} messages in INBOX`)
+        // Search IMAP for messages matching business keywords (server-side filtering)
+        // This avoids downloading all messages and filtering client-side
+        console.log(`[IMAP FETCH] Searching for messages with business keywords since ${imapDate}...`)
+        const matchingUids = new Set<number>()
+        for (const keyword of BUSINESS_KEYWORDS) {
+          try {
+            const results = await connection.search([["SINCE", imapDate], ["TEXT", keyword]], { bodies: "", struct: true })
+            for (const msg of results) {
+              if (msg.attributes?.uid) matchingUids.add(msg.attributes.uid)
+            }
+          } catch (e: any) {
+            console.warn(`[IMAP FETCH] Keyword search "${keyword}" failed:`, e?.message)
+          }
+        }
+        console.log(`[IMAP FETCH] Found ${matchingUids.size} unique messages matching keywords`)
 
+        if (matchingUids.size === 0) {
+          console.log(`[IMAP FETCH] No matching messages, closing connection`)
+          await connection.end()
+          return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken: null })
+        }
+
+        // Fetch full message bodies only for matching UIDs
+        const fetchOptions = { bodies: [""], struct: true }
+        const uidList = Array.from(matchingUids)
+
+        // Limit to 50 messages per request to avoid Vercel timeout
+        const MAX_MSGS = 50
+        const uidsToFetch = uidList.slice(0, MAX_MSGS)
+        if (uidList.length > MAX_MSGS) {
+          console.log(`[IMAP FETCH] Limiting to first ${MAX_MSGS} of ${uidList.length} matching messages`)
+        }
+
+        console.log(`[IMAP FETCH] Fetching full bodies for ${uidsToFetch.length} messages...`)
+        const messages = await connection.search([["UID", uidsToFetch.join(",")]], fetchOptions)
+        console.log(`[IMAP FETCH] Retrieved ${messages.length} messages`)
+
+        // Batch check existing messages in one query
+        const allUids = messages.map((m: any) => m.attributes?.uid?.toString()).filter(Boolean)
+        const { data: existingRows } = await supabase
+          .from("email_messages").select("message_id")
+          .eq("user_id", userId).eq("connection_id", conn.id)
+          .in("message_id", allUids)
+        const existingIds = new Set((existingRows || []).map((r: any) => r.message_id))
+
+        const payloads: any[] = []
         for (const msg of messages) {
-          console.log(`[IMAP FETCH] Processing msg uid=${msg.attributes?.uid} seqno=${msg.attributes?.seqno}`)
-          const all = msg.parts.find((p: any) => p.which === "TEXT")
-          const header = msg.parts.find((p: any) => p.which === "HEADER")
-          if (!all || !header) {
-            console.warn(`[IMAP FETCH] Skipping msg — missing parts: all=${!!all} header=${!!header}`)
+          const uid = msg.attributes?.uid?.toString()
+          if (!uid) continue
+          if (existingIds.has(uid)) {
+            console.log(`[IMAP FETCH] Message uid=${uid} already exists, skipping`)
             continue
           }
 
-          console.log(`[IMAP FETCH] Parsing message body with mailparser...`)
-          const parsed = await simpleParser.simpleParser(all.body)
+          // Get the full raw message (bodies: [""] returns it under which: "")
+          const raw = msg.parts.find((p: any) => p.which === "")
+          if (!raw) {
+            console.warn(`[IMAP FETCH] Skipping uid=${uid} — no raw body`)
+            continue
+          }
+
+          console.log(`[IMAP FETCH] Parsing uid=${uid} with mailparser...`)
+          const parsed = await simpleParser.simpleParser(raw.body)
           const from = parsed.from?.text || parsed.from?.value?.[0]?.address || ""
           const to = parsed.to?.text || parsed.to?.value?.map((v: any) => v.address).join(", ") || ""
           console.log(`[IMAP FETCH] Parsed: from="${from}" to="${to}" subject="${parsed.subject || "(no subject)"}"`)
 
-          // Keyword filter for IMAP
-          const combinedText = `${parsed.subject || ""} ${parsed.text || ""}`.toLowerCase()
-          if (!matchesBusinessKeywords(combinedText)) {
-            console.log(`[IMAP FETCH] Skipping uid=${msg.attributes?.uid} — no business keywords`)
-            continue
-          }
+          payloads.push({
+            user_id: userId, connection_id: conn.id, provider: providerId,
+            direction: "received", from_address: from, to_address: to,
+            subject: parsed.subject || "", body: parsed.text || "",
+            html_body: parsed.html || null,
+            message_id: uid,
+            thread_id: parsed.inReplyTo || uid,
+            read: false,
+            received_at: parsed.date?.toISOString() || new Date().toISOString(),
+          })
+        }
 
-          const uid = msg.attributes.uid.toString()
-          console.log(`[IMAP FETCH] Checking if message uid=${uid} already exists in DB...`)
-          const { data: existing } = await supabase
-            .from("email_messages").select("id")
-            .eq("user_id", userId).eq("connection_id", conn.id)
-            .eq("message_id", uid).maybeSingle()
-
-          if (!existing) {
-            console.log(`[IMAP FETCH] Inserting new message uid=${uid} into DB...`)
-            const { data: inserted, error: insertErr } = await supabase
-              .from("email_messages")
-              .insert({
-                user_id: userId, connection_id: conn.id, provider: providerId,
-                direction: "received", from_address: from, to_address: to,
-                subject: parsed.subject || "", body: parsed.text || "",
-                html_body: parsed.html || null,
-                message_id: uid,
-                thread_id: parsed.inReplyTo || uid,
-                read: false,
-                received_at: parsed.date?.toISOString() || new Date().toISOString(),
-              }).select().single()
-            if (insertErr) {
-              console.error(`[IMAP FETCH] Insert failed for uid=${uid}:`, insertErr.message)
-            } else if (inserted) {
-              console.log(`[IMAP FETCH] Inserted msg id=${inserted.id} uid=${uid}`)
-              results.push(inserted)
-            }
-          } else {
-            console.log(`[IMAP FETCH] Message uid=${uid} already exists, skipping`)
+        if (payloads.length > 0) {
+          console.log(`[IMAP FETCH] Batch inserting ${payloads.length} messages...`)
+          const { data: inserted, error: insertErr } = await supabase
+            .from("email_messages").insert(payloads).select()
+          if (insertErr) {
+            console.error(`[IMAP FETCH] Batch insert failed:`, insertErr.message)
+          } else if (inserted) {
+            console.log(`[IMAP FETCH] Inserted ${inserted.length} messages`)
+            results.push(...inserted)
           }
         }
+
         console.log(`[IMAP FETCH] Closing IMAP connection...`)
         await connection.end()
         console.log(`[IMAP FETCH] IMAP connection closed`)
