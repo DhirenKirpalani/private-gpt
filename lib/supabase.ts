@@ -606,13 +606,13 @@ export async function deleteContact(userId: string, contactId: string) {
   if (error) throw error
 }
 
-// Import contacts from email messages (extract unique senders)
+// Import contacts from email messages (extract unique senders + parse body for contact info)
 export async function importContactsFromEmails(userId: string): Promise<number> {
   console.log("[IMPORT DEBUG] Starting import for user:", userId)
-  // Get all received email messages for this user
+  // Get all received email messages for this user — include body for signature parsing
   const { data: messages, error } = await supabase
     .from("email_messages")
-    .select("from_address, subject, received_at")
+    .select("from_address, subject, received_at, body")
     .eq("user_id", userId)
     .eq("direction", "received")
     .not("from_address", "is", null)
@@ -623,8 +623,67 @@ export async function importContactsFromEmails(userId: string): Promise<number> 
     return 0
   }
 
+  // Extract contact info from email body (signature parsing)
+  function parseSignatureInfo(body: string) {
+    const info: { name?: string; phone?: string; company?: string; location?: string; linkedin?: string } = {}
+    if (!body) return info
+
+    // Strip HTML tags for cleaner parsing
+    const text = body.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+
+    // Name: look for sign-off patterns like "Best regards, John Smith" or "Sincerely, Jane Doe"
+    const signoffs = [
+      /(?:best regards|regards|sincerely|cheers|thanks|thank you|kind regards|warm regards|respectfully|yours truly|best)[,\.]?\s*[\r\n]+\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})/,
+      /(?:best regards|regards|sincerely|cheers|thanks|thank you|kind regards|warm regards|respectfully|yours truly|best)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})/,
+    ]
+    for (const pattern of signoffs) {
+      const nameMatch = text.match(pattern)
+      if (nameMatch) {
+        const candidate = nameMatch[1].trim()
+        // Must be 2+ words or a single capitalized name, and not a common word
+        const commonWords = ["The", "This", "Your", "You", "All", "For", "And", "But", "With"]
+        if (candidate.length >= 3 && !commonWords.includes(candidate)) {
+          info.name = candidate
+          break
+        }
+      }
+    }
+
+    // Phone: match international and US formats
+    const phoneMatch = text.match(/(\+?\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4})/)
+    if (phoneMatch) {
+      const phone = phoneMatch[1].trim()
+      // Filter out years, zip codes, etc. — must be 7+ digits
+      const digits = phone.replace(/\D/g, "")
+      if (digits.length >= 7 && digits.length <= 15) {
+        info.phone = phone
+      }
+    }
+
+    // LinkedIn URL
+    const linkedinMatch = text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|pub|company)\/[^\s<"'.,)]+/i)
+    if (linkedinMatch) {
+      info.linkedin = linkedinMatch[0]
+    }
+
+    // Company: look for patterns like "Company Name" after "at" or in signature
+    // Try "at Company Name" pattern
+    const atCompanyMatch = text.match(/\bat\s+([A-Z][a-zA-Z0-9&\s]{2,30})/);
+    if (atCompanyMatch) {
+      info.company = atCompanyMatch[1].trim()
+    }
+
+    // Location: look for "City, State" or "City, Country" pattern near end of email
+    const locationMatch = text.match(/([A-Z][a-z]+(?:\s[A-Z][a-z]+)?,\s*(?:[A-Z]{2}|[A-Z][a-z]+))/)
+    if (locationMatch) {
+      info.location = locationMatch[1].trim()
+    }
+
+    return info
+  }
+
   // Extract unique email addresses with their most recent message info
-  const uniqueSenders = new Map<string, { name: string; email: string; lastContact: string; subject: string }>()
+  const uniqueSenders = new Map<string, { name: string; email: string; lastContact: string; subject: string; body: string }>()
 
   for (const msg of messages) {
     if (!msg.from_address) continue
@@ -643,7 +702,7 @@ export async function importContactsFromEmails(userId: string): Promise<number> 
     const existing = uniqueSenders.get(email)
     const msgDate = msg.received_at || new Date().toISOString()
     if (!existing || msgDate > existing.lastContact) {
-      uniqueSenders.set(email, { name, email, lastContact: msgDate, subject: msg.subject || "" })
+      uniqueSenders.set(email, { name, email, lastContact: msgDate, subject: msg.subject || "", body: msg.body || "" })
     }
   }
 
@@ -663,27 +722,40 @@ export async function importContactsFromEmails(userId: string): Promise<number> 
   for (const [email, info] of Array.from(uniqueSenders.entries())) {
     if (existingEmails.has(email)) { console.log("[IMPORT DEBUG] Skipping existing:", email); continue }
 
-    // Guess company from email domain
-    let company = ""
-    const domainMatch = email.match(/@(.+)$/)
-    if (domainMatch) {
-      const domain = domainMatch[1]
-      if (!domain.includes("gmail.com") && !domain.includes("yahoo.com") && !domain.includes("hotmail.com") && !domain.includes("outlook.com")) {
-        company = domain.replace(/\.(com|net|org|io|co\.\w+)$/, "").replace(/-/g, " ")
-        company = company.charAt(0).toUpperCase() + company.slice(1)
+    // Parse signature info from email body
+    const sigInfo = parseSignatureInfo(info.body)
+    console.log("[IMPORT DEBUG] Parsed signature for", email, sigInfo)
+
+    // Guess company from email domain (fallback if not found in signature)
+    let company = sigInfo.company || ""
+    if (!company) {
+      const domainMatch = email.match(/@(.+)$/)
+      if (domainMatch) {
+        const domain = domainMatch[1]
+        if (!domain.includes("gmail.com") && !domain.includes("yahoo.com") && !domain.includes("hotmail.com") && !domain.includes("outlook.com")) {
+          company = domain.replace(/\.(com|net|org|io|co\.\w+)$/, "").replace(/-/g, " ")
+          company = company.charAt(0).toUpperCase() + company.slice(1)
+        }
       }
     }
 
-    console.log("[IMPORT DEBUG] Inserting contact:", { name: info.name, email, company })
+    // Build tags — include linkedin if found
+    const tags: string[] = []
+    if (sigInfo.linkedin) tags.push("linkedin")
+
+    // Use signature name if from_address name is just the email (no proper name)
+    const fromName = (info.name === email || info.name.includes("@")) ? (sigInfo.name || email.split("@")[0]) : info.name
+
+    console.log("[IMPORT DEBUG] Inserting contact:", { name: fromName, email, company, phone: sigInfo.phone, location: sigInfo.location, tags })
     const { error: insertError } = await supabase.from("contacts").insert({
       user_id: userId,
-      name: info.name || email.split("@")[0],
+      name: fromName,
       email: info.email,
       company: company || null,
       role: null,
-      phone: null,
-      location: null,
-      tags: [],
+      phone: sigInfo.phone || null,
+      location: sigInfo.location || null,
+      tags,
       starred: false,
       source: "email_import",
       last_contact: info.lastContact,
@@ -699,6 +771,80 @@ export async function importContactsFromEmails(userId: string): Promise<number> 
   }
 
   console.log("[IMPORT DEBUG] Total imported:", imported)
+  return imported
+}
+
+// Import contacts from WhatsApp messages (extract unique senders)
+export async function importContactsFromWhatsApp(userId: string): Promise<number> {
+  console.log("[WA IMPORT] Starting WhatsApp contact import for user:", userId)
+  const { data: messages, error } = await supabase
+    .from("whatsapp_messages")
+    .select("from_number, body, timestamp")
+    .eq("user_id", userId)
+    .eq("direction", "received")
+    .not("from_number", "is", null)
+
+  if (error || !messages || messages.length === 0) {
+    console.log("[WA IMPORT] No WhatsApp messages found, returning 0")
+    return 0
+  }
+
+  // Extract unique phone numbers with most recent message
+  const uniqueSenders = new Map<string, { phone: string; lastContact: string }>()
+  for (const msg of messages) {
+    if (!msg.from_number) continue
+    const phone = msg.from_number as string
+    const msgDate = msg.timestamp || new Date().toISOString()
+    const existing = uniqueSenders.get(phone)
+    if (!existing || msgDate > existing.lastContact) {
+      uniqueSenders.set(phone, { phone, lastContact: msgDate })
+    }
+  }
+
+  console.log("[WA IMPORT] Unique WhatsApp senders:", uniqueSenders.size)
+
+  // Check which contacts already exist by phone
+  const phones = Array.from(uniqueSenders.keys())
+  const { data: existingContacts } = await supabase
+    .from("contacts")
+    .select("phone")
+    .eq("user_id", userId)
+    .in("phone", phones)
+
+  const existingPhones = new Set((existingContacts || []).map((c: any) => c.phone))
+  console.log("[WA IMPORT] Existing phone contacts:", existingPhones.size)
+
+  let imported = 0
+  for (const [phone, info] of Array.from(uniqueSenders.entries())) {
+    if (existingPhones.has(phone)) continue
+
+    // Format phone as name (e.g. "+1234567890")
+    const displayName = phone
+
+    const { error: insertError } = await supabase.from("contacts").insert({
+      user_id: userId,
+      name: displayName,
+      email: null,
+      phone: info.phone,
+      company: null,
+      role: null,
+      location: null,
+      tags: ["whatsapp"],
+      starred: false,
+      source: "whatsapp_import",
+      last_contact: info.lastContact,
+      deal_value: 0,
+      deal_stage: null,
+    })
+
+    if (insertError) {
+      console.error("[WA IMPORT] Insert failed:", insertError.message)
+    } else {
+      imported++
+    }
+  }
+
+  console.log("[WA IMPORT] Total imported:", imported)
   return imported
 }
 
