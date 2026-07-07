@@ -7,7 +7,7 @@ import {
   Search, Plus, Phone, Mail, MapPin, Building2,
   Filter, CircleDollarSign, ChevronDown, X,
   ClipboardList, FileText, Send, Inbox,
-  Star, StarOff, Shield, User, Loader2, Reply, Trash2, Check, Pencil, Menu, PanelLeft,
+  Star, StarOff, Shield, User, Loader2, Reply, Trash2, Check, Pencil, Menu, PanelLeft, Tag,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
@@ -96,6 +96,10 @@ export default function CRMPage() {
   const [emailSearch, setEmailSearch] = useState("")
   const [emailFilterOpen, setEmailFilterOpen] = useState(false)
   const [emailFilter, setEmailFilter] = useState<{ direction: "all" | "sent" | "received"; read: "all" | "read" | "unread" }>({ direction: "all", read: "all" })
+  const [contactEmailFilter, setContactEmailFilter] = useState<string | null>(null)
+  const [keywordFilter, setKeywordFilter] = useState<string | null>(null)
+  const [keywordFilterOpen, setKeywordFilterOpen] = useState(false)
+  const EMAIL_KEYWORDS = ["proposal", "invoice", "contract", "quote", "order", "payment", "receipt", "agreement", "deal", "lead", "client", "project", "billing", "estimate", "refund", "sales", "opportunity", "milestone", "deliverable", "deadline", "approval", "legal"]
 
   // Email kanban state
   const [emailKanbanCols, setEmailKanbanCols] = useState<KanbanCol[]>([
@@ -1228,9 +1232,23 @@ export default function CRMPage() {
 
                 {/* Recent activity */}
                 <div className="rounded-xl border bg-card p-4">
-                  <h3 className="mb-3 text-sm font-semibold">Recent Activity</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">Recent Activity</h3>
+                    {contact.email && (
+                      <button
+                        onClick={() => {
+                          setContactEmailFilter(contact.email)
+                          setActiveTab("Email")
+                        }}
+                        className="flex items-center gap-1.5 rounded-lg bg-blue-600/20 px-2.5 py-1 text-[11px] font-semibold text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 transition-colors"
+                      >
+                        <Mail className="h-3 w-3" />
+                        View Email Thread
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-3">
-                    {activities.filter(a => a.contact === contact.name).slice(0, 4).map(a => (
+                    {activities.filter(a => a.contact === contact.email || a.contact === contact.name).slice(0, 4).map(a => (
                       <div key={a.id} className="flex gap-3">
                         <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600/15 text-emerald-400">
                           {a.type === "email" && <Mail className="h-3 w-3" />}
@@ -1244,7 +1262,7 @@ export default function CRMPage() {
                         </div>
                       </div>
                     ))}
-                    {activities.filter(a => a.contact === contact.name).length === 0 && (
+                    {activities.filter(a => a.contact === contact.email || a.contact === contact.name).length === 0 && (
                       <p className="text-xs text-muted-foreground">No recent activity.</p>
                     )}
                   </div>
@@ -1256,6 +1274,20 @@ export default function CRMPage() {
             {/* ── EMAIL ── */}
             {activeTab === "Email" && (
               <div className="flex flex-1 flex-col min-h-0">
+                {/* Contact filter banner */}
+                {contactEmailFilter && (
+                  <div className="flex items-center justify-between bg-blue-600/10 border-b border-blue-500/20 px-6 py-2">
+                    <span className="text-xs font-medium text-blue-400">
+                      Filtered by contact: {contactEmailFilter}
+                    </span>
+                    <button
+                      onClick={() => setContactEmailFilter(null)}
+                      className="text-xs text-muted-foreground hover:text-white transition-colors"
+                    >
+                      Clear filter ✕
+                    </button>
+                  </div>
+                )}
                 {/* Email Toolbar */}
                 <div className="flex items-center justify-between px-6 py-4 border-b bg-card/50">
                   <div className="flex items-center gap-3">
@@ -1350,6 +1382,35 @@ export default function CRMPage() {
                         </div>
                       )}
                     </div>
+                    <div className="relative">
+                      <button
+                        onClick={() => setKeywordFilterOpen(v => !v)}
+                        className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors", keywordFilter ? "bg-amber-600/10 border-amber-500/30 text-amber-400" : "hover:bg-accent")}
+                      >
+                        <Tag className="h-3.5 w-3.5" />
+                        {keywordFilter ? keywordFilter : "Keyword"}
+                      </button>
+                      {keywordFilterOpen && (
+                        <div className="absolute right-0 top-full z-40 mt-1 w-56 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl p-3 space-y-2 max-h-80 overflow-y-auto">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Filter by keyword</p>
+                          <button
+                            onClick={() => { setKeywordFilter(null); setKeywordFilterOpen(false) }}
+                            className={cn("w-full rounded-lg py-1.5 text-[11px] font-medium border transition-colors", !keywordFilter ? "bg-emerald-600/20 border-emerald-500/40 text-emerald-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}
+                          >
+                            All keywords
+                          </button>
+                          {EMAIL_KEYWORDS.map(kw => (
+                            <button
+                              key={kw}
+                              onClick={() => { setKeywordFilter(kw); setKeywordFilterOpen(false) }}
+                              className={cn("w-full rounded-lg py-1.5 text-[11px] font-medium capitalize border transition-colors text-left px-2.5", keywordFilter === kw ? "bg-amber-600/20 border-amber-500/40 text-amber-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}
+                            >
+                              {kw}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <button
                       onClick={() => fetchInbox()}
                       disabled={inboxLoading}
@@ -1362,7 +1423,7 @@ export default function CRMPage() {
                 </div>
                 {emailView === "kanban" ? (
                   /* ── DRAGGABLE KANBAN ── */
-                  <div className="flex flex-1 overflow-x-auto overflow-y-hidden min-h-0" onClick={() => setEmailFilterOpen(false)}>
+                  <div className="flex flex-1 overflow-x-auto overflow-y-hidden min-h-0" onClick={() => { setEmailFilterOpen(false); setKeywordFilterOpen(false) }}>
                     <div className="flex h-full gap-5 p-6">
                       {emailKanbanCols.map(col => {
                         const q = emailSearch.toLowerCase()
@@ -1371,6 +1432,8 @@ export default function CRMPage() {
                           .filter((m: any) => !q || (m.subject || "").toLowerCase().includes(q) || (m.from_address || "").toLowerCase().includes(q) || (m.body || "").toLowerCase().includes(q))
                           .filter((m: any) => emailFilter.direction === "all" || m.direction === emailFilter.direction)
                           .filter((m: any) => emailFilter.read === "all" || (emailFilter.read === "read" ? m.read : !m.read))
+                          .filter((m: any) => !contactEmailFilter || (m.from_address || "").includes(contactEmailFilter) || (m.to_address || "").includes(contactEmailFilter))
+                          .filter((m: any) => !keywordFilter || (m.subject || "").toLowerCase().includes(keywordFilter) || (m.body || "").toLowerCase().includes(keywordFilter))
                         const getColId = (m: any) => emailCardCols[m.id] || (m.direction === "sent" ? "sent" : m.read ? "read" : "unread")
                         const items = allMsgs.filter(m => getColId(m) === col.id)
                         return (
@@ -1482,7 +1545,7 @@ export default function CRMPage() {
                     </p>
                   </div>
                 ) : emailView === "table" ? (
-                  <div className="rounded-xl border overflow-x-auto" onClick={() => setEmailStatusOpen(null)}>
+                  <div className="rounded-xl border overflow-x-auto" onClick={() => { setEmailStatusOpen(null); setKeywordFilterOpen(false) }}>
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b bg-muted/50">
@@ -1501,6 +1564,8 @@ export default function CRMPage() {
                             .filter((m: any) => !q || (m.subject || "").toLowerCase().includes(q) || (m.from_address || "").toLowerCase().includes(q) || (m.body || "").toLowerCase().includes(q))
                             .filter((m: any) => emailFilter.direction === "all" || m.direction === emailFilter.direction)
                             .filter((m: any) => emailFilter.read === "all" || (emailFilter.read === "read" ? m.read : !m.read))
+                            .filter((m: any) => !contactEmailFilter || (m.from_address || "").includes(contactEmailFilter) || (m.to_address || "").includes(contactEmailFilter))
+                            .filter((m: any) => !keywordFilter || (m.subject || "").toLowerCase().includes(keywordFilter) || (m.body || "").toLowerCase().includes(keywordFilter))
                         })().sort((a: any, b: any) => {
                             const da = a.received_at ? new Date(a.received_at).getTime() : a.sent_at ? new Date(a.sent_at).getTime() : 0
                             const db = b.received_at ? new Date(b.received_at).getTime() : b.sent_at ? new Date(b.sent_at).getTime() : 0
