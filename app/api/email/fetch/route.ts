@@ -135,6 +135,22 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
         }
 
+        // Fetch thread IDs of existing emails in DB so we can match replies to keyword threads
+        const { data: existingThreadEmails } = await supabase
+          .from("email_messages")
+          .select("thread_id, subject, body")
+          .eq("user_id", userId)
+          .eq("connection_id", conn.id)
+          .not("thread_id", "is", null)
+        const keywordThreadIds = new Set<string>()
+        for (const te of existingThreadEmails || []) {
+          const text = `${te.subject || ""} ${te.body || ""}`.toLowerCase()
+          if (matchesBusinessKeywords(text)) {
+            keywordThreadIds.add(te.thread_id)
+          }
+        }
+        console.log(`[EMAIL FETCH] Found ${keywordThreadIds.size} existing threads with keywords`)
+
         // Fetch details in parallel with concurrency limit of 8
         const details: (any | null)[] = []
         for (let i = 0; i < newIds.length; i += 8) {
@@ -176,7 +192,9 @@ export async function POST(req: NextRequest) {
 
           const subject = getHeader("Subject")
           const combinedText = `${subject} ${body || html}`.toLowerCase()
-          if (!matchesBusinessKeywords(combinedText)) {
+          const threadId = d.threadId || d.id
+          const isInKeywordThread = keywordThreadIds.has(threadId)
+          if (!matchesBusinessKeywords(combinedText) && !isInKeywordThread) {
             continue
           }
 
@@ -243,10 +261,28 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
         }
 
+        // Fetch thread IDs of existing emails in DB for keyword thread matching
+        const { data: existingThreadEmails } = await supabase
+          .from("email_messages")
+          .select("thread_id, subject, body")
+          .eq("user_id", userId)
+          .eq("connection_id", conn.id)
+          .not("thread_id", "is", null)
+        const keywordThreadIds = new Set<string>()
+        for (const te of existingThreadEmails || []) {
+          const text = `${te.subject || ""} ${te.body || ""}`.toLowerCase()
+          if (matchesBusinessKeywords(text)) {
+            keywordThreadIds.add(te.thread_id)
+          }
+        }
+        console.log(`[EMAIL FETCH] Microsoft: Found ${keywordThreadIds.size} existing threads with keywords`)
+
         const payloads: any[] = []
         for (const msg of newMsgs) {
           const combinedText = `${msg.subject || ""} ${msg.bodyPreview || msg.body?.content || ""}`.toLowerCase()
-          if (!matchesBusinessKeywords(combinedText)) {
+          const threadId = msg.conversationId || msg.id
+          const isInKeywordThread = keywordThreadIds.has(threadId)
+          if (!matchesBusinessKeywords(combinedText) && !isInKeywordThread) {
             continue
           }
           payloads.push({
@@ -309,9 +345,11 @@ export async function POST(req: NextRequest) {
         const imapDate = cutoffDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-")
 
         // Search IMAP for messages matching business keywords (server-side filtering)
-        // This avoids downloading all messages and filtering client-side
+        // Also search for replies to existing keyword threads
         console.log(`[IMAP FETCH] Searching for messages with business keywords since ${imapDate}...`)
         const matchingUids = new Set<number>()
+
+        // 1. Search by keywords
         for (const keyword of BUSINESS_KEYWORDS) {
           try {
             const results = await connection.search([["SINCE", imapDate], ["TEXT", keyword]], { bodies: "", struct: true })
@@ -322,7 +360,47 @@ export async function POST(req: NextRequest) {
             console.warn(`[IMAP FETCH] Keyword search "${keyword}" failed:`, e?.message)
           }
         }
-        console.log(`[IMAP FETCH] Found ${matchingUids.size} unique messages matching keywords`)
+
+        // 2. Fetch thread IDs of existing emails in DB for keyword thread matching
+        const { data: existingThreadEmails } = await supabase
+          .from("email_messages")
+          .select("thread_id, subject, body, message_id_header")
+          .eq("user_id", userId)
+          .eq("connection_id", conn.id)
+          .not("thread_id", "is", null)
+        const keywordThreadIds = new Set<string>()
+        const keywordMessageIds = new Set<string>()
+        for (const te of existingThreadEmails || []) {
+          const text = `${te.subject || ""} ${te.body || ""}`.toLowerCase()
+          if (matchesBusinessKeywords(text)) {
+            keywordThreadIds.add(te.thread_id)
+            if (te.message_id_header) keywordMessageIds.add(te.message_id_header)
+          }
+        }
+        console.log(`[IMAP FETCH] Found ${keywordThreadIds.size} existing keyword threads, ${keywordMessageIds.size} message IDs`)
+
+        // 3. Search for replies to keyword threads (by In-Reply-To / References headers)
+        for (const msgId of Array.from(keywordMessageIds)) {
+          const cleanId = msgId.replace(/[<>]/g, "")
+          try {
+            const results = await connection.search([["SINCE", imapDate], ["HEADER", "In-Reply-To", cleanId]], { bodies: "", struct: true })
+            for (const msg of results) {
+              if (msg.attributes?.uid) matchingUids.add(msg.attributes.uid)
+            }
+          } catch (e: any) {
+            // Some IMAP servers don't support HEADER search — fallback to TEXT search on message ID
+            try {
+              const results = await connection.search([["SINCE", imapDate], ["TEXT", cleanId]], { bodies: "", struct: true })
+              for (const msg of results) {
+                if (msg.attributes?.uid) matchingUids.add(msg.attributes.uid)
+              }
+            } catch (e2: any) {
+              console.warn(`[IMAP FETCH] Reply search for "${cleanId}" failed:`, e2?.message)
+            }
+          }
+        }
+
+        console.log(`[IMAP FETCH] Found ${matchingUids.size} unique messages (keywords + thread replies)`)
 
         if (matchingUids.size === 0) {
           console.log(`[IMAP FETCH] No matching messages, closing connection`)

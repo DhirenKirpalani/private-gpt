@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
-import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols } from "@/lib/supabase"
+import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols } from "@/lib/supabase"
 
 /* ─── real data ─── */
 const stages = [
@@ -51,6 +51,8 @@ export default function CRMPage() {
   const [navOpen, setNavOpen] = useState(false)
   const [crmSidebarOpen, setCrmSidebarOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [contactModalId, setContactModalId] = useState<string | null>(null)
+  const [contactsModalOpen, setContactsModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("Overview")
   const [search, setSearch] = useState("")
   const [activeNav] = useState("Contacts")
@@ -374,18 +376,19 @@ export default function CRMPage() {
             return [msg, ...prev]
           })
           setInboxFetched(true)
-          // Auto-import the sender as a contact
-          importContactsFromEmails(user.id).then(async (imported) => {
-            if (imported > 0) {
-              const contactList = await getContacts(user.id)
-              setContacts(contactList.map((c: any) => ({
-                id: c.id, name: c.name, company: c.company || "", role: c.role || "",
-                email: c.email || "", phone: c.phone || "", location: c.location || "",
-                tags: c.tags || [], starred: c.starred,
-                lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
-                dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
-              })))
-            }
+          // Auto-import contacts from email + WhatsApp
+          Promise.allSettled([
+            importContactsFromEmails(user.id),
+            importContactsFromWhatsApp(user.id),
+          ]).then(async () => {
+            const contactList = await getContacts(user.id)
+            setContacts(contactList.map((c: any) => ({
+              id: c.id, name: c.name, company: c.company || "", role: c.role || "",
+              email: c.email || "", phone: c.phone || "", location: c.location || "",
+              tags: c.tags || [], starred: c.starred,
+              lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+              dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
+            })))
           }).catch(() => {})
         }
       } else if (payload.eventType === "UPDATE") {
@@ -565,17 +568,18 @@ export default function CRMPage() {
       setInboxFetched(true)
 
       // Fire contact import in background — don't block UI
-      importContactsFromEmails(user.id).then(async (imported) => {
-        if (imported > 0) {
-          const contactList = await getContacts(user.id)
-          setContacts(contactList.map((c: any) => ({
-            id: c.id, name: c.name, company: c.company || "", role: c.role || "",
-            email: c.email || "", phone: c.phone || "", location: c.location || "",
-            tags: c.tags || [], starred: c.starred,
-            lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
-            dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
-          })))
-        }
+      Promise.allSettled([
+        importContactsFromEmails(user.id),
+        importContactsFromWhatsApp(user.id),
+      ]).then(async () => {
+        const contactList = await getContacts(user.id)
+        setContacts(contactList.map((c: any) => ({
+          id: c.id, name: c.name, company: c.company || "", role: c.role || "",
+          email: c.email || "", phone: c.phone || "", location: c.location || "",
+          tags: c.tags || [], starred: c.starred,
+          lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+          dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
+        })))
       }).catch(() => {})
     } catch (e: any) {
       setFetchError(e?.message || "Network error fetching emails")
@@ -999,7 +1003,7 @@ export default function CRMPage() {
                         icon: User,
                         color: "text-purple-400",
                         bg: "bg-purple-500/10",
-                        action: () => {},
+                        action: () => setContactsModalOpen(true),
                       },
                     ].map(({ label, value, sub, icon: Icon, color, bg, action }) => (
                       <button key={label} onClick={action}
@@ -1170,8 +1174,16 @@ export default function CRMPage() {
               </div>
             )}
 
-            {/* ── OVERVIEW ── */}
+            {/* ── OVERVIEW (contact selected) ── */}
             {activeTab === "Overview" && contact && (
+              <div className="overflow-y-auto p-4 sm:p-6">
+                <button
+                  onClick={() => setSelectedId(null)}
+                  className="mb-4 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-white transition-colors"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                  Back to dashboard
+                </button>
               <div className="grid gap-6 lg:grid-cols-3">
                 {/* Contact info */}
                 <div className="lg:col-span-2 space-y-4">
@@ -1267,6 +1279,7 @@ export default function CRMPage() {
                     )}
                   </div>
                 </div>
+              </div>
               </div>
             )}
 
@@ -2443,6 +2456,230 @@ export default function CRMPage() {
           </div>
         </div>
       )}
+
+      {/* ── CONTACTS PICKER MODAL ── */}
+      {contactsModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setContactsModalOpen(false)}>
+          <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1e2330] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setContactsModalOpen(false)} className="absolute right-3 top-3 text-muted-foreground hover:text-white transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="mb-1 text-lg font-bold text-white">Contacts</h2>
+            <p className="mb-4 text-xs text-muted-foreground">{filtered.length} total · {filtered.filter((c: Contact) => c.tags.includes("whatsapp")).length} WhatsApp · {filtered.filter((c: Contact) => c.email).length} Email</p>
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
+                <User className="mb-2 h-6 w-6 text-muted-foreground opacity-40" />
+                <p className="text-sm text-muted-foreground">No contacts yet. Send an email and replies will auto-import contacts.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {filtered.map((c: Contact) => (
+                  <button
+                    key={c.id}
+                    onClick={() => { setContactModalId(c.id); setContactsModalOpen(false) }}
+                    className="group flex items-center gap-3 rounded-xl border bg-card p-3 text-left hover:border-emerald-500/30 hover:bg-emerald-600/5 transition-all"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white">
+                      {getInitials(c.name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">{c.name}</p>
+                      <div className="flex items-center gap-2">
+                        {c.email && (
+                          <span className="flex items-center gap-1 truncate text-[10px] text-blue-400">
+                            <Mail className="h-2.5 w-2.5" />
+                            {c.email}
+                          </span>
+                        )}
+                        {c.phone && (
+                          <span className="flex items-center gap-1 truncate text-[10px] text-emerald-400">
+                            <Phone className="h-2.5 w-2.5" />
+                            {c.phone}
+                          </span>
+                        )}
+                        {!c.email && !c.phone && (
+                          <span className="text-[10px] text-muted-foreground">{c.company || "No contact info"}</span>
+                        )}
+                      </div>
+                    </div>
+                    {c.tags.includes("whatsapp") && <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400">WA</span>}
+                    {c.starred && <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── CONTACT DETAIL MODAL ── */}
+      {contactModalId && (() => {
+        const c = contacts.find((ct: Contact) => ct.id === contactModalId)
+        if (!c) return null
+        const contactEmails = [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")]
+          .filter((m: any) => (m.from_address || "").includes(c.email || c.phone || "") || (m.to_address || "").includes(c.email || c.phone || ""))
+          .sort((a: any, b: any) => {
+            const da = a.received_at ? new Date(a.received_at).getTime() : a.sent_at ? new Date(a.sent_at).getTime() : 0
+            const db = b.received_at ? new Date(b.received_at).getTime() : b.sent_at ? new Date(b.sent_at).getTime() : 0
+            return db - da
+          })
+        const contactActivities = activities.filter(a => a.contact === c.email || a.contact === c.name || a.contact === c.phone)
+        return (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setContactModalId(null)}>
+            <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1e2330] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setContactModalId(null)} className="absolute right-3 top-3 text-muted-foreground hover:text-white transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+
+              {/* Contact header */}
+              <div className="mb-6 flex items-start gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xl font-bold text-white">
+                  {getInitials(c.name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold text-white">{c.name}</h2>
+                    {c.tags.includes("whatsapp") && <Phone className="h-4 w-4 text-emerald-400" />}
+                    {c.starred && <Star className="h-4 w-4 fill-amber-400 text-amber-400" />}
+                  </div>
+                  <p className="text-sm text-muted-foreground">{c.role ? `${c.role} at ` : ""}{c.company || ""}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {c.tags.map((tag: string) => (
+                      <span key={tag} className="rounded-full border bg-card px-2 py-0.5 text-[10px] font-medium text-muted-foreground capitalize">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact info grid */}
+              <div className="mb-6 grid gap-3 sm:grid-cols-2">
+                {[
+                  { icon: Mail, label: "Email", value: c.email },
+                  { icon: Phone, label: "Phone", value: c.phone },
+                  { icon: Building2, label: "Company", value: c.company },
+                  { icon: MapPin, label: "Location", value: c.location },
+                ].map(({ icon: Icon, label, value }) => (
+                  <div key={label} className="flex items-center gap-3 rounded-xl border bg-card p-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+                      <Icon className="h-4 w-4 text-emerald-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+                      <div className="truncate text-sm text-white">{value || "—"}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Deal info */}
+              {(c.dealValue > 0 || c.dealStage) && (
+                <div className="mb-6 rounded-xl border bg-card p-4">
+                  <h3 className="mb-2 text-sm font-semibold">Deal Info</h3>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Stage: <span className="text-white">{c.dealStage || "—"}</span></span>
+                    <span className="text-muted-foreground">Value: <span className="text-emerald-400 font-semibold">${c.dealValue.toLocaleString()}</span></span>
+                  </div>
+                </div>
+              )}
+
+              {/* Email thread */}
+              <div className="mb-6">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Email Thread ({contactEmails.length})</h3>
+                  {c.email && (
+                    <button
+                      onClick={() => {
+                        setContactEmailFilter(c.email || c.phone || "")
+                        setContactModalId(null)
+                        setActiveTab("Email")
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg bg-blue-600/20 px-2.5 py-1 text-[11px] font-semibold text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 transition-colors"
+                    >
+                      <Mail className="h-3 w-3" />
+                      View in Email Tab
+                    </button>
+                  )}
+                </div>
+                {contactEmails.length === 0 ? (
+                  <div className="rounded-xl border border-dashed py-6 text-center">
+                    <Mail className="mx-auto mb-2 h-5 w-5 text-muted-foreground opacity-40" />
+                    <p className="text-xs text-muted-foreground">No email thread with this contact</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {contactEmails.slice(0, 10).map((m: any) => (
+                      <div key={m.id} className="flex items-start gap-3 rounded-lg border bg-card p-3">
+                        <div className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full", m.direction === "sent" ? "bg-blue-500/15" : "bg-emerald-500/15")}>
+                          {m.direction === "sent" ? <Send className="h-3 w-3 text-blue-400" /> : <Mail className="h-3 w-3 text-emerald-400" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-xs font-semibold">{m.subject || "(No subject)"}</p>
+                            <span className="shrink-0 text-[10px] text-muted-foreground">
+                              {m.received_at ? new Date(m.received_at).toLocaleDateString() : m.sent_at ? new Date(m.sent_at).toLocaleDateString() : ""}
+                            </span>
+                          </div>
+                          <p className="truncate text-[11px] text-muted-foreground mt-0.5">{m.body?.slice(0, 100) || ""}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Recent activity */}
+              <div>
+                <h3 className="mb-3 text-sm font-semibold">Recent Activity</h3>
+                {contactActivities.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No recent activity.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {contactActivities.slice(0, 5).map(a => (
+                      <div key={a.id} className="flex gap-3 rounded-lg border bg-card p-3">
+                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600/15 text-emerald-400">
+                          {a.type === "email" && <Mail className="h-3 w-3" />}
+                        </div>
+                        <div>
+                          <p className="text-xs leading-relaxed">{a.text}</p>
+                          <p className="text-[10px] text-muted-foreground">{a.time}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="mt-6 flex gap-2">
+                {c.email && (
+                  <button
+                    onClick={() => {
+                      if (activeCh.type === "email") {
+                        setComposeTo(c.email || "")
+                      }
+                      setComposerOpen(true)
+                      setContactModalId(null)
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    Send Email
+                  </button>
+                )}
+                <button
+                  onClick={() => { setSelectedId(c.id); setContactModalId(null); setActiveTab("Overview") }}
+                  className="flex items-center gap-1.5 rounded-lg border border-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/5 transition-colors"
+                >
+                  <User className="h-3.5 w-3.5" />
+                  Open Full Profile
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
       <Toaster />
     </div>
   )
