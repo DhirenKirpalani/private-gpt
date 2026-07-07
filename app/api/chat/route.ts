@@ -4,8 +4,8 @@ const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 
 const MAX_TOKENS_MAP: Record<string, number> = {
-  Standard: 2000,
-  Detailed: 4000,
+  Standard: 4000,
+  Detailed: 6000,
   Comprehensive: 8000,
 }
 
@@ -52,6 +52,11 @@ export async function POST(req: NextRequest) {
 
     const data = await response.json()
     const content = data.choices?.[0]?.message?.content ?? ""
+    const finishReason = data.choices?.[0]?.finish_reason ?? "unknown"
+    if (finishReason === "length") {
+      console.warn("[CHAT] Response truncated (finish_reason=length) — action block may be missing. Consider increasing max_tokens.")
+    }
+    console.log(`[CHAT] finish_reason=${finishReason} content_length=${content.length} has_action=${content.includes("<!--ACTION:")}`)
     return NextResponse.json({ content })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })
