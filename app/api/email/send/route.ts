@@ -147,12 +147,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "SMTP credentials incomplete" }, { status: 400 })
       }
 
-      const secure = conn.smtp_secure ?? conn.smtp_port === 465
+      // Port 465 = implicit TLS (secure=true), Port 587 = STARTTLS (secure=false)
+      // Ignore stored smtp_secure flag — it is often set incorrectly by users
+      const secure = conn.smtp_port === 465
       console.log(`[SMTP SEND] Creating transporter: host=${conn.smtp_host} port=${conn.smtp_port} secure=${secure}`)
       const transporter = nodemailer.createTransport({
         host: conn.smtp_host,
         port: conn.smtp_port,
         secure,
+        requireTLS: !secure, // Force STARTTLS upgrade on port 587
         auth: { user: conn.smtp_user, pass: conn.smtp_pass },
         tls: { rejectUnauthorized: false },
         debug: true,
