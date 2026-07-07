@@ -59,6 +59,17 @@ function matchesBusinessKeywords(text: string): boolean {
   return BUSINESS_KEYWORDS.some(k => lower.includes(k.toLowerCase()))
 }
 
+// Remove invalid Unicode surrogate pairs and control chars that break JSON/Postgres
+function sanitizeText(text: string | null | undefined): string {
+  if (!text) return ""
+  return text
+    // Remove lone surrogates (invalid UTF-16 pairs)
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "")
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "")
+    // Remove other control characters except tab, newline, carriage return
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { userId, providerId, pageToken } = await req.json()
@@ -366,11 +377,11 @@ export async function POST(req: NextRequest) {
 
           payloads.push({
             user_id: userId, connection_id: conn.id, provider: providerId,
-            direction: "received", from_address: from, to_address: to,
-            subject: parsed.subject || "", body: parsed.text || "",
-            html_body: parsed.html || null,
+            direction: "received", from_address: sanitizeText(from), to_address: sanitizeText(to),
+            subject: sanitizeText(parsed.subject) || "", body: sanitizeText(parsed.text) || "",
+            html_body: sanitizeText(parsed.html) || null,
             message_id: uid,
-            thread_id: parsed.inReplyTo || uid,
+            thread_id: sanitizeText(parsed.inReplyTo) || uid,
             read: false,
             received_at: parsed.date?.toISOString() || new Date().toISOString(),
           })
