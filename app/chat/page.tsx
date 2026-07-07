@@ -734,21 +734,38 @@ export default function ChatPage() {
 
   // Detect AI action blocks (<!--ACTION:{...}-->) and return stripped content + action data
   function extractAiAction(content: string): { content: string; action?: { type: string; [key: string]: any } } {
-    const match = content.match(/<!--ACTION:({.+?})-->/)
-    if (!match) return { content }
+    // Use [\s\S] to match across newlines — AI may generate multi-line JSON
+    const match = content.match(/<!--ACTION:({[\s\S]+?})-->/)
+    if (!match) {
+      console.log("[AI ACTION] No action block found in message")
+      return { content }
+    }
     try {
       const action = JSON.parse(match[1])
       const stripped = content.replace(match[0], "").trim()
+      console.log("[AI ACTION] Extracted action:", action.type, "to:", action.to)
       return { content: stripped, action }
-    } catch { /* silent */ }
+    } catch (e: any) {
+      console.error("[AI ACTION] Failed to parse action JSON:", e?.message, "raw:", match[1])
+    }
     return { content }
   }
 
   async function executeAiAction(action: { type: string; [key: string]: any }): Promise<string> {
     if (action.type === "send_email" && user) {
+      console.log("[AI ACTION send_email] Looking up email connections for user:", user.id)
       const emailConns = await getEmailConnections(user.id)
-      const connected = emailConns.find((c: any) => c.status === "connected")
-      if (!connected) return "*(No connected email account. Please connect Gmail or Outlook in Channels.)*"
+      console.log("[AI ACTION send_email] Connections found:", emailConns.map(c => ({ provider: c.provider, status: c.status, email: c.email_address })))
+      // Prefer SMTP providers (Hostinger, Zoho, etc.) over OAuth (Gmail, Outlook)
+      // because OAuth providers may fail if Google/Microsoft verification is incomplete
+      const connected = emailConns.find((c: any) => c.status === "connected" && c.smtp_host)
+        || emailConns.find((c: any) => c.status === "connected")
+      if (!connected) {
+        console.error("[AI ACTION send_email] No connected email account found")
+        return "*(No connected email account. Please connect an email provider in Channels.)*"
+      }
+      console.log("[AI ACTION send_email] Using provider:", connected.provider, "email:", connected.email_address)
+      console.log("[AI ACTION send_email] Sending to:", action.to, "subject:", action.subject)
       const sendRes = await fetch("/api/email/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -763,6 +780,7 @@ export default function ChatPage() {
         }),
       })
       const sendData = await sendRes.json()
+      console.log("[AI ACTION send_email] Response:", sendRes.status, sendData)
       return sendRes.ok
         ? `*(Email sent to ${action.to})*`
         : `*(Email failed: ${sendData.error || "Unknown error"})*`
@@ -811,6 +829,12 @@ export default function ChatPage() {
       setMessages(prev => prev.map(m => {
         if (m.id !== msgId) return m
         return { ...m, content: m.content + "\n\n" + resultText, action: undefined }
+      }))
+    } catch (err: any) {
+      console.error("[AI ACTION] handleExecuteAction error:", err?.message, err)
+      setMessages(prev => prev.map(m => {
+        if (m.id !== msgId) return m
+        return { ...m, content: m.content + `\n\n*(Action failed: ${err?.message || "Unknown error"})*`, action: undefined }
       }))
     } finally {
       setExecutingActions(prev => {
