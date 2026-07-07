@@ -60,7 +60,7 @@ async function refreshIfNeeded(conn: any): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, providerId, to, subject, body, html, threadId, originalMessageId } = await req.json()
+    const { userId, providerId, to, cc, subject, body, html, threadId, originalMessageId } = await req.json()
     if (!userId || !providerId || !to || !subject || !body) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
@@ -84,6 +84,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Email connection not found" }, { status: 404 })
     }
 
+    // Fetch user profile for sender display name
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, company_name")
+      .eq("user_id", userId)
+      .maybeSingle()
+    const senderName = profile?.company_name || profile?.full_name || conn.email_address || conn.smtp_user
+
     let messageId = ""
 
     // ── OAuth path (Gmail / Outlook one-click) ──
@@ -94,6 +102,7 @@ export async function POST(req: NextRequest) {
         // Send via Gmail API
         const mimeParts = [
           `To: ${to}`,
+          ...(cc ? [`Cc: ${cc}`] : []),
           `From: ${conn.email_address}`,
           `Subject: ${subject}`,
           ...replyHeaders,
@@ -128,6 +137,7 @@ export async function POST(req: NextRequest) {
               subject,
               body: { contentType: "HTML", content: html || `<p>${body.replace(/\n/g, "<br>")}</p>` },
               toRecipients: [{ emailAddress: { address: to } }],
+              ...(cc ? { ccRecipients: cc.split(",").map((addr: string) => ({ emailAddress: { address: addr.trim() } })) } : {}),
               from: { emailAddress: { address: conn.email_address } },
             },
             saveToSentItems: true,
@@ -164,8 +174,9 @@ export async function POST(req: NextRequest) {
 
       console.log(`[SMTP SEND] Sending mail: from=${conn.email_address || conn.smtp_user} to=${to} subject="${subject}"`)
       const info = await transporter.sendMail({
-        from: `"Exploro AI" <${conn.email_address || conn.smtp_user}>`,
+        from: `"${senderName}" <${conn.email_address || conn.smtp_user}>`,
         to,
+        cc: cc || undefined,
         subject,
         text: body,
         html: html || `<p>${body.replace(/\n/g, "<br>")}</p>`,
@@ -184,6 +195,7 @@ export async function POST(req: NextRequest) {
       direction: "sent",
       from_address: conn.email_address || conn.smtp_user || conn.email_account,
       to_address: to,
+      cc_address: cc || null,
       subject,
       body,
       message_id: messageId,
