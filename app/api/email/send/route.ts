@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Store sent email in DB
-    await supabase.from("email_messages").insert({
+    const { data: insertedMsg, error: insertError } = await supabase.from("email_messages").insert({
       user_id: userId,
       connection_id: conn.id,
       provider: providerId,
@@ -201,7 +201,13 @@ export async function POST(req: NextRequest) {
       message_id: messageId,
       thread_id: threadId || null,
       sent_at: new Date().toISOString(),
-    })
+    }).select().single()
+
+    if (insertError) {
+      console.error("[EMAIL SEND] DB insert failed:", insertError.message, insertError.details)
+    } else {
+      console.log(`[EMAIL SEND] Stored in DB: id=${insertedMsg?.id} direction=sent to=${to} subject="${subject}"`)
+    }
 
     return NextResponse.json({
       success: true,
