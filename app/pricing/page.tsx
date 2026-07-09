@@ -16,8 +16,10 @@ function usePricingData() {
     {
       name: t("pricingPlanSolo"),
       key: "Solo" as const,
-      price: isEs ? "$525 mx" : "$30",
-      period: isEs ? "/mes" : "/mo",
+      originalPrice: isEs ? "$700 MXN/mes" : "$40",
+      price: isEs ? "$525 MXN/mes" : "$30",
+      period: isEs ? "" : "/mo",
+      foundingLabel: t("pricingFoundingPriceSolo"),
       desc: t("pricingDescSolo"),
       features: t("pricingFeaturesSolo").split(","),
       trialNote: t("pricingTrialNoteSolo"),
@@ -28,8 +30,10 @@ function usePricingData() {
     {
       name: t("pricingPlanTeam"),
       key: "Team" as const,
-      price: isEs ? "$875 mx" : "$50",
-      period: isEs ? "/mes" : "/mo",
+      originalPrice: isEs ? "$1,400 MXN por usuario/mes" : "$80",
+      price: isEs ? "$875 MXN por usuario/mes" : "$50",
+      period: isEs ? "" : "/seat per month",
+      foundingLabel: t("pricingFoundingPriceTeam"),
       desc: t("pricingDescTeam"),
       features: t("pricingFeaturesTeam").split(","),
       cta: t("pricingCTATeam"),
@@ -109,16 +113,22 @@ export default function PricingPage() {
 
             <div className={cn(
               "mb-3 sm:mb-5 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold",
-              plan.name === "Enterprise" ? "bg-white/10 text-muted-foreground" : "bg-emerald-500/10 text-emerald-400"
+              "bg-emerald-500/10 text-emerald-400"
             )}>
               {plan.key === "Solo" && <Zap className="h-4 w-4" />}
               {plan.name}
             </div>
 
+            {plan.originalPrice && (
+              <p className="text-sm text-muted-foreground line-through">{plan.originalPrice}</p>
+            )}
             <h2 className="text-2xl font-bold sm:text-3xl">
               {plan.price}
               {plan.period && <span className="text-sm font-normal text-muted-foreground sm:text-base">{plan.period}</span>}
             </h2>
+            {plan.foundingLabel && (
+              <p className="mt-1 text-xs font-semibold text-emerald-400 sm:text-sm">{plan.foundingLabel}</p>
+            )}
             <p className="mt-1 text-sm text-muted-foreground sm:mt-2 sm:text-base">{plan.desc}</p>
 
             <ul className="mt-6 space-y-3 sm:mt-8 sm:space-y-4">
