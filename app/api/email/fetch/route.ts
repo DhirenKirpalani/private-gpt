@@ -48,10 +48,10 @@ async function refreshIfNeeded(conn: any): Promise<string> {
 }
 
 const BUSINESS_KEYWORDS = [
-  "proposal","invoice","contract","quote","order","purchase","payment","receipt",
-  "agreement","deal","lead","client","project","billing","estimate","PO","due",
-  "refund","sales","opportunity","milestone","deliverable","deadline","status",
-  "update","approval","sign","legal",
+  "proposal", "invoice", "contract", "quote", "purchase order", "po",
+  "payment", "receipt", "agreement", "deal", "billing", "estimate",
+  "refund", "opportunity", "milestone", "deliverable", "deadline",
+  "legal", "sow", "rfp", "nda", "msa", "scope of work",
 ]
 
 function matchesBusinessKeywords(text: string): boolean {

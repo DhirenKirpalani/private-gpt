@@ -101,7 +101,7 @@ export default function CRMPage() {
   const [contactEmailFilter, setContactEmailFilter] = useState<string | null>(null)
   const [keywordFilter, setKeywordFilter] = useState<string | null>(null)
   const [keywordFilterOpen, setKeywordFilterOpen] = useState(false)
-  const EMAIL_KEYWORDS = ["proposal", "invoice", "contract", "quote", "order", "payment", "receipt", "agreement", "deal", "lead", "client", "project", "billing", "estimate", "refund", "sales", "opportunity", "milestone", "deliverable", "deadline", "approval", "legal"]
+  const EMAIL_KEYWORDS = ["proposal", "invoice", "contract", "quote", "purchase order", "po", "payment", "receipt", "agreement", "deal", "billing", "estimate", "refund", "opportunity", "milestone", "deliverable", "deadline", "legal", "sow", "rfp", "nda", "msa", "scope of work"]
 
   // Email kanban state
   const [emailKanbanCols, setEmailKanbanCols] = useState<KanbanCol[]>([
