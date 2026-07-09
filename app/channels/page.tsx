@@ -139,18 +139,23 @@ function ChannelsPageContent() {
     const meet = searchParams.get("meet")
     const whatsapp = searchParams.get("whatsapp")
     if (success === "connected" || calendar === "connected") {
-      setOauthMsg({ type: "success", text: `Connected ${email ? email + " " : ""}successfully` })
+      const channelName = email ? `${email} Gmail` : "Google Calendar"
+      toast({ title: "Connected", description: `${channelName} has been connected.`, variant: "default" })
+      setOauthMsg({ type: "success", text: `${channelName} connected successfully` })
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (drive === "connected") {
+      toast({ title: "Connected", description: "Google Drive has been connected.", variant: "default" })
       setOauthMsg({ type: "success", text: "Google Drive connected successfully" })
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (meet === "connected") {
+      toast({ title: "Connected", description: "Google Meet has been connected.", variant: "default" })
       setOauthMsg({ type: "success", text: "Google Meet connected successfully" })
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (whatsapp === "1") {
+      toast({ title: "Connected", description: "WhatsApp Business has been connected.", variant: "default" })
       setOauthMsg({ type: "success", text: "WhatsApp Business connected successfully" })
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
@@ -240,25 +245,32 @@ function ChannelsPageContent() {
   const handleDisconnect = async (providerId: string) => {
     if (!user) return
     console.log(`[CHANNELS DISCONNECT] Disconnecting provider=${providerId}`)
+    const channelName = providerId === "gmail" ? "Gmail" : providerId === "outlook" ? "Outlook" : providerId
     try {
       await deleteEmailConnection(user.id, providerId)
       console.log(`[CHANNELS DISCONNECT] Deleted from DB`)
       setEmailConnections(prev => { const next = { ...prev }; delete next[providerId]; return next })
       console.log(`[CHANNELS DISCONNECT] Updated local state`)
+      toast({ title: "Disconnected", description: `${channelName} has been disconnected.`, variant: "default" })
     } catch (e: any) {
       console.error(`[CHANNELS DISCONNECT] Error:`, e?.message)
+      toast({ title: "Error", description: `Failed to disconnect ${channelName}.`, variant: "error" })
     }
   }
 
   const handleDisconnectCalendar = async (providerId: string) => {
     if (!user) return
+    const channelName = providerId === "google" ? "Google Calendar" : providerId === "googlemeet" ? "Google Meet" : providerId === "googledrive" ? "Google Drive" : providerId
     try {
       const conn = calendarConnections[providerId]
       if (conn) {
         await deleteCalendarConnection(user.id, conn.id)
         setCalendarConnections(prev => { const next = { ...prev }; delete next[providerId]; return next })
+        toast({ title: "Disconnected", description: `${channelName} has been disconnected.`, variant: "default" })
       }
-    } catch { /* ignore */ }
+    } catch {
+      toast({ title: "Error", description: `Failed to disconnect ${channelName}.`, variant: "error" })
+    }
   }
 
   const handleConnectWhatsApp = async (phoneNumberId: string, accessToken: string, phoneNumber?: string) => {
@@ -317,8 +329,11 @@ function ChannelsPageContent() {
       if (conn) {
         await deleteWhatsAppConnection(user.id, conn.id)
         setWhatsAppConnections(prev => { const next = { ...prev }; delete next[phoneNumberId]; return next })
+        toast({ title: "Disconnected", description: "WhatsApp has been disconnected.", variant: "default" })
       }
-    } catch { /* ignore */ }
+    } catch {
+      toast({ title: "Error", description: "Failed to disconnect WhatsApp.", variant: "error" })
+    }
   }
 
   const openCompose = (provider: EmailProvider) => {
