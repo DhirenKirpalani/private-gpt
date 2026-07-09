@@ -221,7 +221,7 @@ export default function CRMPage() {
       if (conn.status === "connected" && conn.provider === "google") {
         list.push({
           id: conn.provider || conn.id,
-          label: conn.calendar_email || "Google Calendar",
+          label: "Google Calendar",
           color: "bg-blue-400",
           type: "calendar",
           connected: true,
