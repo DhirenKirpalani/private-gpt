@@ -42,7 +42,7 @@ const CALENDAR_CHANNELS = [
 ]
 
 const VIDEO_CHANNELS = [
-  { id: "googlemeet", name: "Google Meet", provider: "google", icon: <SiGooglemeet className="h-6 w-6" style={{ color: "#00832d" }} />, descKey: "channelDescGoogleMeet", connectable: true, oauthPath: "/api/meet/oauth/google/connect" },
+  { id: "googlemeet", name: "Google Meet", provider: "googlemeet", icon: <SiGooglemeet className="h-6 w-6" style={{ color: "#00832d" }} />, descKey: "channelDescGoogleMeet", connectable: true, oauthPath: "/api/meet/oauth/google/connect" },
 ]
 
 const FILE_CHANNELS = [
