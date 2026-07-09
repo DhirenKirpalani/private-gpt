@@ -218,11 +218,11 @@ export default function CRMPage() {
       }
     }
     for (const conn of calendarConnections) {
-      if (conn.status === "connected") {
+      if (conn.status === "connected" && conn.provider === "google") {
         list.push({
           id: conn.provider || conn.id,
-          label: conn.calendar_email || conn.provider === "google" ? "Google Calendar" : conn.provider || "Calendar",
-          color: conn.provider === "google" ? "bg-blue-400" : "bg-orange-500",
+          label: conn.calendar_email || "Google Calendar",
+          color: "bg-blue-400",
           type: "calendar",
           connected: true,
         })
