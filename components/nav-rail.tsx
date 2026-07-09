@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
 import {
   MessageSquare, BookOpen, Plug2, User,
   Users, X,
@@ -17,6 +18,8 @@ interface NavRailProps {
 export function NavRail({ mobileOpen, onClose }: NavRailProps) {
   const pathname = usePathname()
   const { t } = useI18n()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
   const primary = [
     { href: "/chat",      icon: MessageSquare, label: t("navChat") },
@@ -40,7 +43,7 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
             title={label}
             className={cn(
               "flex h-11 w-11 items-center justify-center rounded-xl transition-colors",
-              pathname === href
+              mounted && pathname === href
                 ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
@@ -58,7 +61,7 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
             title={label}
             className={cn(
               "flex h-11 w-11 items-center justify-center rounded-xl transition-colors",
-              pathname === href
+              mounted && pathname === href
                 ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
@@ -90,7 +93,7 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
                 onClick={onClose}
                 className={cn(
                   "flex h-11 w-11 items-center justify-center rounded-xl transition-colors",
-                  pathname === href
+                  mounted && pathname === href
                     ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
@@ -109,7 +112,7 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
                 onClick={onClose}
                 className={cn(
                   "flex h-11 w-11 items-center justify-center rounded-xl transition-colors",
-                  pathname === href
+                  mounted && pathname === href
                     ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}

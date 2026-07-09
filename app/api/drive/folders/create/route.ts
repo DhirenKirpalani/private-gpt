@@ -37,17 +37,12 @@ async function refreshIfNeeded(conn: any): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const userId = body.userId
-    const query = body.query || ""
-    const pageSize = body.pageSize || 50
-    const parentId = body.parentId || "root"
+    const { userId, name, parentId } = await req.json()
 
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+    if (!userId || !name) {
+      return NextResponse.json({ error: "Missing required fields: userId, name" }, { status: 400 })
     }
 
-    // Get stored Drive connection
     const { data: conn } = await supabase
       .from("calendar_connections")
       .select("*")
@@ -61,47 +56,36 @@ export async function POST(req: NextRequest) {
 
     const accessToken = await refreshIfNeeded(conn)
 
-    // Build search URL
-    const url = new URL("https://www.googleapis.com/drive/v3/files")
-    url.searchParams.set("pageSize", String(pageSize))
-    url.searchParams.set("fields", "nextPageToken, files(id, name, mimeType, size, modifiedTime, webViewLink, thumbnailLink, parents)")
-    url.searchParams.set("orderBy", "folder,name") // folders first, then alphabetically
-
-    const qParts = ["trashed = false"]
+    const metadata: any = {
+      name,
+      mimeType: "application/vnd.google-apps.folder",
+    }
     if (parentId) {
-      qParts.push(`'${parentId}' in parents`)
+      metadata.parents = [parentId]
     }
-    if (query) {
-      qParts.push(`name contains '${query.replace(/'/g, "\\'")}'`)
-    }
-    url.searchParams.set("q", qParts.join(" and "))
 
-    const driveRes = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
+    const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(metadata),
     })
-    const driveData = await driveRes.json()
 
-    if (!driveRes.ok) {
-      return NextResponse.json({ error: driveData.error?.message || "Failed to fetch Drive files" }, { status: 500 })
+    const createData = await createRes.json()
+    if (!createRes.ok) {
+      return NextResponse.json({ error: createData.error?.message || "Failed to create folder" }, { status: 500 })
     }
-
-    const files = (driveData.files || []).map((f: any) => ({
-      id: f.id,
-      name: f.name,
-      mimeType: f.mimeType,
-      size: f.size ? parseInt(f.size) : null,
-      modifiedTime: f.modifiedTime,
-      webViewLink: f.webViewLink,
-      thumbnailLink: f.thumbnailLink,
-      isFolder: f.mimeType === "application/vnd.google-apps.folder",
-    }))
 
     return NextResponse.json({
-      files,
-      nextPageToken: driveData.nextPageToken || null,
+      success: true,
+      folderId: createData.id,
+      name: createData.name,
+      mimeType: createData.mimeType,
     })
   } catch (err: any) {
-    console.error("[DRIVE FETCH]", err)
-    return NextResponse.json({ error: err?.message || "Drive fetch failed" }, { status: 500 })
+    console.error("[DRIVE FOLDER CREATE]", err)
+    return NextResponse.json({ error: err?.message || "Folder creation failed" }, { status: 500 })
   }
 }
