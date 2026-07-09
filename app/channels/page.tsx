@@ -42,7 +42,7 @@ const CALENDAR_CHANNELS = [
 ]
 
 const VIDEO_CHANNELS = [
-  { id: "googlemeet", name: "Google Meet", provider: "google", icon: <SiGooglemeet className="h-6 w-6" style={{ color: "#00832d" }} />, descKey: "channelDescGoogleMeet", connectable: true, usesCalendarConnection: true },
+  { id: "googlemeet", name: "Google Meet", provider: "google", icon: <SiGooglemeet className="h-6 w-6" style={{ color: "#00832d" }} />, descKey: "channelDescGoogleMeet", connectable: true, oauthPath: "/api/meet/oauth/google/connect" },
 ]
 
 const FILE_CHANNELS = [
@@ -136,6 +136,7 @@ function ChannelsPageContent() {
     const email = searchParams.get("email")
     const calendar = searchParams.get("calendar")
     const drive = searchParams.get("drive")
+    const meet = searchParams.get("meet")
     const whatsapp = searchParams.get("whatsapp")
     if (success === "connected" || calendar === "connected") {
       setOauthMsg({ type: "success", text: `Connected ${email ? email + " " : ""}successfully` })
@@ -143,6 +144,10 @@ function ChannelsPageContent() {
       window.history.replaceState({}, "", window.location.pathname)
     } else if (drive === "connected") {
       setOauthMsg({ type: "success", text: "Google Drive connected successfully" })
+      loadConnections()
+      window.history.replaceState({}, "", window.location.pathname)
+    } else if (meet === "connected") {
+      setOauthMsg({ type: "success", text: "Google Meet connected successfully" })
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (whatsapp === "1") {
@@ -652,9 +657,22 @@ function ChannelsPageContent() {
                         )}
                       </div>
                       {meetConnected ? (
-                        <span className="shrink-0 rounded-full border border-emerald-500/30 px-3 py-1 text-xs font-medium text-emerald-400">Active</span>
+                        <button
+                          onClick={() => handleDisconnectCalendar(ch.provider)}
+                          className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                        >
+                          Disconnect
+                        </button>
                       ) : (
-                        <span className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-muted-foreground">Connect Calendar first</span>
+                        <button
+                          onClick={() => {
+                            if (!user) return
+                            window.location.href = `${ch.oauthPath}?userId=${user.id}`
+                          }}
+                          className="w-full sm:w-auto shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                        >
+                          Connect
+                        </button>
                       )}
                     </div>
                   )
