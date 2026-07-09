@@ -7,6 +7,7 @@ import {
   Bot, Copy, RefreshCw, Share2, Sparkles,
   PanelLeftClose, X, User, Paperclip, File, CheckCircle2, ChevronDown,
   Mail, Phone, CalendarDays, Check, Loader2, Menu,
+  HardDrive, Video,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
@@ -136,6 +137,8 @@ export default function ChatPage() {
   const kbPanelRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const driveFileInputRef = useRef<HTMLInputElement>(null)
+  const [driveChatUploading, setDriveChatUploading] = useState(false)
   const messageCountRef = useRef(0)
 
   // Channels panel
@@ -462,8 +465,14 @@ export default function ChatPage() {
         `- List upcoming meetings and events`,
         `- Suggest free time slots for scheduling`,
         `- Create meetings/events in the user's Google Calendar (ask for title, time, duration, attendees, location)`,
+        `- Create Google Calendar events with an attached Google Meet video conference (ask if the user wants a Meet link)`,
         `- Draft meeting invites (ask for attendees, time, and agenda)`,
         `- Summarize the day's or week's schedule`,
+        ``,
+        `Google Drive capabilities:`,
+        `- List files and folders in the user's Google Drive`,
+        `- Generate text/markdown documents (proposals, reports, notes, etc.) and save them directly to Google Drive`,
+        `- When generating a document, ask for the file name and what content to include`,
         ``,
         `WhatsApp capabilities:`,
         `- Summarize recent WhatsApp conversations`,
@@ -491,6 +500,19 @@ export default function ChatPage() {
         `# CRITICAL: CALENDAR EVENT PROTOCOL`,
         `Similarly, you CANNOT create calendar events yourself. When the user asks to create an event, draft it and append:`,
         `<!--ACTION:{"type":"create_event","title":"Event Title","start":"2026-06-19T14:00:00Z","end":"2026-06-19T15:00:00Z","attendees":["a@b.com"],"location":"Zoom"}-->`,
+        `If the user wants a Google Meet link attached, include "addGoogleMeet":true:`,
+        `<!--ACTION:{"type":"create_event","title":"Event Title","start":"2026-06-19T14:00:00Z","end":"2026-06-19T15:00:00Z","attendees":["a@b.com"],"addGoogleMeet":true}-->`,
+        ``,
+        `# CRITICAL: GOOGLE DRIVE UPLOAD PROTOCOL`,
+        `You CANNOT upload files to Google Drive yourself. When the user asks you to generate a document and save it to Google Drive, write the document content and append:`,
+        `<!--ACTION:{"type":"upload_drive","fileName":"Proposal.md","content":"# Project Proposal\\n\\nThis is the generated document content...","mimeType":"text/markdown","folderId":"optional-folder-id"}-->`,
+        `Rules:`,
+        `- fileName MUST end in .md or .txt (plain text/markdown only)`,
+        `- content is the full document text`,
+        `- Use \\n for line breaks in the JSON string`,
+        `- mimeType should be "text/markdown" for .md or "text/plain" for .txt`,
+        `- folderId is optional`,
+        `- Tell the user: "I have prepared the document. Click Upload to Drive to save it."`,
         ``,
         `# CRITICAL: WHATSAPP SENDING PROTOCOL`,
         `Similarly, you CANNOT send WhatsApp messages yourself. When the user asks to send a WhatsApp, draft it and append:`,
@@ -660,6 +682,54 @@ export default function ChatPage() {
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
+  async function handleDriveFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0 || !user) return
+    setDriveChatUploading(true)
+    let uploadedCount = 0
+    let lastError = ""
+    try {
+      for (const file of files) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            const result = reader.result as string
+            resolve(result.split(",")[1])
+          }
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
+        const res = await fetch("/api/drive/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            fileName: file.name,
+            mimeType: file.type,
+            content: base64,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          lastError = data.error || "Upload failed"
+        } else {
+          uploadedCount++
+        }
+      }
+      if (uploadedCount > 0) {
+        toast({ title: "Uploaded to Drive", description: `${uploadedCount} file(s) uploaded`, variant: "default" })
+      }
+      if (lastError) {
+        toast({ title: "Some uploads failed", description: lastError, variant: "error" })
+      }
+    } catch (err: any) {
+      toast({ title: "Drive upload failed", description: err?.message || "Could not upload", variant: "error" })
+    } finally {
+      setDriveChatUploading(false)
+      if (driveFileInputRef.current) driveFileInputRef.current.value = ""
+    }
+  }
+
   async function confirmUpload() {
     if (uploadPreview.length === 0) return
     if (!user) {
@@ -812,12 +882,47 @@ export default function ChatPage() {
           end: action.end,
           attendees: action.attendees || [],
           location: action.location || undefined,
+          addGoogleMeet: action.addGoogleMeet === true,
         }),
       })
       const calData = await calRes.json()
       return calRes.ok
         ? `*(Event "${action.title}" created)*`
         : `*(Event failed: ${calData.error || "Unknown error"})*`
+    }
+    if (action.type === "upload_drive" && user) {
+      const fileName = action.fileName || "document.md"
+      const content = action.content || ""
+      const mimeType = action.mimeType || "text/markdown"
+      const folderId = action.folderId || undefined
+
+      // Create a Blob from the generated text and encode to base64
+      const blob = new Blob([content], { type: mimeType })
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          const result = reader.result as string
+          resolve(result.split(",")[1])
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+
+      const uploadRes = await fetch("/api/drive/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          fileName,
+          mimeType,
+          content: base64,
+          folderId,
+        }),
+      })
+      const uploadData = await uploadRes.json()
+      return uploadRes.ok
+        ? `*(File "${fileName}" uploaded to Google Drive)*`
+        : `*(Drive upload failed: ${uploadData.error || "Unknown error"})*`
     }
     if (action.type === "send_whatsapp" && user) {
       const waRes = await fetch("/api/whatsapp/send", {
@@ -948,21 +1053,40 @@ export default function ChatPage() {
         getWhatsAppConnections(user.id),
       ])
       const channels: typeof connectedChannels = []
-      const emailConnected = emailConns.some((c: any) => c.status === "connected")
+      const connectedEmail = emailConns.find((c: any) => c.status === "connected")
+      const emailProviderName = connectedEmail?.provider === "gmail" ? "Gmail" :
+        connectedEmail?.provider === "outlook" ? "Outlook" :
+        connectedEmail?.provider ? (connectedEmail.provider.charAt(0).toUpperCase() + connectedEmail.provider.slice(1)) : "Email"
       channels.push({
         id: "email",
-        name: "Email",
+        name: emailProviderName,
         icon: <Mail className="h-3.5 w-3.5" />,
-        connected: emailConnected,
-        detail: emailConnected ? (emailConns.find((c: any) => c.status === "connected")?.email_address || "Connected") : "Not connected",
+        connected: !!connectedEmail,
+        detail: connectedEmail ? (connectedEmail.email_address || "Connected") : "Not connected",
       })
-      const calConnected = calConns.length > 0
+      const calendarConn = calConns.find((c: any) => c.provider === "google")
       channels.push({
         id: "calendar",
         name: "Google Calendar",
         icon: <CalendarDays className="h-3.5 w-3.5" />,
-        connected: calConnected,
-        detail: calConnected ? (calConns[0]?.calendar_email || "Connected") : "Not connected",
+        connected: !!calendarConn,
+        detail: calendarConn ? (calendarConn.calendar_email || "Connected") : "Not connected",
+      })
+      const meetConn = calConns.find((c: any) => c.provider === "googlemeet")
+      channels.push({
+        id: "googlemeet",
+        name: "Google Meet",
+        icon: <Video className="h-3.5 w-3.5" />,
+        connected: !!meetConn,
+        detail: meetConn ? (meetConn.calendar_email || "Connected") : "Not connected",
+      })
+      const driveConn = calConns.find((c: any) => c.provider === "googledrive")
+      channels.push({
+        id: "googledrive",
+        name: "Google Drive",
+        icon: <HardDrive className="h-3.5 w-3.5" />,
+        connected: !!driveConn,
+        detail: driveConn ? (driveConn.calendar_email || "Connected") : "Not connected",
       })
       const waConnected = waConns.length > 0
       channels.push({
@@ -1283,6 +1407,19 @@ export default function ChatPage() {
                       >
                         <Paperclip className="h-3.5 w-3.5" />
                         <span className="hidden sm:inline">Upload</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => driveFileInputRef.current?.click()}
+                        disabled={driveChatUploading}
+                        title="Upload to Google Drive"
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+                          inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                        )}
+                      >
+                        <HardDrive className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Drive</span>
                       </button>
                       {/* Knowledge Base button */}
                       <button
@@ -1630,6 +1767,19 @@ export default function ChatPage() {
                       <Paperclip className="h-3.5 w-3.5" />
                       <span className="hidden sm:inline">Upload</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => driveFileInputRef.current?.click()}
+                      disabled={driveChatUploading}
+                      title="Upload to Google Drive"
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+                        inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                      )}
+                    >
+                      <HardDrive className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Drive</span>
+                    </button>
                     {/* Knowledge Base button */}
                     <button
                       onClick={() => handleTabClick("knowledge")}
@@ -1737,6 +1887,13 @@ export default function ChatPage() {
         multiple
         accept=".pdf,.docx,.doc,.txt,.md,.html,.json,.csv,.xml,.pptx,.xlsx,.epub"
         onChange={handleFileChange}
+        className="hidden"
+      />
+      <input
+        ref={driveFileInputRef}
+        type="file"
+        multiple
+        onChange={handleDriveFileUpload}
         className="hidden"
       />
 
