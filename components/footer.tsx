@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { FaLinkedin } from "react-icons/fa"
+import { FaLinkedin, FaFacebook } from "react-icons/fa"
 import { useI18n } from "@/lib/i18n"
 import { useAuth } from "@/app/auth-provider"
 
@@ -43,6 +43,15 @@ export function Footer() {
                 aria-label="LinkedIn"
               >
                 <FaLinkedin className="h-8 w-8" style={{ color: "#0077b5" }} />
+              </a>
+              <a
+                href="https://www.facebook.com/profile.php?id=61591467366278"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center transition-colors hover:opacity-80"
+                aria-label="Facebook"
+              >
+                <FaFacebook className="h-8 w-8" style={{ color: "#1877F2" }} />
               </a>
             </div>
             <p className="mt-2 text-sm font-medium text-emerald-400">A Product of Secretes Corp DBA Urbanseed</p>

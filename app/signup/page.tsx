@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useI18n } from "@/lib/i18n"
+import { useAuth } from "@/app/auth-provider"
 import { signUp, signIn } from "@/lib/supabase"
+import { startTrial } from "@/lib/subscription"
 
 const perkKeys = [
   "signupPerk1",
@@ -19,6 +21,7 @@ const perkKeys = [
 
 export default function SignupPage() {
   const { t } = useI18n()
+  const { refreshSubscription } = useAuth()
   const router = useRouter()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -45,7 +48,11 @@ export default function SignupPage() {
       await signUp(email, password, name)
       // Try auto-signin — may fail if email confirmation is required
       try {
-        await signIn(email, password)
+        const { user } = await signIn(email, password)
+        if (user) {
+          await startTrial(user.id)
+          await refreshSubscription()
+        }
         router.push("/profile")
       } catch (loginErr: any) {
         if (loginErr.message?.toLowerCase().includes("email not confirmed") || loginErr.message?.toLowerCase().includes("not confirmed")) {

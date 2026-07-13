@@ -64,6 +64,7 @@ export type Profile = {
   response_length: string
   languages: any
   avatar_url: string
+  role: "user" | "manager" | "admin" | "super_admin" | null
   logo_url: string
   brand_colors: any
   brand_style: string

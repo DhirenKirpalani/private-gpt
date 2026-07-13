@@ -7,6 +7,8 @@ import { Search, Check, X, MessageSquare, User, Globe, Mail, Eye, EyeOff, Loader
 import { FaWhatsapp, FaTelegram, FaSlack, FaInstagram, FaFacebookMessenger, FaSms, FaMicrosoft } from "react-icons/fa"
 import { SiGmail, SiIcloud, SiGooglecalendar, SiZoho, SiGoogledrive, SiGooglemeet } from "react-icons/si"
 import { NavRail } from "@/components/nav-rail"
+import { TrialPill } from "@/components/trial-pill"
+import { TrialPaywall } from "@/components/trial-paywall"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { useI18n } from "@/lib/i18n"
@@ -427,17 +429,17 @@ function ChannelsPageContent() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* Header */}
-      <header className="flex h-14 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-2 sm:px-3 md:px-4">
+      <header className="flex h-16 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
         <button
           onClick={() => setNavOpen(true)}
-          className="flex md:hidden h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          className="flex md:hidden h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           aria-label="Open menu"
         >
-          <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
+          <Menu className="h-5 w-5" />
         </button>
         <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[32px] w-auto object-contain sm:h-[36px] md:h-[40px]" />
-          <span className="hidden sm:inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
+          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[36px] w-auto object-contain sm:h-[38px] md:h-[40px]" />
+          <span className="inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
         <div className="hidden flex-1 justify-center md:flex">
           <div className="relative w-full max-w-lg">
@@ -446,19 +448,22 @@ function ChannelsPageContent() {
           </div>
         </div>
         <div className="flex flex-1 justify-end items-center gap-1.5 sm:gap-2 md:gap-3 md:flex-none">
-          <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
+          <div className="hidden md:inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
             {(["en", "es"] as const).map(l => (
               <button key={l} onClick={() => setLang(l)} className={cn("rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all sm:px-2.5 sm:text-xs", lang === l ? "bg-emerald-600 text-white shadow-sm" : "text-muted-foreground hover:text-white")}>
                 {l.toUpperCase()}
               </button>
             ))}
           </div>
-          <Link href="/profile" className={cn("relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden", authLoading || avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
-            {!authLoading && !avatarUrl && (userInitials || <User className="h-4 w-4 text-white" />)}
+          <TrialPill className="hidden md:flex" />
+          <Link href="/profile" className={cn("relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden", authLoading || avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
+            {!authLoading && !avatarUrl && (userInitials || <User className="h-5 w-5 md:h-4 md:w-4 text-white" />)}
             {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
           </Link>
         </div>
       </header>
+
+      <TrialPaywall />
 
       {/* OAuth callback toast */}
       {oauthMsg && (
@@ -472,13 +477,13 @@ function ChannelsPageContent() {
 
       <div className="flex flex-1 overflow-hidden">
         <NavRail mobileOpen={navOpen} onClose={() => setNavOpen(false)} />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
-          <div className="mx-auto max-w-2xl space-y-6 sm:space-y-10">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8">
+          <div className="mx-auto max-w-2xl space-y-5 sm:space-y-10">
 
             {/* Email providers */}
             <div>
-              <div className="mb-6">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{t("channelsTitle")}</h1>
+              <div className="mb-4 sm:mb-6">
+                <h1 className="text-lg sm:text-2xl font-bold tracking-tight">{t("channelsTitle")}</h1>
                 <p className="mt-1 text-sm sm:text-base text-muted-foreground">{t("channelsSubtitle")}</p>
               </div>
               <div className="mb-3 flex items-center gap-2">
@@ -491,7 +496,7 @@ function ChannelsPageContent() {
                   const connected = !!conn
                   const hasError = connected && conn.status === "error"
                   return (
-                    <div key={provider.id} className={cn("card-3d flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5", connected ? (hasError ? "border-red-500/30 bg-[#2a3444]" : "border-emerald-500/30 bg-[#2a3444]") : "border-white/5 bg-[#2a3444]")}>
+                    <div key={provider.id} className={cn("flex flex-col gap-3 rounded-xl border p-3 shadow-sm transition-all duration-200 sm:flex-row sm:items-center sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5 hover:sm:-translate-y-0.5", connected ? (hasError ? "border-red-500/30 bg-[#2a3444]" : "border-emerald-500/30 bg-[#2a3444]") : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{provider.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -551,7 +556,7 @@ function ChannelsPageContent() {
                   const waConnected = isWhatsApp && Object.keys(whatsappConnections).length > 0
                   const waConn = waConnected ? Object.values(whatsappConnections)[0] : null
                   return (
-                    <div key={ch.id} className={cn("card-3d flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5", waConn ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                    <div key={ch.id} className={cn("flex flex-col gap-3 rounded-xl border p-3 shadow-sm transition-all duration-200 sm:flex-row sm:items-center sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5 hover:sm:-translate-y-0.5", waConn ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -605,7 +610,7 @@ function ChannelsPageContent() {
                 {CALENDAR_CHANNELS.map(ch => {
                   const calConnected = calendarConnections[ch.provider]
                   return (
-                    <div key={ch.id} className={cn("card-3d flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5", calConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                    <div key={ch.id} className={cn("flex flex-col gap-3 rounded-xl border p-3 shadow-sm transition-all duration-200 sm:flex-row sm:items-center sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5 hover:sm:-translate-y-0.5", calConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -655,7 +660,7 @@ function ChannelsPageContent() {
                 {VIDEO_CHANNELS.map(ch => {
                   const meetConnected = calendarConnections[ch.provider]
                   return (
-                    <div key={ch.id} className={cn("card-3d flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5", meetConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                    <div key={ch.id} className={cn("flex flex-col gap-3 rounded-xl border p-3 shadow-sm transition-all duration-200 sm:flex-row sm:items-center sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5 hover:sm:-translate-y-0.5", meetConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -705,7 +710,7 @@ function ChannelsPageContent() {
                 {FILE_CHANNELS.map(ch => {
                   const fileConnected = calendarConnections[ch.provider]
                   return (
-                    <div key={ch.id} className={cn("card-3d flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5", fileConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                    <div key={ch.id} className={cn("flex flex-col gap-3 rounded-xl border p-3 shadow-sm transition-all duration-200 sm:flex-row sm:items-center sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5 hover:sm:-translate-y-0.5", fileConnected ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
