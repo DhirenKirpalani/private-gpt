@@ -8,6 +8,8 @@ import {
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { NavRail } from "@/components/nav-rail"
+import { TrialPill } from "@/components/trial-pill"
+import { TrialPaywall } from "@/components/trial-paywall"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { useI18n } from "@/lib/i18n"
@@ -478,17 +480,17 @@ export default function KnowledgePage() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* Header */}
-      <header className="flex h-14 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-2 sm:px-3 md:px-4">
+      <header className="flex h-16 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
         <button
           onClick={() => setNavOpen(true)}
-          className="flex md:hidden h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          className="flex md:hidden h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           aria-label="Open menu"
         >
-          <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
+          <Menu className="h-5 w-5" />
         </button>
         <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[32px] w-auto object-contain sm:h-[36px] md:h-[40px]" />
-          <span className="hidden sm:inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
+          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[36px] w-auto object-contain sm:h-[38px] md:h-[40px]" />
+          <span className="inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
         <div className="hidden flex-1 justify-center md:flex">
           <div className="relative w-full max-w-lg">
@@ -503,7 +505,7 @@ export default function KnowledgePage() {
         </div>
         <div className="flex flex-1 justify-end items-center gap-1.5 sm:gap-2 md:gap-3 md:flex-none">
           {/* Language toggle */}
-          <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
+          <div className="hidden md:inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5">
             <button
               onClick={() => setLang("en")}
               className={cn(
@@ -527,15 +529,18 @@ export default function KnowledgePage() {
               ES
             </button>
           </div>
+          <TrialPill className="hidden md:flex" />
           <Link href="/profile" className={cn(
-            "relative flex h-7 w-7 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden",
+            "relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden",
             authLoading || avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500"
           )}>
-            {!authLoading && !avatarUrl && (userInitials || <User className="h-4 w-4 text-white" />)}
+            {!authLoading && !avatarUrl && (userInitials || <User className="h-5 w-5 md:h-4 md:w-4 text-white" />)}
             {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
           </Link>
         </div>
       </header>
+
+      <TrialPaywall />
 
       <div className="flex flex-1 overflow-hidden">
 
@@ -688,7 +693,7 @@ export default function KnowledgePage() {
             <div className="relative flex items-center gap-1.5 sm:gap-2" ref={filterRef}>
               <button
                 onClick={() => setCatSidebarOpen(true)}
-                className="flex md:hidden items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted sm:px-3 sm:py-1.5"
+                className="hidden items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted sm:px-3 sm:py-1.5"
               >
                 <PanelLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 <span className="hidden sm:inline">{t("knowledgeCategories")}</span>
@@ -724,12 +729,46 @@ export default function KnowledgePage() {
             </div>
           </div>
 
+          {/* Mobile category tabs */}
+          <div className="flex md:hidden overflow-x-auto border-b px-3 py-2 scrollbar-hide">
+            <div className="flex items-center gap-1.5">
+              {allCategories.map(cat => {
+                const count = categoryCounts[cat] ?? 0
+                const active = activeCategory === cat
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+                      active
+                        ? "bg-emerald-600/15 text-emerald-400"
+                        : "text-muted-foreground hover:bg-muted/50"
+                    )}
+                  >
+                    {cat === "All Documents" ? <BookOpen className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                    <span>{categoryDisplay(cat, t as unknown as (k: string) => string)}</span>
+                    {count > 0 && (
+                      <span className={cn(
+                        "ml-0.5 shrink-0 rounded-full px-1.5 py-0 text-[10px] tabular-nums leading-none",
+                        active ? "bg-emerald-600/20 text-emerald-400" : "bg-white/10 text-muted-foreground"
+                      )}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           {/* Centered upload bar — hidden when no documents */}
           {filtered.length > 0 && (
-            <div className="flex shrink-0 items-center justify-center gap-3 border-b px-4 py-2.5 sm:px-6 sm:py-3">
-              <label className="group flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-white/15 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5">
+            <div className="flex shrink-0 flex-col items-stretch justify-center gap-2 border-b px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3 sm:px-6 sm:py-3">
+              <label className="group flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5 sm:w-auto">
                 <Upload className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-emerald-400" />
-                <span>{t("knowledgeClickUpload")}</span>
+                <span className="hidden sm:inline">{t("knowledgeClickUpload")}</span>
+                <span className="sm:hidden">Upload</span>
                 <input
                   type="file"
                   multiple
@@ -740,10 +779,11 @@ export default function KnowledgePage() {
               </label>
               <button
                 onClick={() => setDriveOpen(true)}
-                className="flex items-center gap-2 rounded-xl border border-white/10 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5"
+                className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5 sm:w-auto"
               >
                 <HardDrive className="h-4 w-4" />
-                <span>Import from Google Drive</span>
+                <span className="hidden sm:inline">Import from Google Drive</span>
+                <span className="sm:hidden">Google Drive</span>
               </button>
             </div>
           )}
@@ -760,7 +800,7 @@ export default function KnowledgePage() {
                 return (
                   <div
                   key={doc.id}
-                  className="card-3d flex flex-col gap-2 rounded-xl border border-white/5 bg-[#2a3444] px-3 py-3 shadow-lg shadow-emerald-900/5 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10 sm:flex-row sm:items-center sm:gap-4 sm:px-4 sm:py-3"
+                  className="card-3d flex flex-col gap-2 rounded-xl border border-white/5 bg-[#2a3444] px-3 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10 sm:flex-row sm:items-center sm:gap-4 sm:px-4 sm:py-3 sm:shadow-lg sm:shadow-emerald-900/5"
                 >
                   <div className="flex items-start gap-3 sm:items-center sm:gap-4">
                     <div className="relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -852,7 +892,7 @@ export default function KnowledgePage() {
 
               {!docsLoading && filtered.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <div className="mb-6 flex flex-col items-center gap-3">
+                  <div className="mb-6 flex w-full max-w-xs flex-col items-stretch gap-3 px-4">
                     <label className="flex cursor-pointer flex-col items-center gap-2 group">
                       <div className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-muted transition-colors group-hover:border-emerald-500/50 group-hover:bg-emerald-600/5">
                         <Upload className="h-7 w-7 text-muted-foreground transition-colors group-hover:text-emerald-400" />
@@ -868,10 +908,11 @@ export default function KnowledgePage() {
                     </label>
                     <button
                       onClick={() => setDriveOpen(true)}
-                      className="flex items-center gap-2 rounded-xl border border-white/10 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5"
+                      className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5"
                     >
                       <HardDrive className="h-4 w-4" />
-                      <span>Import from Google Drive</span>
+                      <span className="hidden sm:inline">Import from Google Drive</span>
+                      <span className="sm:hidden">Google Drive</span>
                     </button>
                   </div>
                   <p className="font-medium">{t("knowledgeEmptyTitle")}</p>

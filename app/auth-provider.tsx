@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react"
 import { supabase, getUser, getSession, signOut, getProfile, type Profile } from "@/lib/supabase"
-import { getSubscription, type Subscription } from "@/lib/subscription"
+import { getSubscription, startTrial, type Subscription } from "@/lib/subscription"
 import type { User, Session } from "@supabase/supabase-js"
 
 type AuthContextType = {
@@ -12,6 +12,7 @@ type AuthContextType = {
   logout: () => Promise<void>
   avatarUrl: string
   profile: Profile | null
+  role: Profile["role"]
   refreshProfile: () => Promise<void>
   subscription: Subscription | null
   refreshSubscription: () => Promise<void>
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
   avatarUrl: "",
   profile: null,
+  role: null,
   refreshProfile: async () => {},
   subscription: null,
   refreshSubscription: async () => {},
@@ -35,12 +37,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [avatarUrl, setAvatarUrl] = useState("")
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [role, setRole] = useState<Profile["role"]>(null)
   const [subscription, setSubscription] = useState<Subscription | null>(null)
 
   const loadProfile = useCallback(async (userId: string) => {
     try {
       const p = await getProfile(userId)
       setProfile(p)
+      setRole(p?.role || null)
       const url = p?.avatar_url || ""
       setAvatarUrl(url)
       if (url) localStorage.setItem("exploro_avatar_url", url)
@@ -58,6 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadSubscription = useCallback(async (userId: string) => {
     try {
       const sub = await getSubscription(userId)
+      if (!sub) {
+        // Existing user without a subscription row — grant a 15-day trial.
+        await startTrial(userId)
+        const newSub = await getSubscription(userId)
+        setSubscription(newSub)
+        return
+      }
       setSubscription(sub)
     } catch {
       setSubscription(null)
@@ -122,12 +133,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setSession(null)
     setProfile(null)
+    setRole(null)
     setAvatarUrl("")
     setSubscription(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, logout, avatarUrl, profile, refreshProfile, subscription, refreshSubscription }}>
+    <AuthContext.Provider value={{ user, session, loading, logout, avatarUrl, profile, role, refreshProfile, subscription, refreshSubscription }}>
       {children}
     </AuthContext.Provider>
   )

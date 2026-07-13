@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 import { useAuth } from "@/app/auth-provider"
-import { StripeCheckoutButton, StripePortalButton } from "@/components/stripe-checkout-button"
+import { CheckoutButton } from "@/components/checkout-button"
 
 function usePricingData() {
   const { t, lang } = useI18n()
@@ -148,21 +148,21 @@ export default function PricingPage() {
                   </Button>
                 </a>
               ) : plan.key === "Solo" ? (
-                <StripeCheckoutButton
+                <CheckoutButton
                   plan="solo"
                   userId={userId}
                   className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-sm py-4 sm:text-base sm:py-6"
                 >
                   {plan.cta} <ArrowRight className="h-4 w-4" />
-                </StripeCheckoutButton>
+                </CheckoutButton>
               ) : (
-                <StripeCheckoutButton
+                <CheckoutButton
                   plan="team"
                   userId={userId}
                   className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-sm py-4 sm:text-base sm:py-6"
                 >
                   {plan.cta} <ArrowRight className="h-4 w-4" />
-                </StripeCheckoutButton>
+                </CheckoutButton>
               )}
               {plan.trialNote && (
                 <p className="mt-3 text-center text-sm text-muted-foreground">

@@ -85,7 +85,7 @@ export function Navbar() {
             className="h-[34px] w-auto object-contain transition-transform duration-300 hover:scale-105 sm:h-[38px] lg:h-[44px]"
             style={{ transformOrigin: "left center" }}
           />
-          <span className="hidden rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30 sm:inline-block">BETA</span>
+          <span className="inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
 
         {/* Desktop nav — hidden on mobile */}
