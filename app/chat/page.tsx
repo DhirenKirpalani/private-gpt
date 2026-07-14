@@ -1139,6 +1139,18 @@ export default function ChatPage() {
   return (
     <div className="fixed inset-0 z-[60] flex flex-col">
 
+      {/* Cinematic background — behind everything at z-0 */}
+      {mounted && (
+        <div className="absolute inset-0" style={{ zIndex: 0, isolation: "isolate", pointerEvents: "none" }}>
+          <CinematicBackground
+            primaryColor={themePrimary}
+            secondaryColor={themeSecondary}
+            style={themeStyle}
+            mood={themeMood}
+          />
+        </div>
+      )}
+
       {/* ── HEADER ── */}
       <header
         className="relative z-10 flex h-16 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b border-white/5 px-3 md:px-4"
@@ -1226,16 +1238,7 @@ export default function ChatPage() {
       <TrialPaywall />
 
       {/* ── BODY ── */}
-      <div className="relative flex flex-1 overflow-hidden">
-        {/* Cinematic background layers */}
-        {mounted && (
-          <CinematicBackground
-            primaryColor={themePrimary}
-            secondaryColor={themeSecondary}
-            style={themeStyle}
-            mood={themeMood}
-          />
-        )}
+      <div className="relative z-10 flex flex-1 overflow-hidden">
 
         {/* ── NAV RAIL (desktop only) ── */}
         <NavRail mobileOpen={navOpen} onClose={() => setNavOpen(false)} />
