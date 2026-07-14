@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation"
 import { Loader2, Save, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/app/auth-provider"
-import { getAppSettings, updateAppSetting } from "@/lib/app-settings"
+import { getAppSettings } from "@/lib/app-settings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast, Toaster } from "@/components/ui/toast"
 
 export default function AdminPage() {
-  const { user, role, loading } = useAuth()
+  const { user, role, loading, refreshSubscription } = useAuth()
   const router = useRouter()
   const [trialDays, setTrialDays] = useState(15)
   const [saving, setSaving] = useState(false)
@@ -38,10 +38,19 @@ export default function AdminPage() {
   }, [user, role, loading, router])
 
   const handleSave = async () => {
+    if (!user) return
     setSaving(true)
     try {
-      await updateAppSetting("trial_days", String(trialDays))
-      toast({ title: "Saved", description: `Trial period updated to ${trialDays} days.` })
+      const res = await fetch("/api/admin/update-trial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trialDays, requestingUserId: user.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to save")
+
+      await refreshSubscription()
+      toast({ title: "Saved", description: `Trial period updated to ${trialDays} days for all users.` })
     } catch (err: any) {
       toast({ title: "Error", description: err.message || "Failed to save", variant: "error" })
     } finally {

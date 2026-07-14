@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { useEffect, useState, useRef, useCallback } from "react"
 import {
   MessageSquare, BookOpen, Plug2, User,
-  Users, X, Shield,
+  Users, X, Shield, Headphones,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
@@ -72,6 +72,10 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
     { href: "/crm", icon: Users, labelKey: "navCRM" },
   ] as const
 
+  const support = [
+    { href: "/support", icon: Headphones, labelKey: "navTechSupport" },
+  ] as const
+
   const admin = [
     { href: "/admin", icon: Shield, labelKey: "navAdmin" },
   ] as const
@@ -88,6 +92,7 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
     navProfile: "Profile",
     navCRM: "CRM",
     navAdmin: "Admin",
+    navTechSupport: "Tech Support",
   }
   const getLabel = (key: keyof typeof labels) => (mounted ? t(key) : labels[key])
 
@@ -140,6 +145,32 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
                 active
                   ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                "w-11 justify-center gap-0 px-0 group-hover/nav:w-full group-hover/nav:justify-start group-hover/nav:gap-3 group-hover/nav:px-2"
+              )}
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              <span className="w-0 overflow-hidden whitespace-nowrap text-sm font-medium opacity-0 transition-all duration-200 group-hover/nav:w-auto group-hover/nav:opacity-100">
+                {label}
+              </span>
+            </Link>
+          )
+        })}
+
+        <div className="my-2 h-px w-8 bg-border transition-all duration-200 group-hover/nav:w-full" />
+
+        {support.map(({ href, icon: Icon, labelKey }) => {
+          const label = getLabel(labelKey as keyof typeof labels)
+          const active = pathname === href
+          return (
+            <Link
+              key={href}
+              href={href}
+              title={label}
+              className={cn(
+                "flex h-11 shrink-0 items-center rounded-xl transition-all duration-200",
+                active
+                  ? "bg-[#FFBF00] text-white shadow-md"
+                  : "text-[#FFBF00] hover:bg-[#FFBF00]/10",
                 "w-11 justify-center gap-0 px-0 group-hover/nav:w-full group-hover/nav:justify-start group-hover/nav:gap-3 group-hover/nav:px-2"
               )}
             >
@@ -225,6 +256,7 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
           pathname={pathname}
           primary={primary}
           secondary={secondary}
+          support={support}
           admin={admin}
           bottom={bottom}
           labels={labels}
@@ -241,12 +273,13 @@ interface MobileNavDrawerProps {
   pathname: string
   primary: readonly { href: string; icon: typeof MessageSquare; labelKey: string }[]
   secondary: readonly { href: string; icon: typeof MessageSquare; labelKey: string }[]
+  support: readonly { href: string; icon: typeof MessageSquare; labelKey: string }[]
   admin: readonly { href: string; icon: typeof MessageSquare; labelKey: string }[]
   bottom: readonly { href: string; icon: typeof MessageSquare; labelKey: string }[]
   labels: Record<string, string>
 }
 
-function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondary, admin, bottom, labels }: MobileNavDrawerProps) {
+function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondary, support, admin, bottom, labels }: MobileNavDrawerProps) {
   const [open, setOpen] = useState(false)
   useEffect(() => {
     const t = setTimeout(() => setOpen(true), 10)
@@ -255,9 +288,10 @@ function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondar
 
   const getLabel = (key: string) => labels[key] || key
 
-  const renderItem = (href: string, Icon: typeof MessageSquare, labelKey: string) => {
+  const renderItem = (href: string, Icon: typeof MessageSquare, labelKey: string, color?: string) => {
     const label = getLabel(labelKey)
     const active = pathname === href
+    const isGold = color === "gold"
     return (
       <Link
         key={href}
@@ -266,8 +300,12 @@ function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondar
         className={cn(
           "flex h-12 items-center gap-4 rounded-xl px-3 transition-colors",
           active
-            ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            ? isGold
+              ? "bg-[#FFBF00] text-white shadow-md"
+              : "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
+            : isGold
+              ? "text-[#FFBF00] hover:bg-[#FFBF00]/10 hover:text-[#FFBF00]"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground"
         )}
       >
         {href === "/profile" && avatarUrl ? (
@@ -315,6 +353,12 @@ function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondar
 
         <div className="flex flex-col gap-1">
           {secondary.map(({ href, icon, labelKey }) => renderItem(href, icon, labelKey))}
+        </div>
+
+        <div className="h-px bg-border" />
+
+        <div className="flex flex-col gap-1">
+          {support.map(({ href, icon, labelKey }) => renderItem(href, icon, labelKey, "gold"))}
         </div>
 
         {role === "super_admin" && (

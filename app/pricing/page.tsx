@@ -16,8 +16,8 @@ function usePricingData() {
     {
       name: t("pricingPlanSolo"),
       key: "Solo" as const,
-      originalPrice: isEs ? "$700 MXN/mes" : "$40",
-      price: isEs ? "$525 MXN/mes" : "$30",
+      originalPrice: isEs ? "$700 MX/mes" : "$40",
+      price: isEs ? "$525 MX/mes" : "$30",
       period: isEs ? "" : "/mo",
       foundingLabel: t("pricingFoundingPriceSolo"),
       desc: t("pricingDescSolo"),
@@ -30,8 +30,8 @@ function usePricingData() {
     {
       name: t("pricingPlanTeam"),
       key: "Team" as const,
-      originalPrice: isEs ? "$1,400 MXN por usuario/mes" : "$80",
-      price: isEs ? "$875 MXN por usuario/mes" : "$50",
+      originalPrice: isEs ? "$1,400 MX/mes por usuario" : "$80",
+      price: isEs ? "$875 MX/mes por usuario" : "$50",
       period: isEs ? "" : "/seat per month",
       foundingLabel: t("pricingFoundingPriceTeam"),
       desc: t("pricingDescTeam"),
@@ -49,7 +49,7 @@ function usePricingData() {
       features: t("pricingFeaturesEnterprise").split(","),
       cta: t("pricingCTAEnterprise"),
       ctaStyle: "outline" as const,
-      href: "mailto:sales@exploro.ai",
+      href: "https://calendly.com/urbanseed-ai/ai-bureau-services",
     },
   ]
 
@@ -142,7 +142,7 @@ export default function PricingPage() {
 
             <div className="mt-8 sm:mt-10">
               {plan.key === "Enterprise" ? (
-                <a href={plan.href}>
+                <a href={plan.href} target="_blank" rel="noopener noreferrer">
                   <Button variant="outline" className="w-full border-white/10 text-sm py-4 sm:text-base sm:py-6">
                     {plan.cta}
                   </Button>

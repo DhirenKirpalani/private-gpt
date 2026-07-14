@@ -1,10 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { Lock } from "lucide-react"
 import { useAuth } from "@/app/auth-provider"
 import { isTrialExpired } from "@/lib/subscription"
-import { cn } from "@/lib/utils"
 
 export function TrialPaywall({ className }: { className?: string }) {
   const { subscription } = useAuth()
@@ -13,21 +12,32 @@ export function TrialPaywall({ className }: { className?: string }) {
   if (!expired) return null
 
   return (
-    <div
-      className={cn(
-        "flex items-center justify-between gap-4 border-b border-red-500/20 bg-red-500/10 px-4 py-3 text-sm",
-        className
-      )}
-    >
-      <p className="text-red-200">
-        Your 15-day trial has ended. Choose a plan to continue using Exploro.
-      </p>
-      <Link
-        href="/pricing"
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-600"
-      >
-        View plans <ArrowRight className="h-3.5 w-3.5" />
-      </Link>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Blurred backdrop */}
+      <div className="absolute inset-0 backdrop-blur-md bg-black/60" />
+
+      {/* Modal card */}
+      <div className="relative z-10 mx-4 w-full max-w-md rounded-2xl border border-[#FFBF00]/20 bg-[#0f1117] p-8 shadow-2xl text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#FFBF00]/10 border border-[#FFBF00]/20">
+          <Lock className="h-6 w-6 text-[#FFBF00]" />
+        </div>
+
+        <h2 className="mb-2 text-xl font-bold text-white">Your free trial has ended</h2>
+        <p className="mb-6 text-sm text-muted-foreground">
+          Upgrade to a plan to continue using Exploro and keep access to all your chats, documents, and integrations.
+        </p>
+
+        <Link
+          href="/pricing"
+          className="inline-flex w-full items-center justify-center rounded-xl bg-[#FFBF00] px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-[#FFBF00]/90"
+        >
+          Subscribe — View Plans
+        </Link>
+
+        <p className="mt-4 text-xs text-muted-foreground">
+          Your data is safe. It will be available as soon as you subscribe.
+        </p>
+      </div>
     </div>
   )
 }
