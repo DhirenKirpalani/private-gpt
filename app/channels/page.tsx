@@ -9,6 +9,8 @@ import { SiGmail, SiIcloud, SiGooglecalendar, SiZoho, SiGoogledrive, SiGooglemee
 import { NavRail } from "@/components/nav-rail"
 import { TrialPill } from "@/components/trial-pill"
 import { TrialPaywall } from "@/components/trial-paywall"
+import { AnnouncementBanner } from "@/components/announcement-banner"
+import { ChannelCardSkeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { useI18n } from "@/lib/i18n"
@@ -463,6 +465,7 @@ function ChannelsPageContent() {
         </div>
       </header>
 
+      <AnnouncementBanner />
       <TrialPaywall />
 
       {/* OAuth callback toast */}
@@ -1136,8 +1139,8 @@ export default function ChannelsPage() {
         <div className="flex h-14 md:h-16 shrink-0 items-center gap-3 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4" />
         <div className="flex flex-1 overflow-hidden">
           <div className="flex h-full w-16 shrink-0 flex-col items-center gap-2 border-r bg-background py-3" />
-          <div className="flex-1 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <div className="flex-1 overflow-y-auto p-6">
+            <ChannelCardSkeleton />
           </div>
         </div>
       </div>

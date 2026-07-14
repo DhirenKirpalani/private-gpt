@@ -12,8 +12,11 @@ import {
 import { NavRail } from "@/components/nav-rail"
 import { TrialPill } from "@/components/trial-pill"
 import { TrialPaywall } from "@/components/trial-paywall"
+import { AnnouncementBanner } from "@/components/announcement-banner"
+import { ConversationSkeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
+import { useWorkspace } from "@/app/workspace-provider"
 import {
   getProfile, fetchUserDocuments, type Profile,
   getConversations, createConversation, updateConversationTitle,
@@ -89,6 +92,7 @@ function timeAgo(dateStr: string): string {
 
 export default function ChatPage() {
   const { user, avatarUrl, loading: authLoading } = useAuth()
+  const { currentWorkspace } = useWorkspace()
   const { t, lang, setLang } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [navOpen, setNavOpen] = useState(false)
@@ -184,6 +188,17 @@ export default function ChatPage() {
     if (kbEnabled && user) loadKbDocs()
   }, [kbEnabled, user])
 
+  // Reload conversations + KB when workspace changes
+  useEffect(() => {
+    if (!user || !currentWorkspace) return
+    // Clear any stale conversation so old messages never bleed across workspaces
+    localStorage.removeItem("exploro_current_conv")
+    setCurrentConversationId(null)
+    setMessages([])
+    loadConversations()
+    if (kbEnabled) loadKbDocs()
+  }, [currentWorkspace?.id])
+
   // Reload KB docs when tab becomes visible or regains focus
   // (user may have deleted/added docs in another tab or navigated away and back)
   useEffect(() => {
@@ -223,21 +238,6 @@ export default function ChatPage() {
           }).then(r => r.json()).then(d => { if (d.content) setWebsiteContent(d.content) }).catch(() => {})
         }
         await loadConversations()
-        // Restore last active conversation
-        const storedConvId = localStorage.getItem("exploro_current_conv")
-        if (storedConvId) {
-          setCurrentConversationId(storedConvId)
-          try {
-            const dbMessages = await getMessages(storedConvId)
-            setMessages(dbMessages.map(m => ({
-              id: m.id,
-              role: m.role,
-              content: m.content,
-              sources: m.sources || undefined,
-              timestamp: new Date(m.created_at),
-            })))
-          } catch { /* silent */ }
-        }
         // Input style from profile
         const inputStyle = profile?.input_style
         if (inputStyle) {
@@ -312,7 +312,7 @@ export default function ChatPage() {
   async function ensureConversation(): Promise<string> {
     if (currentConversationId) return currentConversationId
     if (!user) throw new Error("Not authenticated")
-    const conv = await createConversation(user.id, input.trim().slice(0, 40))
+    const conv = await createConversation(user.id, input.trim().slice(0, 40), currentWorkspace?.id)
     setConversations(prev => [conv, ...prev])
     setCurrentConversationId(conv.id)
     return conv.id
@@ -786,7 +786,7 @@ export default function ChatPage() {
     if (!user) return
     setConversationsLoading(true)
     try {
-      const convs = await getConversations(user.id)
+      const convs = await getConversations(user.id, currentWorkspace?.id)
       setConversations(convs)
     } catch { /* silent */ } finally {
       setConversationsLoading(false)
@@ -1035,7 +1035,7 @@ export default function ChatPage() {
       })))
       // Load actual parsed text for documents that have it
       try {
-        const contents = await fetchDocumentContents(user.id)
+        const contents = await fetchDocumentContents(user.id, currentWorkspace?.id)
         const map: Record<string, string> = {}
         for (const c of contents) map[c.id] = c.parsed_text
         setKbDocContents(map)
@@ -1217,6 +1217,12 @@ export default function ChatPage() {
               ES
             </button>
           </div>
+          {currentWorkspace && (
+            <Link href={`/workspace/${currentWorkspace.id}`} className="hidden md:flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white">
+              <span className="text-sm leading-none">{currentWorkspace.icon}</span>
+              <span className="max-w-[90px] truncate">{currentWorkspace.name}</span>
+            </Link>
+          )}
           <TrialPill className="hidden md:flex" />
           <Link href="/profile" className={cn(
             "relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden",
@@ -1235,6 +1241,7 @@ export default function ChatPage() {
         </div>
       </header>
 
+      <AnnouncementBanner />
       <TrialPaywall />
 
       {/* ── BODY ── */}
@@ -1267,20 +1274,17 @@ export default function ChatPage() {
             </div>
             <div className="flex-1 overflow-y-auto px-3 pb-4">
               <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("chatRecent")}</p>
-              {conversationsLoading && (
-                <div className="flex items-center justify-center py-6">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-                </div>
-              )}
+              {conversationsLoading && <ConversationSkeleton />}
               {!conversationsLoading && conversations.length === 0 && (
                 <p className="px-2 py-4 text-xs text-muted-foreground text-center">No conversations yet.</p>
               )}
-              {!conversationsLoading && conversations.map(conv => (
+              {!conversationsLoading && conversations.map((conv, i) => (
                 <button
                   key={conv.id}
                   onClick={() => handleSelectConversation(conv.id)}
+                  style={{ animationDelay: `${i * 20}ms` }}
                   className={cn(
-                    "group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors",
+                    "animate-fade-in group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors",
                     currentConversationId === conv.id ? "bg-emerald-600/10" : "hover:bg-muted/50"
                   )}
                 >

@@ -10,6 +10,8 @@ export type Subscription = {
   fastspring_subscription_id: string | null
   fastspring_customer_id: string | null
   fastspring_product_path: string | null
+  lemonsqueezy_subscription_id: string | null
+  lemonsqueezy_customer_id: string | null
   status: "active" | "canceled" | "incomplete" | "incomplete_expired" | "past_due" | "paused" | "trialing" | "unpaid" | null
   plan: "solo" | "team" | "enterprise" | null
   current_period_start: string | null
@@ -60,8 +62,10 @@ export function getTrialDaysLeft(sub: Subscription | null): number | null {
 }
 
 export function planName(sub: Subscription | null): string {
-  if (!sub?.plan) return "Free"
-  return sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1)
+  if (!sub) return "Free"
+  const name = sub.plan ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : "Solo"
+  if (sub.status === "trialing") return `${name} (Trial)`
+  return name
 }
 
 export async function startTrial(userId: string): Promise<void> {
@@ -74,7 +78,7 @@ export async function startTrial(userId: string): Promise<void> {
       status: "trialing",
       current_period_start: now.toISOString(),
       current_period_end: end.toISOString(),
-      plan: null,
+      plan: "solo",
       updated_at: now.toISOString(),
     },
     { onConflict: "user_id" }

@@ -10,12 +10,15 @@ import { Label } from "@/components/ui/label"
 import { NavRail } from "@/components/nav-rail"
 import { TrialPill } from "@/components/trial-pill"
 import { TrialPaywall } from "@/components/trial-paywall"
+import { AnnouncementBanner } from "@/components/announcement-banner"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
+import { useWorkspace } from "@/app/workspace-provider"
 import { useI18n } from "@/lib/i18n"
 import { ACCEPTED_MIME_TYPES, isAcceptedFile, isCountableDocument } from "@/lib/file-types"
 import { getProfile, uploadDocument, fetchUserDocuments, fetchUserCategories, insertCategory, deleteCategory, deleteDocument, getDocumentPublicUrl, updateDocumentText } from "@/lib/supabase"
 import { toast, Toaster } from "@/components/ui/toast"
+import { DocumentSkeleton } from "@/components/ui/skeleton"
 
 const DEFAULT_CATEGORIES = ["SOPs", "FAQs", "Training Material", "Policies", "Reports"]
 
@@ -87,6 +90,7 @@ function categoryDisplay(cat: string, translate: (k: string) => string) {
 
 export default function KnowledgePage() {
   const { user, avatarUrl, loading: authLoading } = useAuth()
+  const { currentWorkspace } = useWorkspace()
   const { t, lang, setLang } = useI18n()
   const [navOpen, setNavOpen] = useState(false)
   const [activeCategory, setActiveCategory] = useState("All Documents")
@@ -132,18 +136,18 @@ export default function KnowledgePage() {
         setUserInitials(getInitials(name))
 
         // Load categories and documents from DB
-        let cats = await fetchUserCategories(user.id)
+        let cats = await fetchUserCategories(user.id, currentWorkspace?.id)
         // Seed default categories if user has none
         if (cats.length === 0) {
           const seeded = await Promise.all(
             DEFAULT_CATEGORIES.map((name, i) =>
-              insertCategory(user.id, name).then(c => ({ ...c, is_default: true }))
+              insertCategory(user.id, name, currentWorkspace?.id).then(c => ({ ...c, is_default: true }))
             )
           )
           cats = seeded
         }
         setCustomCategories(cats)
-        const docs = await fetchUserDocuments(user.id)
+        const docs = await fetchUserDocuments(user.id, currentWorkspace?.id)
         const mapped: DocItem[] = docs.map((d: any) => ({
           id: d.id,
           name: d.original_filename,
@@ -165,7 +169,7 @@ export default function KnowledgePage() {
       }
     }
     load()
-  }, [user])
+  }, [user, currentWorkspace?.id])
 
   // Close add-category input on outside click
   useEffect(() => {
@@ -255,7 +259,7 @@ export default function KnowledgePage() {
             pageCount = data.pageCount || 0
           }
         }
-        const doc = await uploadDocument(user.id, file, category, pageCount)
+        const doc = await uploadDocument(user.id, file, category, pageCount, currentWorkspace?.id)
         // Parse text in background
         try {
           const parseRes = await fetch("/api/parse-document", {
@@ -275,7 +279,7 @@ export default function KnowledgePage() {
         }
       }
       // Refresh document list
-      const docs = await fetchUserDocuments(user.id)
+      const docs = await fetchUserDocuments(user.id, currentWorkspace?.id)
       const mapped: DocItem[] = docs.map((d: any) => ({
         id: d.id,
         name: d.original_filename,
@@ -408,7 +412,7 @@ export default function KnowledgePage() {
       if (!res.ok) throw new Error(data.error || "Import failed")
       toast({ title: "Imported from Drive", description: data.name, variant: "default" })
       // Refresh document list
-      const docs = await fetchUserDocuments(user.id)
+      const docs = await fetchUserDocuments(user.id, currentWorkspace?.id)
       const mapped: DocItem[] = docs.map((d: any) => ({
         id: d.id,
         name: d.original_filename,
@@ -540,6 +544,7 @@ export default function KnowledgePage() {
         </div>
       </header>
 
+      <AnnouncementBanner />
       <TrialPaywall />
 
       <div className="flex flex-1 overflow-hidden">
@@ -615,7 +620,7 @@ export default function KnowledgePage() {
                       if (!user) return
                       const name = newCategoryName.trim()
                       try {
-                        const cat = await insertCategory(user.id, name)
+                        const cat = await insertCategory(user.id, name, currentWorkspace?.id)
                         setCustomCategories(prev => [...prev, cat])
                       } catch (err) { console.error(err) }
                       setActiveCategory(name)
@@ -638,7 +643,7 @@ export default function KnowledgePage() {
                     const name = newCategoryName.trim()
                     if (name) {
                       try {
-                        const cat = await insertCategory(user.id, name)
+                        const cat = await insertCategory(user.id, name, currentWorkspace?.id)
                         setCustomCategories(prev => [...prev, cat])
                       } catch (err) { console.error(err) }
                       setActiveCategory(name)
@@ -790,17 +795,13 @@ export default function KnowledgePage() {
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             <div className="space-y-2">
-              {docsLoading && (
-                <div className="flex items-center justify-center py-20">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-                </div>
-              )}
+              {docsLoading && <DocumentSkeleton />}
               {!docsLoading && filtered.map(doc => {
                 const docIndex = docList.findIndex(d => d.id === doc.id) + 1
                 return (
                   <div
                   key={doc.id}
-                  className="card-3d flex flex-col gap-2 rounded-xl border border-white/5 bg-[#2a3444] px-3 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10 sm:flex-row sm:items-center sm:gap-4 sm:px-4 sm:py-3 sm:shadow-lg sm:shadow-emerald-900/5"
+                  className="animate-slide-up card-3d flex flex-col gap-2 rounded-xl border border-white/5 bg-[#2a3444] px-3 py-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/20 hover:shadow-xl hover:shadow-emerald-900/10 sm:flex-row sm:items-center sm:gap-4 sm:px-4 sm:py-3 sm:shadow-lg sm:shadow-emerald-900/5"
                 >
                   <div className="flex items-start gap-3 sm:items-center sm:gap-4">
                     <div className="relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
