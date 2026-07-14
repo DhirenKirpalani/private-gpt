@@ -17,11 +17,11 @@ export function TrialPill({ className }: { className?: string }) {
       <Link
         href="/pricing"
         className={cn(
-          "inline-flex items-center rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/20",
+          "inline-flex items-center rounded-full border border-[#FFBF00]/50 bg-[#FFBF00]/20 px-3 py-1 text-xs font-semibold text-[#FFBF00] transition-colors hover:bg-[#FFBF00]/30",
           className
         )}
       >
-        Trial ended — upgrade
+        Subscribe
       </Link>
     )
   }
@@ -32,14 +32,11 @@ export function TrialPill({ className }: { className?: string }) {
     <Link
       href="/pricing"
       className={cn(
-        "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-        isLastDay
-          ? "border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-          : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20",
+        "inline-flex items-center rounded-full border border-[#FFBF00]/30 bg-[#FFBF00]/10 px-3 py-1 text-xs font-semibold text-[#FFBF00] transition-colors hover:bg-[#FFBF00]/20",
         className
       )}
     >
-      {daysLeft === 1 ? "1 day left" : `${daysLeft} days left`}
+      {daysLeft === 1 ? "Free trial ends in 1 day" : `Free trial ends in ${daysLeft} days`}
     </Link>
   )
 }
