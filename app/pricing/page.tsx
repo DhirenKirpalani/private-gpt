@@ -1,12 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { Check, Zap, ArrowRight, Star, Clock } from "lucide-react"
+import { Check, Zap, ArrowRight, Star, Clock, BadgeCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 import { useAuth } from "@/app/auth-provider"
 import { CheckoutButton } from "@/components/checkout-button"
+import { isActive, isTrialExpired } from "@/lib/subscription"
 
 function usePricingData() {
   const { t, lang } = useI18n()
@@ -78,8 +79,11 @@ function usePricingData() {
 
 export default function PricingPage() {
   const { t, plans, comparisonFeatures, comingSoon } = usePricingData()
-  const { user } = useAuth()
+  const { user, subscription } = useAuth()
   const userId = user?.id
+  const currentPlan = subscription?.plan ?? null
+  const trialExpired = isTrialExpired(subscription)
+  const isCurrentActive = currentPlan && isActive(subscription)
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:py-16">
       {/* Header */}
@@ -147,6 +151,21 @@ export default function PricingPage() {
                     {plan.cta}
                   </Button>
                 </a>
+              ) : isCurrentActive && currentPlan === plan.key.toLowerCase() ? (
+                <Button
+                  disabled
+                  className="w-full gap-2 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-sm py-4 sm:text-base sm:py-6 cursor-default"
+                >
+                  <BadgeCheck className="h-4 w-4" /> Current Plan
+                </Button>
+              ) : currentPlan === plan.key.toLowerCase() && trialExpired ? (
+                <CheckoutButton
+                  plan={plan.key.toLowerCase() as "solo" | "team"}
+                  userId={userId}
+                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-sm py-4 sm:text-base sm:py-6"
+                >
+                  Subscribe <ArrowRight className="h-4 w-4" />
+                </CheckoutButton>
               ) : plan.key === "Solo" ? (
                 <CheckoutButton
                   plan="solo"
