@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import { supabase, getUser, getSession, signOut, getProfile, type Profile } from "@/lib/supabase"
 import { getSubscription, startTrial, type Subscription } from "@/lib/subscription"
 import type { User, Session } from "@supabase/supabase-js"
+import { PageLoadingScreen } from "@/components/ui/skeleton"
 
 type AuthContextType = {
   user: User | null
@@ -157,11 +158,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
 
   if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-      </div>
-    )
+    return <PageLoadingScreen />
   }
 
   if (!user) {

@@ -2,6 +2,8 @@ import { supabase } from "./supabase"
 
 export type AppSettings = {
   trial_days: number
+  announcement_text: string
+  announcement_enabled: string
 }
 
 export async function getAppSettings(): Promise<AppSettings> {
@@ -18,6 +20,8 @@ export async function getAppSettings(): Promise<AppSettings> {
 
   return {
     trial_days: parseInt(settings.trial_days || "15", 10) || 15,
+    announcement_text: settings.announcement_text ?? "",
+    announcement_enabled: settings.announcement_enabled ?? "false",
   }
 }
 

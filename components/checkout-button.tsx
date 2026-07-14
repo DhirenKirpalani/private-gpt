@@ -56,7 +56,7 @@ export function CheckoutButton({
         // If profile fetch fails, default to Stripe
       }
 
-      const endpoint = useStripe ? "/api/stripe/checkout" : "/api/fastspring/checkout"
+      const endpoint = useStripe ? "/api/stripe/checkout" : "/api/lemonsqueezy/checkout"
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -109,14 +109,19 @@ export function BillingPortalButton({ userId, className, children }: BillingPort
     try {
       const sub = await getSubscription(userId)
 
-      if (sub?.fastspring_subscription_id) {
-        // FastSpring — redirect to FastSpring account management
-        const storeId = process.env.NEXT_PUBLIC_FASTSPRING_STORE_ID ?? ""
-        if (storeId) {
-          window.location.href = `https://${storeId}.onfastspring.com/account`
+      if (sub?.lemonsqueezy_subscription_id) {
+        // Lemon Squeezy — fetch customer portal URL from API
+        const res = await fetch("/api/lemonsqueezy/portal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscriptionId: sub.lemonsqueezy_subscription_id }),
+        })
+        const data = await res.json()
+        if (data.url) {
+          window.location.href = data.url
           return
         }
-        toast({ title: "Billing Error", description: "FastSpring store not configured.", variant: "error" })
+        toast({ title: "Billing Error", description: data.error || "Could not open billing portal.", variant: "error" })
         return
       }
 

@@ -13,6 +13,7 @@ import {
 import { NavRail } from "@/components/nav-rail"
 import { TrialPill } from "@/components/trial-pill"
 import { TrialPaywall } from "@/components/trial-paywall"
+import { AnnouncementBanner } from "@/components/announcement-banner"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { useI18n } from "@/lib/i18n"
@@ -755,6 +756,7 @@ export default function CRMPage() {
         </div>
       </header>
 
+      <AnnouncementBanner />
       <TrialPaywall />
 
       {/* ── BODY ── */}

@@ -269,7 +269,8 @@ export async function uploadDocument(
   userId: string,
   file: File,
   category: string,
-  pageCount: number = 0
+  pageCount: number = 0,
+  workspaceId?: string
 ) {
   const documentId = crypto.randomUUID()
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
@@ -295,6 +296,7 @@ export async function uploadDocument(
       file_size_bytes: file.size,
       status: "INDEXED",
       page_count: pageCount,
+      ...(workspaceId ? { workspace_id: workspaceId } : {}),
     })
     .select()
     .single()
@@ -303,33 +305,39 @@ export async function uploadDocument(
   return data
 }
 
-export async function fetchUserDocuments(userId: string) {
-  const { data, error } = await supabase
+export async function fetchUserDocuments(userId: string, workspaceId?: string) {
+  let query = supabase
     .from("documents")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
 
+  if (workspaceId) query = query.eq("workspace_id", workspaceId)
+
+  const { data, error } = await query
   if (error) throw error
   return data || []
 }
 
 // Categories
-export async function fetchUserCategories(userId: string) {
-  const { data, error } = await supabase
+export async function fetchUserCategories(userId: string, workspaceId?: string) {
+  let query = supabase
     .from("knowledge_categories")
     .select("id, name")
     .eq("user_id", userId)
     .order("sort_order", { ascending: true })
 
+  if (workspaceId) query = query.eq("workspace_id", workspaceId)
+
+  const { data, error } = await query
   if (error) throw error
   return data || []
 }
 
-export async function insertCategory(userId: string, name: string) {
+export async function insertCategory(userId: string, name: string, workspaceId?: string) {
   const { data, error } = await supabase
     .from("knowledge_categories")
-    .insert({ user_id: userId, name })
+    .insert({ user_id: userId, name, ...(workspaceId ? { workspace_id: workspaceId } : {}) })
     .select("id, name")
     .single()
 
@@ -363,13 +371,17 @@ export async function updateDocumentText(documentId: string, parsedText: string)
   if (error) throw error
 }
 
-export async function fetchDocumentContents(userId: string) {
-  const { data, error } = await supabase
+export async function fetchDocumentContents(userId: string, workspaceId?: string) {
+  let query = supabase
     .from("documents")
     .select("id, original_filename, category, parsed_text")
     .eq("user_id", userId)
     .not("parsed_text", "is", null)
     .order("created_at", { ascending: false })
+
+  if (workspaceId) query = query.eq("workspace_id", workspaceId)
+
+  const { data, error } = await query
   if (error) throw error
   return (data ?? []) as { id: string; original_filename: string; category: string; parsed_text: string }[]
 }
@@ -444,20 +456,24 @@ export type ChatMessage = {
   created_at: string
 }
 
-export async function getConversations(userId: string): Promise<ChatConversation[]> {
-  const { data, error } = await supabase
+export async function getConversations(userId: string, workspaceId?: string): Promise<ChatConversation[]> {
+  let query = supabase
     .from("chat_conversations")
     .select("*")
     .eq("user_id", userId)
     .order("updated_at", { ascending: false })
+
+  if (workspaceId) query = query.eq("workspace_id", workspaceId)
+
+  const { data, error } = await query
   if (error) throw error
   return (data ?? []) as ChatConversation[]
 }
 
-export async function createConversation(userId: string, title?: string): Promise<ChatConversation> {
+export async function createConversation(userId: string, title?: string, workspaceId?: string): Promise<ChatConversation> {
   const { data, error } = await supabase
     .from("chat_conversations")
-    .insert({ user_id: userId, title: title || null })
+    .insert({ user_id: userId, title: title || null, ...(workspaceId ? { workspace_id: workspaceId } : {}) })
     .select()
     .single()
   if (error) throw error

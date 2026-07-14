@@ -5,6 +5,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { AuthProvider } from "./auth-provider";
+import { WorkspaceProvider } from "./workspace-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -27,11 +28,13 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={inter.className}>
         <AuthProvider>
-          <I18nProvider>
-            <Navbar />
-            <main className="pt-[72px] min-h-screen">{children}</main>
-            <Footer />
-          </I18nProvider>
+          <WorkspaceProvider>
+            <I18nProvider>
+              <Navbar />
+              <main className="pt-[72px] min-h-screen">{children}</main>
+              <Footer />
+            </I18nProvider>
+          </WorkspaceProvider>
         </AuthProvider>
       </body>
     </html>

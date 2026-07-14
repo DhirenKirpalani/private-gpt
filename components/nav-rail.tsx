@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 import { useAuth } from "@/app/auth-provider"
+import { WorkspaceSelector } from "@/components/workspace-selector"
 
 interface NavRailProps {
   mobileOpen?: boolean
@@ -106,6 +107,11 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
     <>
       {/* Desktop NavRail — expands on hover */}
       <nav className="group/nav hidden md:flex h-full w-16 shrink-0 flex-col items-center gap-2 border-r bg-background py-3 overflow-y-auto transition-all duration-200 ease-out hover:w-48 hover:items-stretch hover:px-3">
+        {/* Collapsed: show workspace emoji icon; Expanded: show full selector */}
+        <WorkspaceSelector
+          className="hidden group-hover/nav:flex w-full"
+          collapsedClassName="flex group-hover/nav:hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-lg hover:bg-white/10 transition-colors"
+        />
         {primary.map(({ href, icon: Icon, labelKey }) => {
           const label = getLabel(labelKey as keyof typeof labels)
           const active = pathname === href
@@ -342,6 +348,10 @@ function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondar
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        <div className="h-px bg-border" />
+
+        <WorkspaceSelector className="w-full" />
 
         <div className="h-px bg-border" />
 
