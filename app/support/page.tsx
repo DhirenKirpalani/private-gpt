@@ -4,10 +4,12 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Mail, ArrowLeft, Send, CheckCircle, ImagePlus, X, Loader2, Lock } from "lucide-react"
 import { useAuth } from "@/app/auth-provider"
+import { useI18n } from "@/lib/i18n"
 import { uploadSupportScreenshot } from "@/lib/supabase"
 
 export default function SupportPage() {
   const { user, loading: authLoading } = useAuth()
+  const { t } = useI18n()
   const router = useRouter()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -30,17 +32,6 @@ export default function SupportPage() {
     }
   }, [user])
 
-  if (authLoading || !user) {
-    return (
-      <div className="flex flex-col bg-background min-h-screen items-center justify-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10">
-          <Lock className="h-5 w-5 text-emerald-400" />
-        </div>
-        <p className="mt-3 text-sm text-muted-foreground">Checking access...</p>
-      </div>
-    )
-  }
-
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files
     if (!selected) return
@@ -58,6 +49,17 @@ export default function SupportPage() {
     setFiles(prev => prev.filter((_, i) => i !== index))
     setPreviews(prev => prev.filter((_, i) => i !== index))
   }, [])
+
+  if (authLoading || !user) {
+    return (
+      <div className="flex flex-col bg-background min-h-screen items-center justify-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10">
+          <Lock className="h-5 w-5 text-emerald-400" />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">{t("supportCheckingAccess")}</p>
+      </div>
+    )
+  }
 
   function getSystemInfo() {
     const ua = navigator.userAgent
@@ -113,9 +115,9 @@ export default function SupportPage() {
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10 mx-auto">
               <Mail className="h-5 w-5 text-emerald-400" />
             </div>
-            <h1 className="text-xl font-bold">Need help?</h1>
+            <h1 className="text-xl font-bold">{t("supportNeedHelp")}</h1>
             <p className="text-sm text-muted-foreground">
-              Tell us what went wrong and we will fix it for you.
+              {t("supportSubtitle")}
             </p>
             <a
               href="mailto:support@exploro-os.com"
@@ -129,49 +131,49 @@ export default function SupportPage() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1.5">Your name</label>
+              <label className="block text-sm font-medium mb-1.5">{t("supportYourName")}</label>
               <input
                 type="text"
                 value={name}
                 readOnly={!!user}
                 onChange={e => setName(e.target.value)}
                 required
-                placeholder="Jane Doe"
+                placeholder={t("supportPlaceholderName")}
                 className="w-full rounded-xl border border-white/10 bg-[#2a3444] px-4 py-2.5 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 read-only:opacity-60 read-only:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1.5">Your email</label>
+              <label className="block text-sm font-medium mb-1.5">{t("supportYourEmail")}</label>
               <input
                 type="email"
                 value={email}
                 readOnly={!!user}
                 onChange={e => setEmail(e.target.value)}
                 required
-                placeholder="jane@company.com"
+                placeholder={t("supportPlaceholderEmail")}
                 className="w-full rounded-xl border border-white/10 bg-[#2a3444] px-4 py-2.5 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 read-only:opacity-60 read-only:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1.5">What happened?</label>
+              <label className="block text-sm font-medium mb-1.5">{t("supportWhatHappened")}</label>
               <textarea
                 value={message}
                 onChange={e => setMessage(e.target.value)}
                 required
                 rows={5}
-                placeholder="Describe your issue in simple words..."
+                placeholder={t("supportPlaceholderMessage")}
                 className="w-full resize-none rounded-xl border border-white/10 bg-[#2a3444] px-4 py-3 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
               />
             </div>
 
             {/* Screenshots */}
             <div>
-              <label className="block text-sm font-medium mb-1.5">Screenshots (optional)</label>
+              <label className="block text-sm font-medium mb-1.5">{t("supportScreenshots")}</label>
               <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-white/20 bg-[#2a3444] px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-emerald-500/30 hover:text-white">
                 <ImagePlus className="h-4 w-4" />
-                <span>Click to add images</span>
+                <span>{t("supportClickToAdd")}</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -207,17 +209,17 @@ export default function SupportPage() {
               {uploading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Uploading...
+                  {t("supportUploading")}
                 </>
               ) : sent ? (
                 <>
                   <CheckCircle className="h-4 w-4" />
-                  Email opened
+                  {t("supportEmailOpened")}
                 </>
               ) : (
                 <>
                   <Send className="h-4 w-4" />
-                  Send to support
+                  {t("supportSendToSupport")}
                 </>
               )}
             </button>
@@ -228,7 +230,7 @@ export default function SupportPage() {
             className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to home
+            {t("supportBackToHome")}
           </Link>
         </div>
       </main>

@@ -79,12 +79,12 @@ export default function HomePage() {
           {t("heroSubtitle")}
         </p>
         <p className="animate-fade-in-up mb-6 text-sm font-medium text-emerald-400 sm:mb-10 [animation-delay:280ms]">
-          A Product of Secretes Corp DBA Urbanseed
+          {t("productTagline")}
         </p>
         <div className="animate-fade-in-up flex flex-wrap items-center justify-center gap-4 [animation-delay:360ms]">
           {user ? (
             <Button size="lg" onClick={() => router.push("/chat")} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
-              Go to Chat <ArrowRight className="h-4 w-4" />
+              {t("goToChat")} <ArrowRight className="h-4 w-4" />
             </Button>
           ) : (
             <>
@@ -502,7 +502,7 @@ export default function HomePage() {
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Button size="lg" onClick={handleCTA} className="bg-emerald-600 hover:bg-emerald-700 text-white px-10">
-              {user ? "Go to Chat" : t("ctaStartFree")}
+              {user ? t("goToChat") : t("ctaStartFree")}
             </Button>
             {!user && (
               <a href="https://calendly.com/exploro-os-support/30min" target="_blank" rel="noopener noreferrer">

@@ -54,7 +54,7 @@ export function Footer() {
                 <FaFacebook className="h-8 w-8" style={{ color: "#1877F2" }} />
               </a>
             </div>
-            <p className="mt-2 text-sm font-medium text-emerald-400">A Product of Secretes Corp DBA Urbanseed</p>
+            <p className="mt-2 text-sm font-medium text-emerald-400">{t("productTagline")}</p>
             <p className="mt-2 max-w-xs text-sm leading-relaxed text-muted-foreground">
               {t("brandTagline")}
             </p>
