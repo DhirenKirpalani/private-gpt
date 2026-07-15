@@ -672,6 +672,34 @@ export const translations = {
     profileTooltipBusinessDescDo3: "Answer business-specific questions",
     profileTooltipBusinessDescDo4: "Generate proposals, emails, and reports aligned with your brand",
     profileTooltipBusinessDescDataNote: "Your data remains private and is never used to train public models.",
+
+    // Support form
+    supportNeedHelp: "Need help?",
+    supportSubtitle: "Tell us what went wrong and we will fix it for you.",
+    supportYourName: "Your name",
+    supportYourEmail: "Your email",
+    supportWhatHappened: "What happened?",
+    supportPlaceholderName: "Jane Doe",
+    supportPlaceholderEmail: "jane@company.com",
+    supportPlaceholderMessage: "Describe your issue in simple words...",
+    supportScreenshots: "Screenshots (optional)",
+    supportClickToAdd: "Click to add images",
+    supportUploading: "Uploading...",
+    supportEmailOpened: "Email opened",
+    supportSendToSupport: "Send to support",
+    supportBackToHome: "Back to home",
+    supportCheckingAccess: "Checking access...",
+
+    // Product tagline & CTAs
+    productTagline: "A Product of Secretes Corp DBA Urbanseed",
+    goToChat: "Go to Chat",
+
+    // Placeholder pages
+    analyticsComingSoon: "Track AI usage, document queries, and business insights. Coming soon.",
+    automationsComingSoon: "Build automated workflows triggered by messages, documents, and events. Coming soon.",
+    agentsComingSoon: "Build and deploy autonomous AI agents for sales, support, and ops. Coming soon.",
+    contactsComingSoon: "Manage and search your customer and team contacts. Coming soon.",
+    inboxComingSoon: "Unified inbox for WhatsApp, email, and chat messages. Coming soon.",
   },
   es: {
     // Navbar
@@ -1346,6 +1374,34 @@ export const translations = {
     profileTooltipBusinessDescDo3: "Responder preguntas específicas del negocio",
     profileTooltipBusinessDescDo4: "Generar propuestas, correos e informes alineados con tu marca",
     profileTooltipBusinessDescDataNote: "Tus datos permanecen privados y nunca se usan para entrenar modelos públicos.",
+
+    // Support form
+    supportNeedHelp: "¿Necesitas ayuda?",
+    supportSubtitle: "Cuéntanos qué salió mal y lo resolveremos por ti.",
+    supportYourName: "Tu nombre",
+    supportYourEmail: "Tu correo",
+    supportWhatHappened: "¿Qué pasó?",
+    supportPlaceholderName: "Juan Pérez",
+    supportPlaceholderEmail: "juan@empresa.com",
+    supportPlaceholderMessage: "Describe tu problema en palabras simples...",
+    supportScreenshots: "Capturas de pantalla (opcional)",
+    supportClickToAdd: "Haz clic para agregar imágenes",
+    supportUploading: "Subiendo...",
+    supportEmailOpened: "Correo abierto",
+    supportSendToSupport: "Enviar a soporte",
+    supportBackToHome: "Volver al inicio",
+    supportCheckingAccess: "Verificando acceso...",
+
+    // Product tagline & CTAs
+    productTagline: "Un Producto de Secretes Corp DBA Urbanseed",
+    goToChat: "Ir al Chat",
+
+    // Placeholder pages
+    analyticsComingSoon: "Rastrea el uso de IA, consultas de documentos e información empresarial. Próximamente.",
+    automationsComingSoon: "Construye flujos de trabajo automatizados activados por mensajes, documentos y eventos. Próximamente.",
+    agentsComingSoon: "Construye e implementa agentes de IA autónomos para ventas, soporte y operaciones. Próximamente.",
+    contactsComingSoon: "Administra y busca tus contactos de clientes y equipo. Próximamente.",
+    inboxComingSoon: "Bandeja de entrada unificada para WhatsApp, correo y mensajes de chat. Próximamente.",
   },
 } as const;
 
