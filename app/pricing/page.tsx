@@ -17,9 +17,9 @@ function usePricingData() {
     {
       name: t("pricingPlanSolo"),
       key: "Solo" as const,
-      originalPrice: isEs ? "$700 MX/mes" : "$40",
-      price: isEs ? "$525 MX/mes" : "$30",
-      period: isEs ? "" : "/mo",
+      originalPrice: isEs ? "$700" : "USD 40",
+      price: isEs ? "$525" : "USD 30",
+      period: isEs ? "MX/mes" : "/mo",
       foundingLabel: t("pricingFoundingPriceSolo"),
       desc: t("pricingDescSolo"),
       features: t("pricingFeaturesSolo").split(","),
@@ -31,9 +31,9 @@ function usePricingData() {
     {
       name: t("pricingPlanTeam"),
       key: "Team" as const,
-      originalPrice: isEs ? "$1,400 MX/mes por usuario" : "$80",
-      price: isEs ? "$875 MX/mes por usuario" : "$50",
-      period: isEs ? "" : "/seat per month",
+      originalPrice: isEs ? "$1,400" : "USD 80",
+      price: isEs ? "$875" : "USD 50",
+      period: isEs ? "MX/mes por usuario" : "/seat per month",
       foundingLabel: t("pricingFoundingPriceTeam"),
       desc: t("pricingDescTeam"),
       features: t("pricingFeaturesTeam").split(","),
@@ -183,10 +183,21 @@ export default function PricingPage() {
                   {plan.cta} <ArrowRight className="h-4 w-4" />
                 </CheckoutButton>
               )}
-              {plan.trialNote && (
-                <p className="mt-3 text-center text-sm text-muted-foreground">
-                  {plan.trialNote}
-                </p>
+              {plan.trialNote && plan.key === "Solo" && (
+                <div className="mt-3 flex justify-center">
+                  {user ? (
+                    <span className="inline-flex items-center rounded-full border border-[#FFBF00]/30 bg-[#FFBF00]/10 px-3 py-1 text-xs font-semibold text-[#FFBF00]">
+                      {plan.trialNote}
+                    </span>
+                  ) : (
+                    <Link
+                      href="/signup"
+                      className="inline-flex items-center rounded-full border border-[#FFBF00]/30 bg-[#FFBF00]/10 px-3 py-1 text-xs font-semibold text-[#FFBF00] transition-colors hover:bg-[#FFBF00]/20"
+                    >
+                      {plan.trialNote}
+                    </Link>
+                  )}
+                </div>
               )}
             </div>
           </div>

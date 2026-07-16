@@ -58,6 +58,7 @@ export const translations = {
     signupPerk1: "No credit card required to start",
     signupPerk2: "Set up your AI in under 60 minutes",
     signupPerk3: "Cancel or upgrade anytime",
+    signupTrialNote: "You'll get a 15-day free trial of the Solo plan.",
 
     // Homepage
     heroBadge: "Private · Secure · Yours",
@@ -760,6 +761,7 @@ export const translations = {
     signupPerk1: "No se requiere tarjeta de crédito para empezar",
     signupPerk2: "Configura tu IA en menos de 60 minutos",
     signupPerk3: "Cancela o actualiza en cualquier momento",
+    signupTrialNote: "Recibirás una prueba gratuita de 15 días del plan Solo.",
 
     // Homepage
     heroBadge: "Privado · Seguro · Tuyo",

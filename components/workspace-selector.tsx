@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { ChevronDown, Plus, Settings, Check, Loader2, Building2 } from "lucide-react"
+import { ChevronDown, Plus, Settings, Check, Loader2, Building2, User } from "lucide-react"
 import { useWorkspace } from "@/app/workspace-provider"
 import { useAuth } from "@/app/auth-provider"
 import { cn } from "@/lib/utils"
@@ -13,6 +13,8 @@ type Props = {
   collapsedClassName?: string
   /** className applied to the full selector wrapper */
   className?: string
+  /** Renders a slim pill for use in top navbars */
+  compact?: boolean
 }
 
 function WorkspaceDropdown({
@@ -25,13 +27,13 @@ function WorkspaceDropdown({
   const { workspaces, currentWorkspace, setCurrentWorkspace } = useWorkspace()
 
   return (
-    <div className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-xl border border-white/10 bg-[#131929] shadow-2xl shadow-black/50">
+    <div className="absolute right-0 top-full z-[100] mt-1.5 w-56 min-w-[200px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-white/10 bg-[#131929] shadow-2xl shadow-black/50">
       {/* Workspace list */}
       <div className="max-h-52 overflow-y-auto p-1.5">
-        {workspaces.length === 0 ? (
+        {workspaces.filter(ws => ws.name !== "Admin's Workspace").length === 0 ? (
           <p className="px-3 py-3 text-xs text-muted-foreground text-center">No workspaces yet</p>
         ) : (
-          workspaces.map(ws => {
+          workspaces.filter(ws => ws.name !== "Admin's Workspace").map(ws => {
             const active = currentWorkspace?.id === ws.id
             return (
               <button
@@ -42,7 +44,7 @@ function WorkspaceDropdown({
                   active ? "bg-emerald-600/10 text-emerald-400" : "hover:bg-white/5 text-white/80 hover:text-white"
                 )}
               >
-                <span className="text-base leading-none">{ws.icon}</span>
+                <span className="text-base leading-none">{ws.icon?.split(",")[0].trim() || "🏢"}</span>
                 <span className="flex-1 truncate text-left font-medium">{ws.name}</span>
                 {active && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />}
               </button>
@@ -53,6 +55,23 @@ function WorkspaceDropdown({
 
       {/* Footer actions */}
       <div className="border-t border-white/5 p-1.5 space-y-0.5">
+        {(() => {
+          const adminWs = workspaces.find(ws => ws.name === "Admin's Workspace")
+          const isPersonal = currentWorkspace?.id === adminWs?.id
+          return adminWs ? (
+            <button
+              onClick={() => { setCurrentWorkspace(adminWs); onClose() }}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors",
+                isPersonal ? "bg-white/5 text-white" : "text-muted-foreground hover:bg-white/5 hover:text-white"
+              )}
+            >
+              <User className="h-3.5 w-3.5 shrink-0" />
+              <span>Personal mode</span>
+              {isPersonal && <Check className="h-3.5 w-3.5 shrink-0 ml-auto text-emerald-400" />}
+            </button>
+          ) : null
+        })()}
         <button
           onClick={() => { onNew(); onClose() }}
           className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-white"
@@ -75,7 +94,7 @@ function WorkspaceDropdown({
   )
 }
 
-export function WorkspaceSelector({ className, collapsedClassName }: Props) {
+export function WorkspaceSelector({ className, collapsedClassName, compact }: Props) {
   const { workspaces, currentWorkspace, workspaceLoading } = useWorkspace()
   const { profile } = useAuth()
   const [open, setOpen] = useState(false)
@@ -90,8 +109,35 @@ export function WorkspaceSelector({ className, collapsedClassName }: Props) {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
 
-  const icon = currentWorkspace?.icon ?? "🏢"
+  const icon = (currentWorkspace?.icon ?? "🏢").split(",")[0].trim() || "🏢"
   const companyName = profile?.company_name || profile?.full_name || "My Company"
+  const isPersonalMode = currentWorkspace?.name === "Admin's Workspace"
+  const displayName = isPersonalMode ? "Personal" : (currentWorkspace?.name ?? "Workspace")
+
+  // ── Compact pill (top navbar usage) ──────────────────────────────────────
+  if (compact) {
+    return (
+      <>
+        <div ref={ref} className={cn("relative", className)}>
+          <button
+            onClick={() => setOpen(v => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-white/80 transition-all hover:bg-white/10 hover:text-white hover:border-white/20"
+          >
+            {workspaceLoading
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <span className="text-sm leading-none">{icon}</span>
+            }
+            <span className="hidden sm:inline max-w-[110px] truncate">
+              {workspaceLoading ? "…" : displayName}
+            </span>
+            <ChevronDown className={cn("h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
+          </button>
+          {open && <WorkspaceDropdown onClose={() => setOpen(false)} onNew={() => setShowCreate(true)} />}
+        </div>
+        {showCreate && <CreateWorkspaceModal onClose={() => setShowCreate(false)} />}
+      </>
+    )
+  }
 
   // ── Collapsed icon (desktop nav non-hover state) ──────────────────────────
   if (collapsedClassName) {

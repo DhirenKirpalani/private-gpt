@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
-import { Shield, Globe, FileText, Trash2, Scale, Clock, Database, Eye, BrainCircuit, Cog, AlertTriangle, Lock, KeyRound, Server, Mail, AlertOctagon, HelpCircle } from "lucide-react"
+import { Shield, Globe, FileText, Trash2, Scale, Clock, Database, Eye, BrainCircuit, Cog, AlertTriangle, Lock, KeyRound, Server, Mail, AlertOctagon, HelpCircle, Gift } from "lucide-react"
 
 const sections = {
   en: [
@@ -121,6 +121,11 @@ const sections = {
       title: "23. Contact About Google Data",
       body: `For questions or requests regarding Google user data, users can contact privacy@exploro-os.com.`,
     },
+    {
+      icon: Gift,
+      title: "24. Free Trial",
+      body: `Upon signing up, users are assigned a fifteen (15) day free trial of the Solo plan. During the trial period, users have access to all features included in their assigned plan. No payment information is required to start the trial. Unless the user subscribes to a paid plan before the trial period ends, the account will automatically revert to limited functionality after the fifteen (15) day period. User data collected during the trial is processed in accordance with this Privacy Policy.`,
+    },
   ],
   es: [
     {
@@ -237,6 +242,11 @@ const sections = {
       icon: HelpCircle,
       title: "23. Contacto Sobre Datos de Google",
       body: `Para preguntas o solicitudes relacionadas con los datos de usuario de Google, los usuarios pueden contactar a privacy@exploro-os.com.`,
+    },
+    {
+      icon: Gift,
+      title: "24. Prueba Gratuita",
+      body: `Al registrarse, los usuarios reciben una prueba gratuita de quince (15) días del plan Solo. Durante el período de prueba, los usuarios tienen acceso a todas las funciones incluidas en su plan asignado. No se requiere información de pago para iniciar la prueba. A menos que el usuario se suscriba a un plan de pago antes de que finalice el período de prueba, la cuenta revertirá automáticamente a funcionalidad limitada después de los quince (15) días. Los datos del usuario recopilados durante la prueba se procesan de acuerdo con esta Política de Privacidad.`,
     },
   ],
 }

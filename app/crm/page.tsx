@@ -16,6 +16,7 @@ import { TrialPaywall } from "@/components/trial-paywall"
 import { AnnouncementBanner } from "@/components/announcement-banner"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
+import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
 import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols } from "@/lib/supabase"
@@ -50,7 +51,7 @@ function getInitials(name: string): string {
 type Contact = { id: string; name: string; company: string | null; role: string | null; email: string | null; phone: string | null; location: string | null; tags: string[]; starred: boolean; lastContact: string; dealValue: number; dealStage: string | null }
 
 export default function CRMPage() {
-  const { user } = useAuth()
+  const { user, subscription, role } = useAuth()
   const { t, lang, setLang } = useI18n()
   const [navOpen, setNavOpen] = useState(false)
   const [crmSidebarOpen, setCrmSidebarOpen] = useState(false)
@@ -259,8 +260,8 @@ export default function CRMPage() {
   // Unread email count (received emails with read=false)
   const unreadCount = inboxMessages.filter((m: any) => !m.read).length
 
-  // Upcoming calendar events count (events with start_time in the future)
-  const upcomingEventsCount = calendarEvents.filter((e: any) => e.start_time && new Date(e.start_time) > new Date()).length
+  // Upcoming calendar events count (events that haven't ended yet)
+  const upcomingEventsCount = calendarEvents.filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).length
 
   const filtered = contacts.filter((c: Contact) =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -684,7 +685,7 @@ export default function CRMPage() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* ── HEADER ── */}
-      <header className="flex h-16 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
+      <header className="relative z-40 flex h-16 md:h-16 shrink-0 items-center gap-2 md:gap-4 border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
         <div className="flex items-center gap-2 sm:gap-2">
           <button
             onClick={() => setNavOpen(true)}
@@ -740,6 +741,12 @@ export default function CRMPage() {
               ES
             </button>
           </div>
+          {(() => {
+            const showWorkspace = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
+            return showWorkspace ? (
+              <WorkspaceSelector compact />
+            ) : null
+          })()}
           <TrialPill className="hidden md:flex" />
           <button
             onClick={() => setPrivacyOpen(true)}
@@ -1111,7 +1118,7 @@ export default function CRMPage() {
                       {/* Calendar */}
                       {(() => {
                         const conn = calendarConnections.find((c: any) => c.status === "connected")
-                        const nextEvent = [...calendarEvents].sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
+                        const nextEvent = [...calendarEvents].filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
                         return (
                           <button onClick={() => setActiveTab("Calendar")}
                             className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
@@ -1181,7 +1188,7 @@ export default function CRMPage() {
                         </div>
                       ) : (
                         <div className="divide-y">
-                          {[...calendarEvents].filter((e: any) => e.start_time && new Date(e.start_time) >= new Date())
+                          {[...calendarEvents].filter((e: any) => e.end_time && new Date(e.end_time) > new Date())
                             .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
                             .slice(0, 5).map((ev: any) => (
                             <div key={ev.id} className="flex items-start gap-3 px-4 py-3">

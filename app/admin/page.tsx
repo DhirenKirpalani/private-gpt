@@ -31,6 +31,36 @@ type Stats = {
   arpu: number
   conversionRate: number
   churnRate: number
+  // Revenue
+  ltv: number
+  revenueChurnRate: number
+  netRevenueRetention: number
+  mrrGrowthRate: number
+  newMrrThisMonth: number
+  // Conversion
+  soloToTeamRate: number
+  // Usage
+  dau: number
+  mau: number
+  stickiness: number
+  docsPerUser: number
+  messagesPerUser: number
+  totalDocuments: number
+  totalChatMessages: number
+  // Workspace
+  totalWorkspaces: number
+  seatsPerWorkspace: number
+  newWorkspaces30d: number
+  // Seats
+  totalActiveSeats: number
+  avgSeatsPerTeam: number
+  newSeats30d: number
+  // Growth
+  userGrowthRate: number
+  // Cohort
+  retention30d: number
+  users30dAgo: number
+  users60dAgo: number
 }
 
 export default function AdminPage() {
@@ -180,7 +210,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-background p-6 sm:p-10">
       <Toaster />
-      <div className="mx-auto max-w-2xl space-y-6">
+      <div className="mx-auto max-w-3xl space-y-6">
 
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -260,7 +290,101 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
-              <p className="text-[10px] text-muted-foreground">LTV = ARPU × avg subscription lifespan (months). CAC requires marketing spend data tracked externally.</p>
+              <p className="text-[10px] text-muted-foreground">LTV = ARPU / churn rate. NRR includes seat expansion revenue.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Revenue & Retention */}
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-emerald-400" />
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Revenue & Retention</h2>
+          </div>
+          {statsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: "LTV", value: `$${stats?.ltv ?? 0}`, sub: "lifetime value", color: "text-emerald-400" },
+                { label: "NRR", value: `${stats?.netRevenueRetention ?? 100}%`, sub: "net revenue retention", color: "text-emerald-400" },
+                { label: "Revenue Churn", value: `${stats?.revenueChurnRate ?? 0}%`, sub: "lost MRR / total", color: (stats?.revenueChurnRate ?? 0) > 10 ? "text-red-400" : "text-emerald-400" },
+                { label: "MRR Growth", value: `${stats?.mrrGrowthRate ?? 0}%`, sub: "new MRR / total MRR", color: "text-[#FFBF00]" },
+                { label: "New MRR (30d)", value: `$${stats?.newMrrThisMonth ?? 0}`, sub: "this month", color: "text-emerald-400" },
+                { label: "Solo → Team", value: `${stats?.soloToTeamRate ?? 0}%`, sub: "upgrade rate", color: "text-purple-400" },
+                { label: "User Growth", value: `${stats?.userGrowthRate ?? 0}%`, sub: "last 30 days", color: "text-blue-400" },
+                { label: "Retention 30d", value: `${stats?.retention30d ?? 0}%`, sub: "users active from 30d ago", color: (stats?.retention30d ?? 0) < 50 ? "text-red-400" : "text-emerald-400" },
+              ].map((m) => (
+                <div key={m.label} className="rounded-lg border bg-background p-3">
+                  <p className="text-xs text-muted-foreground">{m.label}</p>
+                  <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Usage & Engagement */}
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <BarChart2 className="h-4 w-4 text-blue-400" />
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Usage & Engagement</h2>
+          </div>
+          {statsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: "DAU", value: stats?.dau ?? 0, sub: "active in last 24h", color: "text-blue-400" },
+                { label: "MAU", value: stats?.mau ?? 0, sub: "total registered", color: "text-blue-400" },
+                { label: "Stickiness", value: `${stats?.stickiness ?? 0}%`, sub: "DAU / MAU ratio", color: (stats?.stickiness ?? 0) > 20 ? "text-emerald-400" : "text-[#FFBF00]" },
+                { label: "Docs / User", value: stats?.docsPerUser ?? 0, sub: "avg documents", color: "text-purple-400" },
+                { label: "Messages / User", value: stats?.messagesPerUser ?? 0, sub: "avg chat messages", color: "text-purple-400" },
+                { label: "Total Docs", value: stats?.totalDocuments ?? 0, sub: "all documents", color: "text-muted-foreground" },
+                { label: "Total Messages", value: stats?.totalChatMessages ?? 0, sub: "all chat messages", color: "text-muted-foreground" },
+                { label: "Users (30d ago)", value: stats?.users30dAgo ?? 0, sub: "registered 30d ago", color: "text-muted-foreground" },
+              ].map((m) => (
+                <div key={m.label} className="rounded-lg border bg-background p-3">
+                  <p className="text-xs text-muted-foreground">{m.label}</p>
+                  <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Workspace & Seats */}
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-purple-400" />
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Workspace & Seats</h2>
+          </div>
+          {statsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: "Total Workspaces", value: stats?.totalWorkspaces ?? 0, sub: "all workspaces", color: "text-blue-400" },
+                { label: "New Workspaces (30d)", value: stats?.newWorkspaces30d ?? 0, sub: "created this month", color: "text-emerald-400" },
+                { label: "Seats / Workspace", value: stats?.seatsPerWorkspace ?? 0, sub: "avg team size", color: "text-purple-400" },
+                { label: "Total Active Seats", value: stats?.totalActiveSeats ?? 0, sub: "team plan seats", color: "text-emerald-400" },
+                { label: "Avg Seats / Team", value: stats?.avgSeatsPerTeam ?? 0, sub: "team plan only", color: "text-[#FFBF00]" },
+                { label: "New Seats (30d)", value: stats?.newSeats30d ?? 0, sub: "members added this month", color: "text-emerald-400" },
+              ].map((m) => (
+                <div key={m.label} className="rounded-lg border bg-background p-3">
+                  <p className="text-xs text-muted-foreground">{m.label}</p>
+                  <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
+                </div>
+              ))}
             </div>
           )}
         </div>

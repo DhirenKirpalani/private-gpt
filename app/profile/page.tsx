@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Search, Save, Info, X, ChevronDown, Check, Loader2, User, LogOut, Menu, CreditCard, ArrowRight } from "lucide-react"
+import { Search, Save, Info, X, ChevronDown, Check, Loader2, User, LogOut, Menu, CreditCard, ArrowRight, Building2, Plus, Settings, Trash2 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -16,6 +16,11 @@ import { toast, Toaster } from "@/components/ui/toast"
 import { Calendar } from "@/components/ui/calendar"
 import { BillingPortalButton } from "@/components/checkout-button"
 import { isPaid, planName } from "@/lib/subscription"
+import { TrialPill } from "@/components/trial-pill"
+import { WorkspaceSelector } from "@/components/workspace-selector"
+import { useWorkspace } from "@/app/workspace-provider"
+import { CreateWorkspaceModal } from "@/components/create-workspace-modal"
+import { deleteWorkspace, type Workspace } from "@/lib/workspace"
 
 const countries = [
   "Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda","Argentina","Armenia","Australia","Austria","Azerbaijan",
@@ -222,7 +227,8 @@ function formToProfile(form: typeof defaultForm): Partial<Profile> {
 }
 
 export default function ProfilePage() {
-  const { user, loading: authLoading, refreshProfile, subscription } = useAuth()
+  const { user, loading: authLoading, refreshProfile, subscription, role } = useAuth()
+  const { workspaces, refreshWorkspaces, setCurrentWorkspace } = useWorkspace()
   const { t, lang, setLang } = useI18n()
   const router = useRouter()
   const [saved, setSaved] = useState(false)
@@ -249,6 +255,8 @@ export default function ProfilePage() {
   const [emailConnections, setEmailConnections] = useState<any[]>([])
   const [whatsappConnections, setWhatsappConnections] = useState<any[]>([])
   const [calendarConnections, setCalendarConnections] = useState<any[]>([])
+  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   useEffect(() => {
     if (authLoading) return
@@ -496,7 +504,7 @@ export default function ProfilePage() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
 
       {/* Header */}
-      <header className="flex h-16 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
+      <header className="relative z-40 flex h-16 md:h-16 shrink-0 items-center gap-2 md:gap-4 border-b bg-background/80 backdrop-blur-md px-3 md:px-4">
         <button
           onClick={() => setNavOpen(true)}
           className="flex md:hidden h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
@@ -534,6 +542,13 @@ export default function ProfilePage() {
               ES
             </button>
           </div>
+          {(() => {
+            const showWorkspace = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
+            return showWorkspace ? (
+              <WorkspaceSelector compact />
+            ) : null
+          })()}
+          <TrialPill className="hidden md:flex" />
           <Link href="/chat" className={cn("relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-xs font-bold text-white transition-colors overflow-hidden", form.avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
             {!form.avatarUrl && (form.fullName.trim()
               ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
@@ -1686,6 +1701,89 @@ export default function ProfilePage() {
                 })()}
               </div>
             </section>
+
+            {/* Workspaces — visible for Team/Enterprise plans or super_admin */}
+            {(subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin") && (
+              <section className="rounded-2xl border border-white/10 bg-[#2a3444] p-5 sm:p-8">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
+                    <Building2 className="h-5 w-5 text-emerald-400" /> Workspaces
+                  </h3>
+                  <Button
+                    onClick={() => setShowCreateWorkspace(true)}
+                    className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4" /> New
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {workspaces.filter(ws => ws.name !== "Admin's Workspace").length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">No workspaces yet. Create one to get started.</p>
+                  ) : (
+                    workspaces.filter(ws => ws.name !== "Admin's Workspace").map(ws => (
+                      <div
+                        key={ws.id}
+                        className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3"
+                      >
+                        <span className="text-xl leading-none">{(ws.icon ?? "🏢").split(",")[0].trim() || "🏢"}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate text-sm font-semibold text-white">{ws.name}</p>
+                          {ws.description && (
+                            <p className="truncate text-xs text-muted-foreground">{ws.description}</p>
+                          )}
+                        </div>
+                        <Link
+                          href={`/workspace/${ws.id}`}
+                          onClick={() => setCurrentWorkspace(ws)}
+                          className="text-muted-foreground hover:text-white transition-colors"
+                          title="Settings"
+                        >
+                          <Settings className="h-4 w-4" />
+                        </Link>
+                        {workspaces.length > 1 && (
+                          confirmDeleteId === ws.id ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await deleteWorkspace(ws.id)
+                                    await refreshWorkspaces()
+                                    setConfirmDeleteId(null)
+                                    toast({ title: "Workspace deleted" })
+                                  } catch (err: any) {
+                                    toast({ title: "Error", description: err.message, variant: "error" })
+                                  }
+                                }}
+                                className="rounded-md bg-red-500/10 px-2 py-1 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-white transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteId(ws.id)}
+                              className="text-red-400/60 hover:text-red-400 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            )}
+
+            {showCreateWorkspace && <CreateWorkspaceModal onClose={() => setShowCreateWorkspace(false)} />}
 
             {/* Billing & Subscription */}
             <section className="rounded-2xl border border-white/10 bg-[#2a3444] p-5 sm:p-8">

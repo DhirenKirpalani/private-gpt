@@ -17,6 +17,7 @@ import { ConversationSkeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { useWorkspace } from "@/app/workspace-provider"
+import { WorkspaceSelector } from "@/components/workspace-selector"
 import {
   getProfile, fetchUserDocuments, type Profile,
   getConversations, createConversation, updateConversationTitle,
@@ -91,7 +92,7 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function ChatPage() {
-  const { user, avatarUrl, loading: authLoading } = useAuth()
+  const { user, avatarUrl, loading: authLoading, subscription, role } = useAuth()
   const { currentWorkspace } = useWorkspace()
   const { t, lang, setLang } = useI18n()
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -1153,11 +1154,7 @@ export default function ChatPage() {
 
       {/* ── HEADER ── */}
       <header
-        className="relative z-10 flex h-16 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b border-white/5 px-3 md:px-4"
-        style={{
-          backgroundColor: theme.ui.surfaceBg,
-          backdropFilter: `blur(${theme.ui.glassBlur}px)`,
-        }}
+        className="relative z-40 flex h-16 md:h-16 shrink-0 items-center gap-2 md:gap-4 border-b bg-background/80 backdrop-blur-md px-3 md:px-4"
       >
         <div className="flex items-center gap-2 sm:gap-2">
           <button
@@ -1217,12 +1214,12 @@ export default function ChatPage() {
               ES
             </button>
           </div>
-          {currentWorkspace && (
-            <Link href={`/workspace/${currentWorkspace.id}`} className="hidden md:flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white">
-              <span className="text-sm leading-none">{currentWorkspace.icon}</span>
-              <span className="max-w-[90px] truncate">{currentWorkspace.name}</span>
-            </Link>
-          )}
+          {(() => {
+            const showWorkspace = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
+            return showWorkspace ? (
+              <WorkspaceSelector compact />
+            ) : null
+          })()}
           <TrialPill className="hidden md:flex" />
           <Link href="/profile" className={cn(
             "relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden",
