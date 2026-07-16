@@ -135,21 +135,27 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
         }
 
-        // Fetch thread IDs of existing emails in DB so we can match replies to keyword threads
+        // Fetch thread IDs of existing emails in DB so we can match replies to keyword threads + sent emails
         const { data: existingThreadEmails } = await supabase
           .from("email_messages")
-          .select("thread_id, subject, body")
+          .select("thread_id, subject, body, direction")
           .eq("user_id", userId)
           .eq("connection_id", conn.id)
           .not("thread_id", "is", null)
         const keywordThreadIds = new Set<string>()
+        const sentThreadIds = new Set<string>()
         for (const te of existingThreadEmails || []) {
+          // Always capture replies to emails we sent
+          if (te.direction === "sent") {
+            sentThreadIds.add(te.thread_id)
+          }
+          // Also capture threads with business keywords
           const text = `${te.subject || ""} ${te.body || ""}`.toLowerCase()
           if (matchesBusinessKeywords(text)) {
             keywordThreadIds.add(te.thread_id)
           }
         }
-        console.log(`[EMAIL FETCH] Found ${keywordThreadIds.size} existing threads with keywords`)
+        console.log(`[EMAIL FETCH] Found ${keywordThreadIds.size} keyword threads, ${sentThreadIds.size} sent threads`)
 
         // Fetch details in parallel with concurrency limit of 8
         const details: (any | null)[] = []
@@ -194,7 +200,8 @@ export async function POST(req: NextRequest) {
           const combinedText = `${subject} ${body || html}`.toLowerCase()
           const threadId = d.threadId || d.id
           const isInKeywordThread = keywordThreadIds.has(threadId)
-          if (!matchesBusinessKeywords(combinedText) && !isInKeywordThread) {
+          const isInSentThread = sentThreadIds.has(threadId)
+          if (!matchesBusinessKeywords(combinedText) && !isInKeywordThread && !isInSentThread) {
             continue
           }
 
@@ -261,28 +268,33 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
         }
 
-        // Fetch thread IDs of existing emails in DB for keyword thread matching
+        // Fetch thread IDs of existing emails in DB for keyword + sent thread matching
         const { data: existingThreadEmails } = await supabase
           .from("email_messages")
-          .select("thread_id, subject, body")
+          .select("thread_id, subject, body, direction")
           .eq("user_id", userId)
           .eq("connection_id", conn.id)
           .not("thread_id", "is", null)
         const keywordThreadIds = new Set<string>()
+        const sentThreadIds = new Set<string>()
         for (const te of existingThreadEmails || []) {
+          if (te.direction === "sent") {
+            sentThreadIds.add(te.thread_id)
+          }
           const text = `${te.subject || ""} ${te.body || ""}`.toLowerCase()
           if (matchesBusinessKeywords(text)) {
             keywordThreadIds.add(te.thread_id)
           }
         }
-        console.log(`[EMAIL FETCH] Microsoft: Found ${keywordThreadIds.size} existing threads with keywords`)
+        console.log(`[EMAIL FETCH] Microsoft: Found ${keywordThreadIds.size} keyword threads, ${sentThreadIds.size} sent threads`)
 
         const payloads: any[] = []
         for (const msg of newMsgs) {
           const combinedText = `${msg.subject || ""} ${msg.bodyPreview || msg.body?.content || ""}`.toLowerCase()
           const threadId = msg.conversationId || msg.id
           const isInKeywordThread = keywordThreadIds.has(threadId)
-          if (!matchesBusinessKeywords(combinedText) && !isInKeywordThread) {
+          const isInSentThread = sentThreadIds.has(threadId)
+          if (!matchesBusinessKeywords(combinedText) && !isInKeywordThread && !isInSentThread) {
             continue
           }
           payloads.push({
@@ -361,26 +373,31 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // 2. Fetch thread IDs of existing emails in DB for keyword thread matching
+        // 2. Fetch thread IDs of existing emails in DB for keyword + sent thread matching
         const { data: existingThreadEmails } = await supabase
           .from("email_messages")
-          .select("thread_id, subject, body, message_id_header")
+          .select("thread_id, subject, body, message_id_header, direction")
           .eq("user_id", userId)
           .eq("connection_id", conn.id)
           .not("thread_id", "is", null)
         const keywordThreadIds = new Set<string>()
         const keywordMessageIds = new Set<string>()
+        const sentMessageIds = new Set<string>()
         for (const te of existingThreadEmails || []) {
+          if (te.direction === "sent") {
+            if (te.message_id_header) sentMessageIds.add(te.message_id_header)
+          }
           const text = `${te.subject || ""} ${te.body || ""}`.toLowerCase()
           if (matchesBusinessKeywords(text)) {
             keywordThreadIds.add(te.thread_id)
             if (te.message_id_header) keywordMessageIds.add(te.message_id_header)
           }
         }
-        console.log(`[IMAP FETCH] Found ${keywordThreadIds.size} existing keyword threads, ${keywordMessageIds.size} message IDs`)
+        console.log(`[IMAP FETCH] Found ${keywordThreadIds.size} keyword threads, ${keywordMessageIds.size} keyword msg IDs, ${sentMessageIds.size} sent msg IDs`)
 
-        // 3. Search for replies to keyword threads (by In-Reply-To / References headers)
-        for (const msgId of Array.from(keywordMessageIds)) {
+        // 3. Search for replies to keyword threads + sent emails (by In-Reply-To / References headers)
+        const allReplyMessageIds = new Set(Array.from(keywordMessageIds).concat(Array.from(sentMessageIds)))
+        for (const msgId of Array.from(allReplyMessageIds)) {
           const cleanId = msgId.replace(/[<>]/g, "")
           try {
             const results = await connection.search([["SINCE", imapDate], ["HEADER", "In-Reply-To", cleanId]], { bodies: "", struct: true })

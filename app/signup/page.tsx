@@ -15,6 +15,7 @@ import { startTrial } from "@/lib/subscription"
 
 const perkKeys = [
   "signupPerk1",
+  "signupTrialNote",
   "signupPerk2",
   "signupPerk3",
 ] as const
@@ -166,9 +167,9 @@ export default function SignupPage() {
                 className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500 cursor-pointer" required />
               <span className="text-sm text-muted-foreground leading-snug">
                 {t("agreeTerms")}{" "}
-                <Link href="#" className="text-emerald-400 hover:underline">{t("termsAnd")}</Link>{" "}
+                <Link href="/terms" className="text-emerald-400 hover:underline">{t("termsAnd")}</Link>{" "}
                 {t("and")}{" "}
-                <Link href="#" className="text-emerald-400 hover:underline">{t("privacyPolicy")}</Link>
+                <Link href="/privacy" className="text-emerald-400 hover:underline">{t("privacyPolicy")}</Link>
               </span>
             </label>
 

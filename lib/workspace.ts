@@ -1,6 +1,6 @@
 import { supabase } from "./supabase"
 
-export type WorkspaceRole = "owner" | "admin" | "member"
+export type WorkspaceRole = "owner" | "admin" | "manager" | "member"
 
 export type Workspace = {
   id: string

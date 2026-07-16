@@ -38,7 +38,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       // First-time user: auto-create Default workspace and migrate all legacy data into it
       if (list.length === 0) {
-        const defaultWs = await createWorkspace(userId, "Default", "Your initial workspace", "🏢")
+        const defaultWs = await createWorkspace(userId, "Admin's Workspace", "Your initial workspace", "🏢")
         await backfillWorkspaceId(userId, defaultWs.id)
         list = [defaultWs]
       } else {

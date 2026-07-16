@@ -60,7 +60,8 @@ async function refreshIfNeeded(conn: any): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, providerId, to, cc, subject, body, html, threadId, originalMessageId } = await req.json()
+    const { userId, providerId, to, cc, subject, body, html, threadId: clientThreadId, originalMessageId } = await req.json()
+    let threadId = clientThreadId || null
     if (!userId || !providerId || !to || !subject || !body) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
@@ -123,6 +124,10 @@ export async function POST(req: NextRequest) {
         const gmailData = await gmailRes.json()
         if (!gmailRes.ok) throw new Error(gmailData.error?.message || "Gmail API send failed")
         messageId = gmailData.id
+        // Use Gmail's threadId from response if not already set from client
+        if (!threadId && gmailData.threadId) {
+          threadId = gmailData.threadId
+        }
 
       } else if (conn.oauth_provider === "microsoft") {
         // Send via Microsoft Graph
@@ -199,7 +204,8 @@ export async function POST(req: NextRequest) {
       subject,
       body,
       message_id: messageId,
-      thread_id: threadId || null,
+      message_id_header: conn.oauth_provider === "google" ? null : messageId,
+      thread_id: threadId,
       sent_at: new Date().toISOString(),
     }).select().single()
 

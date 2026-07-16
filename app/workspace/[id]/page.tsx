@@ -2,12 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, UserPlus, Trash2, Loader2, Crown, Pencil, Check, X, Settings } from "lucide-react"
+import { ArrowLeft, UserPlus, Trash2, Loader2, Crown, Check, X, Settings } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/app/auth-provider"
 import { useWorkspace } from "@/app/workspace-provider"
 import {
-  getWorkspaceMembers, removeWorkspaceMember, updateWorkspaceMemberRole,
+  getWorkspaceMembers, updateWorkspaceMemberRole,
   updateWorkspace, deleteWorkspace, type WorkspaceMember, type WorkspaceRole,
 } from "@/lib/workspace"
 import { Button } from "@/components/ui/button"
@@ -19,10 +19,24 @@ import { cn } from "@/lib/utils"
 const ROLE_COLORS: Record<string, string> = {
   owner:  "text-[#FFBF00] border-[#FFBF00]/30 bg-[#FFBF00]/10",
   admin:  "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
+  manager: "text-purple-400 border-purple-500/30 bg-purple-500/10",
   member: "text-blue-400 border-blue-500/30 bg-blue-500/10",
 }
 
-const ICONS = ["🏢", "📊", "💼", "🎯", "🚀", "💡", "🛒", "📱", "🌍", "🔧", "📣", "💰"]
+const ICONS: { emoji: string; label: string }[] = [
+  { emoji: "💼", label: "Sales" },
+  { emoji: "�", label: "Marketing" },
+  { emoji: "⚖️", label: "Legal" },
+  { emoji: "⚙️", label: "Operations" },
+  { emoji: "�", label: "Finance" },
+  { emoji: "�", label: "HR" },
+  { emoji: "�", label: "Management" },
+  { emoji: "�", label: "General" },
+  { emoji: "�", label: "Innovation" },
+  { emoji: "�", label: "Strategy" },
+  { emoji: "�", label: "Commerce" },
+  { emoji: "🌍", label: "Global" },
+]
 
 export default function WorkspaceSettingsPage() {
   const { id } = useParams<{ id: string }>()
@@ -39,11 +53,8 @@ export default function WorkspaceSettingsPage() {
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>("admin")
   const [inviting, setInviting] = useState(false)
 
-  const [editName, setEditName] = useState(workspace?.name ?? "")
   const [editDesc, setEditDesc] = useState(workspace?.description ?? "")
-  const [editIcon, setEditIcon] = useState(workspace?.icon ?? "🏢")
-  const [editingName, setEditingName] = useState(false)
-  const [savingName, setSavingName] = useState(false)
+  const [savingDesc, setSavingDesc] = useState(false)
 
   const [deleting, setDeleting] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -66,9 +77,7 @@ export default function WorkspaceSettingsPage() {
 
   useEffect(() => {
     if (workspace) {
-      setEditName(workspace.name)
       setEditDesc(workspace.description ?? "")
-      setEditIcon(workspace.icon ?? "🏢")
     }
   }, [workspace])
 
@@ -79,7 +88,7 @@ export default function WorkspaceSettingsPage() {
       const res = await fetch("/api/workspace/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestingUserId: user.id, workspaceId: id, email: inviteEmail.trim(), role: inviteRole }),
+        body: JSON.stringify({ requestingUserId: user.id, workspaceId: id, workspaceName: workspace?.name, email: inviteEmail.trim(), role: inviteRole }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to invite")
@@ -94,9 +103,21 @@ export default function WorkspaceSettingsPage() {
   }
 
   const handleRemoveMember = async (userId: string) => {
-    if (!id) return
+    if (!id || !user) return
     try {
-      await removeWorkspaceMember(id, userId)
+      const res = await fetch("/api/workspace/remove-member", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestingUserId: user.id,
+          workspaceId: id,
+          userId,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Failed to remove member")
+      }
       setMembers(m => m.filter(x => x.user_id !== userId))
       toast({ title: "Member removed" })
     } catch (err: any) {
@@ -114,18 +135,17 @@ export default function WorkspaceSettingsPage() {
     }
   }
 
-  const handleSaveName = async () => {
-    if (!editName.trim() || !id) return
-    setSavingName(true)
+  const handleSaveDesc = async () => {
+    if (!id) return
+    setSavingDesc(true)
     try {
-      await updateWorkspace(id, { name: editName.trim(), description: editDesc.trim() || null, icon: editIcon })
+      await updateWorkspace(id, { description: editDesc.trim() || null })
       await refreshWorkspaces()
-      setEditingName(false)
       toast({ title: "Saved" })
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" })
     } finally {
-      setSavingName(false)
+      setSavingDesc(false)
     }
   }
 
@@ -136,7 +156,7 @@ export default function WorkspaceSettingsPage() {
       await deleteWorkspace(id)
       await refreshWorkspaces()
       toast({ title: "Workspace deleted" })
-      router.push("/chat")
+      router.push("/profile")
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" })
     } finally {
@@ -159,57 +179,40 @@ export default function WorkspaceSettingsPage() {
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Link href="/chat" className="text-muted-foreground hover:text-foreground">
+          <Link href="/profile" className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">{workspace.icon}</span>
-            <div>
-              <h1 className="text-xl font-bold">{workspace.name}</h1>
-              <p className="text-xs text-muted-foreground">Workspace settings</p>
-            </div>
+          <span className="text-3xl">{(workspace.icon ?? "🏢").split(",")[0].trim() || "🏢"}</span>
+          <div>
+            <h1 className="text-xl font-bold">{workspace.name}</h1>
+            <p className="text-xs text-muted-foreground">
+              {(workspace.icon ?? "").split(",").map(s => s.trim()).filter(Boolean)
+                .map(emoji => ICONS.find(ic => ic.emoji === emoji)?.label)
+                .filter(Boolean)
+                .join(" · ") || "Workspace settings"}
+            </p>
           </div>
         </div>
 
-        {/* General settings */}
+        {/* Description (read-only display) */}
+        {workspace.description && !isOwner && (
+          <div className="rounded-xl border bg-card p-4 shadow-sm">
+            <p className="text-sm text-muted-foreground">{workspace.description}</p>
+          </div>
+        )}
+
+        {/* Description */}
         {isOwner && (
           <div className="rounded-xl border bg-card p-6 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <Settings className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">General</h2>
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Description</h2>
             </div>
-
             <div className="space-y-4">
-              {/* Icon */}
-              <div>
-                <Label className="mb-2 block">Icon</Label>
-                <div className="flex flex-wrap gap-2">
-                  {ICONS.map(i => (
-                    <button key={i} onClick={() => setEditIcon(i)}
-                      className={cn("flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition-colors",
-                        editIcon === i ? "border-emerald-500 bg-emerald-500/10" : "border-white/10 hover:border-white/20"
-                      )}>
-                      {i}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Name */}
-              <div>
-                <Label htmlFor="ws-name">Name</Label>
-                <Input id="ws-name" value={editName} onChange={e => setEditName(e.target.value)} className="mt-1.5" />
-              </div>
-
-              {/* Description */}
-              <div>
-                <Label htmlFor="ws-desc">Description</Label>
-                <Input id="ws-desc" value={editDesc} onChange={e => setEditDesc(e.target.value)} className="mt-1.5" placeholder="What does this workspace focus on?" />
-              </div>
-
-              <Button onClick={handleSaveName} disabled={savingName || !editName.trim()}>
-                {savingName ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-                Save changes
+              <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="What does this workspace focus on?" />
+              <Button onClick={handleSaveDesc} disabled={savingDesc}>
+                {savingDesc ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                Save description
               </Button>
             </div>
           </div>
@@ -217,9 +220,14 @@ export default function WorkspaceSettingsPage() {
 
         {/* Members */}
         <div className="rounded-xl border bg-card p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <UserPlus className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Members</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Members</h2>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {members.length} {members.length === 1 ? "seat" : "seats"} · ${members.length * 50}/mo
+            </span>
           </div>
 
           {/* Invite */}
@@ -235,7 +243,7 @@ export default function WorkspaceSettingsPage() {
                   className="flex-1"
                 />
                 <div className="flex gap-1">
-                  {(["admin", "member"] as WorkspaceRole[]).map(r => (
+                  {(["admin", "manager", "member"] as WorkspaceRole[]).map(r => (
                     <button key={r} onClick={() => setInviteRole(r)}
                       className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors capitalize",
                         inviteRole === r ? "border-emerald-500 bg-emerald-500/10 text-emerald-400" : "border-border text-muted-foreground hover:border-white/20"
@@ -268,7 +276,7 @@ export default function WorkspaceSettingsPage() {
                   </div>
                   {isOwner && m.role !== "owner" ? (
                     <div className="flex items-center gap-1.5">
-                      {(["admin", "member"] as WorkspaceRole[]).map(r => (
+                      {(["admin", "manager", "member"] as WorkspaceRole[]).map(r => (
                         <button key={r} onClick={() => handleChangeRole(m.user_id, r)}
                           className={cn("rounded px-2 py-0.5 text-xs font-medium transition-colors capitalize",
                             m.role === r ? "bg-emerald-500/10 text-emerald-400" : "text-muted-foreground hover:text-white"

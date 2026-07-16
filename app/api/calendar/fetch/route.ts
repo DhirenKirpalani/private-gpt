@@ -53,16 +53,53 @@ export async function POST(req: NextRequest) {
 
     const accessToken = await refreshIfNeeded(conn)
 
-    // Fetch upcoming events from primary calendar
-    const timeMin = new Date().toISOString()
+    // Delete past events from DB (end_time < now)
+    const nowIso = new Date().toISOString()
+    await supabase
+      .from("calendar_events")
+      .delete()
+      .eq("user_id", userId)
+      .eq("connection_id", conn.id)
+      .lt("end_time", nowIso)
+
+    // Fetch events from start of today to 14 days from now (15 days total)
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+    const timeMin = startOfDay.toISOString()
+    const timeMax = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+
     const calendarRes = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&maxResults=50&orderBy=startTime&singleEvents=true`,
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&maxResults=50&orderBy=startTime&singleEvents=true`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     )
     const calendarData = await calendarRes.json()
     if (!calendarRes.ok) throw new Error(calendarData.error?.message || "Calendar API failed")
 
-    const events = calendarData.items || []
+    // Filter out birthday and holiday events
+    const BIRTHDAY_PATTERNS = [
+      /\bbirthday\b/i,
+      /\bcumpleaños\b/i,
+      /\bholidays\b/i,
+      /\bferiados\b/i,
+    ]
+    const BIRTHDAY_ORGANIZERS = [
+      "birthday@group.v.calendar.google.com",
+      "holiday@group.v.calendar.google.com",
+      "en.usa#holiday@group.v.calendar.google.com",
+      "en.mexican#holiday@group.v.calendar.google.com",
+    ]
+
+    const events = (calendarData.items || []).filter((ev: any) => {
+      // Filter by event type
+      if (ev.eventType === "birthday" || ev.eventType === "holiday") return false
+      // Filter by organizer email
+      const organizerEmail = ev.organizer?.email || ""
+      if (BIRTHDAY_ORGANIZERS.some(o => organizerEmail.toLowerCase() === o)) return false
+      // Filter by summary pattern
+      const summary = ev.summary || ""
+      if (BIRTHDAY_PATTERNS.some(p => p.test(summary))) return false
+      return true
+    })
     const results: any[] = []
 
     for (const ev of events) {

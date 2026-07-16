@@ -24,14 +24,14 @@ export async function POST(req: NextRequest) {
 
     if (emailErr) console.error("[AI CONTEXT] Email fetch error:", emailErr.message)
 
-    // Fetch upcoming calendar events (next 14 days)
+    // Fetch upcoming calendar events (next 14 days, not yet ended)
     const now = new Date().toISOString()
     const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
     let { data: events, error: calErr } = await supabase
       .from("calendar_events")
       .select("summary, description, start_time, end_time, location, attendees")
       .eq("user_id", userId)
-      .gte("start_time", now)
+      .gt("end_time", now)
       .lte("start_time", twoWeeksLater)
       .order("start_time", { ascending: true })
       .limit(10)
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
             .from("calendar_events")
             .select("summary, description, start_time, end_time, location, attendees")
             .eq("user_id", userId)
-            .gte("start_time", now)
+            .gt("end_time", now)
             .lte("start_time", twoWeeksLater)
             .order("start_time", { ascending: true })
             .limit(10)
