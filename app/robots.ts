@@ -10,6 +10,5 @@ export default function robots(): MetadataRoute.Robots {
       disallow: ["/chat", "/crm", "/channels", "/admin", "/profile", "/workspace", "/api/"],
     },
     sitemap: `${baseUrl}/sitemap.xml`,
-    host: baseUrl,
   }
 }
