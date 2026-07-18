@@ -79,9 +79,12 @@ export function Navbar() {
 
         {/* Brand */}
         <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-visible" onClick={() => { setMobileOpen(false); setActiveSection("") }}>
-          <img
+          <Image
             src="/assets/images/exploro-logo.png"
-            alt="Exploro"
+            alt="Exploro OS"
+            width={154}
+            height={44}
+            priority
             className="h-[34px] w-auto object-contain transition-transform duration-300 hover:scale-105 sm:h-[38px] lg:h-[44px]"
             style={{ transformOrigin: "left center" }}
           />
@@ -144,7 +147,7 @@ export function Navbar() {
             )}>
               {!loading && !avatarUrl && (userInitials || <User className="h-4 w-4 text-white" />)}
               {avatarUrl && (
-                <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+                <Image src={avatarUrl} alt="Your profile avatar" fill sizes="32px" className="absolute inset-0 h-full w-full rounded-full object-cover transition-opacity duration-300" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
               )}
             </Link>
           ) : (

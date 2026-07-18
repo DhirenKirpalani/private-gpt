@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { Search, Check, X, MessageSquare, User, Globe, Mail, Eye, EyeOff, Loader2, AlertCircle, ExternalLink, CalendarDays, Menu } from "lucide-react"
 import { FaWhatsapp, FaTelegram, FaSlack, FaInstagram, FaFacebookMessenger, FaSms, FaMicrosoft } from "react-icons/fa"
 import { SiGmail, SiIcloud, SiGooglecalendar, SiZoho, SiGoogledrive, SiGooglemeet } from "react-icons/si"
@@ -441,7 +442,7 @@ function ChannelsPageContent() {
           <Menu className="h-5 w-5" />
         </button>
         <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[36px] w-auto object-contain sm:h-[38px] md:h-[40px]" />
+          <Image src="/assets/images/exploro-logo.png" alt="Exploro OS" width={140} height={40} className="h-[36px] w-auto object-contain sm:h-[38px] md:h-[40px]" />
           <span className="inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
         <div className="hidden flex-1 justify-center md:flex">
@@ -467,7 +468,7 @@ function ChannelsPageContent() {
           <TrialPill className="hidden md:flex" />
           <Link href="/profile" className={cn("relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden", authLoading || avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
             {!authLoading && !avatarUrl && (userInitials || <User className="h-5 w-5 md:h-4 md:w-4 text-white" />)}
-            {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
+            {avatarUrl && <Image src={avatarUrl} alt="Your avatar" fill sizes="36px" className="absolute inset-0 h-full w-full rounded-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
           </Link>
         </div>
       </header>

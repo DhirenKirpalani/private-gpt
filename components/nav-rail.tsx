@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useEffect, useState, useRef, useCallback } from "react"
 import {
@@ -229,9 +230,11 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
                 )}
               >
                 {href === "/profile" && avatarUrl ? (
-                  <img
+                  <Image
                     src={avatarUrl}
                     alt={label}
+                    width={32}
+                    height={32}
                     className="h-8 w-8 shrink-0 rounded-full object-cover"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
                   />
@@ -309,7 +312,7 @@ function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondar
         )}
       >
         {href === "/profile" && avatarUrl ? (
-          <img src={avatarUrl} alt={label} className="h-6 w-6 rounded-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+          <Image src={avatarUrl} alt={label} width={24} height={24} className="h-6 w-6 rounded-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
         ) : (
           <Icon className="h-5 w-5 shrink-0" />
         )}
@@ -328,9 +331,11 @@ function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondar
       >
         <div className="flex items-center justify-between px-1 pb-2">
           <div className="flex items-center gap-1.5">
-            <img
+            <Image
               src="/assets/images/exploro-logo.png"
-              alt="Exploro"
+              alt="Exploro OS"
+              width={112}
+              height={32}
               className="h-8 w-auto object-contain"
             />
             <span className="inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
