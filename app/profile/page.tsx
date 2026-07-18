@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Search, Save, Info, X, ChevronDown, Check, Loader2, User, LogOut, Menu, CreditCard, ArrowRight, Building2, Plus, Settings, Trash2 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
@@ -513,7 +514,7 @@ export default function ProfilePage() {
           <Menu className="h-5 w-5" />
         </button>
         <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[36px] w-auto object-contain sm:h-[38px] md:h-[40px]" />
+          <Image src="/assets/images/exploro-logo.png" alt="Exploro OS" width={140} height={40} className="h-[36px] w-auto object-contain sm:h-[38px] md:h-[40px]" />
           <span className="inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
         <div className="flex flex-1 justify-end items-center gap-1.5 sm:gap-2 md:gap-3">
@@ -554,10 +555,12 @@ export default function ProfilePage() {
               ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
               : <User className="h-5 w-5 md:h-4 md:w-4 text-white" />)}
             {form.avatarUrl && (
-              <img
+              <Image
                 src={form.avatarUrl}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
+                alt="Your avatar"
+                fill
+                sizes="36px"
+                className="absolute inset-0 h-full w-full rounded-full object-cover"
                 onError={e => { (e.target as HTMLImageElement).style.display = "none" }}
               />
             )}
@@ -628,10 +631,12 @@ export default function ProfilePage() {
                       ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
                       : <User className="h-10 w-10 text-white/80" />)}
                     {form.avatarUrl && (
-                      <img
+                      <Image
                         src={form.avatarUrl}
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover"
+                        alt="Your avatar"
+                        fill
+                        sizes="80px"
+                        className="absolute inset-0 h-full w-full rounded-full object-cover"
                         onError={e => {
                           console.error("[AVATAR DEBUG] Image failed to load:", form.avatarUrl)
                           ;(e.target as HTMLImageElement).style.display = "none"
@@ -1306,9 +1311,11 @@ export default function ProfilePage() {
                   </div>
                   {form.logoUrl && (
                     <div className="mb-2 flex items-center gap-3">
-                      <img
+                      <Image
                         src={form.logoUrl}
-                        alt=""
+                        alt="Company logo"
+                        width={160}
+                        height={40}
                         className="h-10 w-auto max-w-[160px] rounded object-contain"
                         onError={e => { (e.target as HTMLImageElement).style.display = "none" }}
                       />

@@ -1,5 +1,6 @@
 "use client"
 import Link from "next/link"
+import Image from "next/image"
 import { Clock } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { useI18n } from "@/lib/i18n"
@@ -9,7 +10,7 @@ export default function AutomationsPage() {
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
       <header className="flex h-14 md:h-16 shrink-0 items-center gap-2 md:gap-4 overflow-hidden border-b bg-background/80 backdrop-blur-md px-2 sm:px-3 md:px-4">
         <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[32px] w-auto object-contain sm:h-[36px] md:h-[40px]" />
+          <Image src="/assets/images/exploro-logo.png" alt="Exploro OS" width={140} height={40} className="h-[32px] w-auto object-contain sm:h-[36px] md:h-[40px]" />
           <span className="inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
         <div className="flex-1" />

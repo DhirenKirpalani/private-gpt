@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { FaLinkedin, FaFacebook } from "react-icons/fa"
 import { useI18n } from "@/lib/i18n"
@@ -33,7 +34,7 @@ export function Footer() {
                 href="/"
                 className="flex items-center justify-center transition-transform duration-300 hover:scale-105"
               >
-                <img src="/assets/images/exploro-icon.svg" alt="Exploro" className="h-10 w-10 object-contain" />
+                <Image src="/assets/images/exploro-icon.svg" alt="Exploro OS" width={40} height={40} unoptimized className="h-10 w-10 object-contain" />
               </Link>
               <a
                 href="https://www.linkedin.com/company/us-ai-bureau/?viewAsMember=true"
@@ -86,6 +87,20 @@ export function Footer() {
                 className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
                 {t("security")}
+              </Link>
+
+              <Link
+                href="/pricing"
+                className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {t("pricing")}
+              </Link>
+
+              <Link
+                href="/about"
+                className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {t("aboutUs")}
               </Link>
             </div>
           </div>
@@ -165,6 +180,13 @@ export function Footer() {
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               {t("terms")}
+            </Link>
+
+            <Link
+              href="/disclaimer"
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Disclaimer
             </Link>
           </div>
         </div>

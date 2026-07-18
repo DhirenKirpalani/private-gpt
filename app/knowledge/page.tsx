@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
   Search, Upload, FileText, Trash2, Info, X,
   Filter, File, CheckCircle2, Clock, AlertCircle, BookOpen, User, Plus, ChevronDown, RefreshCw, Menu, PanelLeft, Folder, FolderOpen, ArrowLeft, HardDrive,
@@ -494,7 +495,7 @@ export default function KnowledgePage() {
           <Menu className="h-5 w-5" />
         </button>
         <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
-          <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-[36px] w-auto object-contain sm:h-[38px] md:h-[40px]" />
+          <Image src="/assets/images/exploro-logo.png" alt="Exploro OS" width={140} height={40} className="h-[36px] w-auto object-contain sm:h-[38px] md:h-[40px]" />
           <span className="inline-block rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-600/30">BETA</span>
         </Link>
         <div className="hidden flex-1 justify-center md:flex">
@@ -546,7 +547,7 @@ export default function KnowledgePage() {
             authLoading || avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500"
           )}>
             {!authLoading && !avatarUrl && (userInitials || <User className="h-5 w-5 md:h-4 md:w-4 text-white" />)}
-            {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
+            {avatarUrl && <Image src={avatarUrl} alt="Your avatar" fill sizes="36px" className="absolute inset-0 h-full w-full rounded-full object-cover transition-opacity duration-300" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
           </Link>
         </div>
       </header>

@@ -1,520 +1,206 @@
-"use client"
+import type { Metadata } from "next"
+import HomeClient from "./home-client"
 
-import { useRouter } from "next/navigation"
-import { useI18n } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
-import { useAuth } from "@/app/auth-provider"
-import { FaWhatsapp, FaTelegram, FaSlack, FaEnvelope, FaApple, FaGoogle } from "react-icons/fa"
-import { SiNotion, SiDropbox, SiGooglecalendar } from "react-icons/si"
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://exploro-os.com"
 
-function OutlookIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="none">
-      <rect width="24" height="24" rx="5" fill="#0078D4"/>
-      <path d="M5 8h14v8c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V8z" fill="white"/>
-      <path d="M5 8l7 5 7-5" stroke="#0078D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-      <path d="M5 8l7 5" stroke="#0078D4" strokeWidth="1" strokeLinecap="round" fill="none"/>
-      <path d="M19 8l-7 5" stroke="#0078D4" strokeWidth="1" strokeLinecap="round" fill="none"/>
-    </svg>
-  )
+export const metadata: Metadata = {
+  title: "Exploro OS — AI-Powered Business Platform for SMEs",
+  description: "Exploro OS is an AI-powered business assistant for SMEs that unifies company knowledge, Gmail, Google Drive, Calendar, WhatsApp, and other business tools into a secure, searchable workspace. It uses retrieval-augmented generation (RAG) to provide accurate, context-aware answers based on your organization's data.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "Exploro OS — AI-Powered Business Platform for SMEs",
+    description: "Unify company knowledge, Gmail, Google Drive, Calendar, WhatsApp, and business tools into a secure AI workspace with RAG-powered answers.",
+    url: baseUrl,
+  },
 }
-
-function OneDriveIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
-    </svg>
-  )
-}
-import {
-  ArrowRight,
-  Play,
-  X,
-  Check,
-  Upload,
-  Rocket,
-  Shield,
-  Lock,
-  FileText,
-  MessageSquare,
-  Bot,
-  ChevronDown,
-  Building2,
-  BarChart3,
-  HeartPulse,
-  Briefcase,
-  Home,
-  GraduationCap,
-  Stethoscope,
-  ShoppingBag,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { FaqSection } from "@/components/faq-section"
 
 export default function HomePage() {
-  const { t } = useI18n()
-  const router = useRouter()
-  const { user } = useAuth()
-
-  const handleCTA = () => {
-    if (user) {
-      router.push("/chat")
-    } else {
-      router.push("/signup")
-    }
-  }
-
   return (
-    <div className="flex flex-col">
-
-      {/* ── HERO ── */}
-      <section className="relative flex flex-col items-center justify-center overflow-hidden px-4 pt-20 pb-16 text-center sm:py-40">
-        <div className="animate-fade-in-up mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-400 sm:mb-5 [animation-delay:0ms]">
-          {t("heroBadge")}
-        </div>
-        <h1 className="animate-fade-in-up mb-4 max-w-5xl pb-2 text-3xl font-extrabold tracking-tight text-white sm:mb-6 sm:text-5xl md:text-7xl [animation-delay:120ms]">
-          {t("heroTitle")}
-        </h1>
-        <p className="animate-fade-in-up mb-2 max-w-2xl text-base text-muted-foreground sm:text-xl [animation-delay:240ms]">
-          {t("heroSubtitle")}
+    <>
+      {/* SSR content for Googlebot and AI Overview — hidden visually, visible to crawlers */}
+      <div className="sr-only">
+        <h1>Exploro OS — AI-Powered Business Platform for SMEs</h1>
+        <p>
+          Exploro OS is an AI-powered business assistant for small and medium enterprises that unifies company
+          knowledge, Gmail, Google Drive, Google Calendar, WhatsApp, Telegram, and other business tools into a
+          single secure, searchable workspace. It uses retrieval-augmented generation (RAG) to provide accurate,
+          context-aware answers based on your organization&apos;s own data — so every response is grounded in
+          your documents, not hallucinated.
         </p>
-        <p className="animate-fade-in-up mb-6 text-sm font-medium text-emerald-400 sm:mb-10 [animation-delay:280ms]">
-          {t("productTagline")}
+
+        <h2>What is Exploro OS?</h2>
+        <p>
+          Exploro OS is a private AI workspace built for small and medium businesses. Think of it as ChatGPT for
+          your company — but instead of answering from the public internet, it answers from your own documents,
+          emails, calendar, and business tools. You upload your knowledge base, connect your Gmail or Outlook,
+          sync your calendar, and link WhatsApp or Telegram. Then you ask questions in plain English and get
+          answers with citations pointing to the exact source document.
         </p>
-        <div className="animate-fade-in-up flex flex-wrap items-center justify-center gap-4 [animation-delay:360ms]">
-          {user ? (
-            <Button size="lg" onClick={() => router.push("/chat")} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
-              {t("goToChat")} <ArrowRight className="h-4 w-4" />
-            </Button>
-          ) : (
-            <>
-              <Button size="lg" onClick={handleCTA} className="pulse-ring gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
-                {t("heroStartFree")} <ArrowRight className="h-4 w-4" />
-              </Button>
-              <a href="https://yellow-rabbit-520973.hostingersite.com/Videos/Exploro%20Walkthrough%20Video%201.mp4" target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="gap-2 px-8 transition-all duration-200 hover:scale-105">
-                  <Play className="h-4 w-4" /> {t("heroWatchDemo")}
-                </Button>
-              </a>
-            </>
-          )}
-        </div>
-      </section>
 
-      {/* ── COMPARISON (Features) ── */}
-      <section id="features" className="border-t border-white/5 px-4 py-24">
-        <div className="mx-auto max-w-4xl">
-          <div className="reveal mb-12 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-white">{t("comparisonTitle")}</h2>
-            <p className="mt-3 text-muted-foreground">{t("comparisonSubtitle")}</p>
-          </div>
+        <h2>Who is Exploro OS for?</h2>
+        <p>
+          Exploro OS is designed for small and medium businesses that need a private, secure AI assistant
+          connected to their real business data. It works well for:
+        </p>
+        <ul>
+          <li>Consultants and agencies managing multiple client projects and documents</li>
+          <li>Restaurants and hospitality businesses handling orders, menus, and customer communications</li>
+          <li>Healthcare providers managing patient records, appointments, and compliance documents</li>
+          <li>Real estate firms tracking listings, contracts, and client communications</li>
+          <li>Educational institutions organizing curricula, research, and administrative documents</li>
+          <li>Wellness centers and coaches managing client programs and content</li>
+          <li>Any business that wants a private AI assistant trained on their own data</li>
+        </ul>
 
-          {/* Desktop: table */}
-          <div className="perspective-table hidden md:block">
-            <div className="table-3d cinematic-border overflow-hidden rounded-2xl shadow-2xl shadow-emerald-900/20">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-emerald-500/10 bg-emerald-950/20 backdrop-blur-sm">
-                    <th className="px-6 py-4 text-left font-semibold text-muted-foreground">{t("comparisonCapability")}</th>
-                    <th className="px-6 py-4 text-center font-semibold text-muted-foreground">{t("comparisonChatGPT")}</th>
-                    <th className="px-6 py-4 text-center font-semibold text-emerald-400">Exploro</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {[
-                    [t("comparisonItem1"), false, true],
-                    [t("comparisonItem2"), false, true],
-                    [t("comparisonItem3"), false, true],
-                    [t("comparisonItem4"), false, true],
-                    [t("comparisonItem5"), false, true],
-                    [t("comparisonItem6"), false, true],
-                    [t("comparisonItem7"), false, true],
-                  ].map(([label, chatgpt, exploro], i) => (
-                    <tr key={label as string} className={cn("row-3d", i % 2 === 0 ? "bg-white/[0.02]" : "")}>
-                      <td className="px-6 py-4 font-medium">{label as string}</td>
-                      <td className="px-6 py-4 text-center">
-                        {chatgpt ? <Check className="mx-auto h-4 w-4 text-emerald-400" /> : <X className="mx-auto h-4 w-4 text-red-400" />}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex justify-center">
-                          {exploro ? <Check className="h-4 w-4 text-emerald-400" /> : <X className="h-4 w-4 text-red-400" />}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        <h2>What problem does Exploro OS solve?</h2>
+        <p>
+          Most small businesses face three problems when trying to use AI:
+        </p>
+        <ol>
+          <li>
+            <strong>Scattered knowledge</strong> — Documents live in Google Drive, emails in Gmail, messages in
+            WhatsApp, and files in Dropbox. No single AI can access all of them at once.
+          </li>
+          <li>
+            <strong>Generic AI lacks context</strong> — ChatGPT and similar tools don&apos;t know your business,
+            your clients, your contracts, or your processes. They hallucinate when asked specific questions.
+          </li>
+          <li>
+            <strong>Data privacy concerns</strong> — Uploading sensitive business documents to public AI tools
+            risks data leaks and compliance violations.
+          </li>
+        </ol>
+        <p>
+          Exploro OS solves all three by connecting your existing tools into one private AI workspace. Every
+          answer is grounded in your own data, cites its source, and never trains on your documents.
+        </p>
 
-          {/* Mobile: stacked cards */}
-          <div className="space-y-3 md:hidden">
-            {[
-              t("comparisonItem1"),
-              t("comparisonItem2"),
-              t("comparisonItem3"),
-              t("comparisonItem4"),
-              t("comparisonItem5"),
-              t("comparisonItem6"),
-              t("comparisonItem7"),
-            ].map((label) => (
-              <div key={label} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-                <span className="text-sm font-medium">{label}</span>
-                <div className="flex shrink-0 items-center gap-4">
-                  <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("comparisonChatGPT")}</span>
-                    <X className="h-4 w-4 text-red-400" />
-                  </div>
-                  <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Exploro</span>
-                    <Check className="h-4 w-4 text-emerald-400" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+        <h2>How does Exploro OS work?</h2>
+        <p>
+          Exploro OS works in three steps:
+        </p>
+        <ol>
+          <li>
+            <strong>Connect your tools</strong> — Link your Gmail, Google Drive, Google Calendar, WhatsApp,
+            Outlook, Slack, Notion, Dropbox, or OneDrive accounts with secure OAuth authentication.
+          </li>
+          <li>
+            <strong>Build your knowledge base</strong> — Upload PDFs, spreadsheets, contracts, proposals, and
+            any business documents. Exploro OS encrypts and indexes them using RAG (retrieval-augmented
+            generation) technology.
+          </li>
+          <li>
+            <strong>Ask questions in plain language</strong> — Type questions like &quot;What did the client
+            agree to in the last proposal?&quot; or &quot;When is my next meeting with Acme Corp?&quot; and get
+            instant answers with citations to the source document.
+          </li>
+        </ol>
 
-      {/* ── BUILT FOR (Use Cases) ── */}
-      <section id="use-cases" className="border-t border-white/5 px-4 py-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="reveal mb-12 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-white">{t("industriesHeading")}</h2>
-            <p className="mt-3 text-muted-foreground">{t("industriesTitle")}</p>
-          </div>
-          <div className="perspective-grid">
-            <div className="grid-3d grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                { icon: Briefcase, label: t("industryConsultants"), desc: t("industryConsultantsDesc") },
-                { icon: Building2, label: t("industryAgencies"), desc: t("industryAgenciesDesc") },
-                { icon: BarChart3, label: t("industryRestaurants"), desc: t("industryRestaurantsDesc") },
-                { icon: Stethoscope, label: t("industryHealthcare"), desc: t("industryHealthcareDesc") },
-                { icon: Home, label: t("industryRealEstate"), desc: t("industryRealEstateDesc") },
-                { icon: GraduationCap, label: t("industryEducation"), desc: t("industryEducationDesc") },
-                { icon: HeartPulse, label: t("industryWellness"), desc: t("industryWellnessDesc") },
-                { icon: ShoppingBag, label: t("industrySMBs"), desc: t("industrySMBsDesc") },
-              ].map(({ icon: Icon, label, desc }) => (
-                <div key={label} className="card-3d rounded-xl border border-white/5 bg-[#2a3444] p-4">
-                  <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
-                    <Icon className="h-4 w-4 text-emerald-400" />
-                  </div>
-                  <p className="text-sm font-semibold">{label}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{desc}</p>
-                </div>
-            ))}
-          </div>
-          </div>
-        </div>
-      </section>
+        <h2>Key Features</h2>
+        <ul>
+          <li><strong>Private AI knowledge base</strong> — Upload documents and get RAG-powered answers with source citations</li>
+          <li><strong>AI-powered CRM</strong> — Manage contacts, track deals, and view customer communication history</li>
+          <li><strong>AI email assistant</strong> — Draft, reply, and manage Gmail or Outlook inbox with AI suggestions</li>
+          <li><strong>Calendar integration</strong> — Sync Google Calendar and ask about upcoming meetings and events</li>
+          <li><strong>WhatsApp &amp; Telegram integration</strong> — Connect business messaging channels for AI-assisted responses</li>
+          <li><strong>Document management</strong> — Search across Google Drive, OneDrive, Dropbox, and Notion from one place</li>
+          <li><strong>Team workspaces</strong> — Collaborate with role-based access control and shared knowledge bases</li>
+          <li><strong>AI agents</strong> — Automate repetitive workflows and task execution</li>
+          <li><strong>Multi-language support</strong> — Full interface in English and Spanish</li>
+          <li><strong>Brand customization</strong> — Upload your logo, set brand colors, and customize your AI assistant&apos;s tone</li>
+        </ul>
 
-      {/* ── HOW IT WORKS ── */}
-      <section id="how-it-works" className="bg-background border-t border-white/5 px-4 py-24">
-        <div className="mx-auto max-w-4xl">
-          <div className="reveal mb-14 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-white">{t("howItWorksTitle")}</h2>
-            <p className="mt-3 text-muted-foreground">{t("howItWorksSubtitle")}</p>
-          </div>
+        <h2>Is Exploro OS secure?</h2>
+        <p>
+          Yes. Exploro OS is built with security as a foundational principle:
+        </p>
+        <ul>
+          <li><strong>Encrypted knowledge base</strong> — All uploaded documents are encrypted at rest and in transit</li>
+          <li><strong>Temporary memory</strong> — Conversation history is deleted after each session to prevent data contamination</li>
+          <li><strong>No model training</strong> — Your data is never used to train AI models</li>
+          <li><strong>Data isolation</strong> — Each business has its own isolated knowledge base with no cross-contamination</li>
+          <li><strong>Source citations</strong> — Every AI response includes citations to the source document for verification</li>
+          <li><strong>OAuth authentication</strong> — Tool integrations use secure OAuth — we never store your passwords</li>
+        </ul>
 
-          {/* Desktop: vertical timeline */}
-          <div className="perspective-timeline hidden flex-col md:flex">
-            <div className="timeline-3d">
-              {[
-                { step: "01", icon: Upload, title: t("step1Title"), desc: t("step1Desc") },
-                { step: "02", icon: Bot, title: t("step2Title"), desc: t("step2Desc") },
-                { step: "03", icon: FileText, title: t("step3Title"), desc: t("step3Desc") },
-                { step: "04", icon: MessageSquare, title: t("step4Title"), desc: t("step4Desc") },
-                { step: "05", icon: Shield, title: t("step5Title"), desc: t("step5Desc") },
-                { step: "06", icon: Rocket, title: t("step6Title"), desc: t("step6Desc") },
-              ].map((item, i) => (
-                <div key={item.step} className="step-3d flex gap-5">
-                  <div className="flex flex-col items-center">
-                    <div className="step-icon-3d flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-                      <item.icon className="h-5 w-5" />
-                    </div>
-                    {i < 5 && <div className="mt-1 h-full w-px timeline-line-glow" />}
-                  </div>
-                  <div className="pb-10">
-                    <div className="mb-1 text-xs font-bold uppercase tracking-widest text-emerald-400">{t("stepLabel")} {item.step}</div>
-                    <h3 className="text-lg font-semibold">{item.title}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <h2>Exploro OS vs. ChatGPT: What&apos;s the difference?</h2>
+        <p>
+          ChatGPT is a general-purpose AI chatbot that answers from the public internet. It doesn&apos;t know your
+          business, your documents, or your clients. Exploro OS is a private AI workspace that answers from your
+          own data — your documents, emails, calendar, and messages. The key differences:
+        </p>
+        <ul>
+          <li><strong>Data source:</strong> ChatGPT uses public internet data. Exploro OS uses your private business data.</li>
+          <li><strong>Accuracy:</strong> ChatGPT can hallucinate. Exploro OS cites sources and declines to answer when it doesn&apos;t know.</li>
+          <li><strong>Integrations:</strong> ChatGPT has no business tool integrations. Exploro OS connects to Gmail, Google Drive, Calendar, WhatsApp, and more.</li>
+          <li><strong>Privacy:</strong> ChatGPT may use conversations for training. Exploro OS never trains on your data and deletes session memory.</li>
+          <li><strong>Team collaboration:</strong> ChatGPT is individual-only. Exploro OS supports team workspaces with shared knowledge bases.</li>
+        </ul>
 
-          {/* Mobile: compact cards */}
-          <div className="grid gap-3 md:hidden">
-            {[
-              { step: "01", icon: Upload, title: t("step1Title"), desc: t("step1Desc") },
-              { step: "02", icon: Bot, title: t("step2Title"), desc: t("step2Desc") },
-              { step: "03", icon: FileText, title: t("step3Title"), desc: t("step3Desc") },
-              { step: "04", icon: MessageSquare, title: t("step4Title"), desc: t("step4Desc") },
-              { step: "05", icon: Shield, title: t("step5Title"), desc: t("step5Desc") },
-              { step: "06", icon: Rocket, title: t("step6Title"), desc: t("step6Desc") },
-            ].map((item) => (
-              <div key={item.step} className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600/15 text-emerald-400">
-                  <item.icon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">{t("stepLabel")} {item.step}</span>
-                  </div>
-                  <h3 className="mt-0.5 text-sm font-semibold">{item.title}</h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+        <h2>Integrations</h2>
+        <p>Exploro OS connects directly to the tools your business already uses:</p>
+        <ul>
+          <li><strong>Gmail</strong> — AI email assistant for drafting, replying, and managing inbox</li>
+          <li><strong>Google Drive</strong> — Document search and AI-powered retrieval across your files</li>
+          <li><strong>Google Calendar</strong> — Event sync and upcoming meeting context for the AI</li>
+          <li><strong>WhatsApp</strong> — Business messaging with AI-assisted responses</li>
+          <li><strong>Outlook</strong> — Email integration via Microsoft Graph API</li>
+          <li><strong>Slack</strong> — Team communication integration</li>
+          <li><strong>Notion</strong> — Knowledge base synchronization</li>
+          <li><strong>Dropbox</strong> — Cloud document storage integration</li>
+          <li><strong>OneDrive</strong> — Microsoft cloud storage integration</li>
+          <li><strong>Telegram</strong> — Messaging channel integration</li>
+        </ul>
 
-      {/* ── INTEGRATIONS ── */}
-      <section id="integrations" className="border-t border-white/5 px-4 py-24">
-        <div className="mx-auto max-w-5xl text-center">
-          <h2 className="reveal mb-4 text-3xl font-bold tracking-tight text-white">{t("integrationsTitle")}</h2>
-          <p className="mb-12 text-muted-foreground">{t("integrationsSubtitle")}</p>
-          <div className="perspective-grid">
-            <div className="grid-3d grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <h2>Pricing</h2>
+        <p>
+          Exploro OS offers simple, transparent pricing with a 15-day free trial — no credit card required:
+        </p>
+        <ul>
+          <li><strong>Solo plan</strong> — $30/month for individual users. Includes AI knowledge base, email integration, calendar sync, and messaging channels.</li>
+          <li><strong>Team plan</strong> — $50/month per seat for collaborative workspaces. Includes everything in Solo plus team knowledge sharing, role-based access, and workspace management.</li>
+          <li><strong>Free trial</strong> — 15 days, full access, no credit card required. Cancel anytime.</li>
+        </ul>
 
-            {/* WhatsApp */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaWhatsapp className="h-6 w-6" style={{ color: "#25D366" }} />
-              </div>
-              <span className="text-sm font-medium">WhatsApp</span>
-            </div>
+        <h2>Why choose Exploro OS?</h2>
+        <p>
+          If you&apos;re a small or medium business looking for an AI assistant that actually knows your business,
+          Exploro OS is the answer. It connects to your existing tools, uses your own data for context, maintains
+          strict data privacy, and provides verifiable answers with source citations. No technical skills
+          required — we handle the setup while you focus on running your business.
+        </p>
 
-            {/* Gmail */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaGoogle className="h-6 w-6" style={{ color: "#EA4335" }} />
-              </div>
-              <span className="text-sm font-medium">Gmail</span>
-            </div>
-
-            {/* Outlook */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <OutlookIcon className="h-6 w-6" style={{ color: "#0078D4" }} />
-              </div>
-              <span className="text-sm font-medium">Outlook</span>
-            </div>
-
-            {/* Google Drive */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaGoogle className="h-6 w-6" style={{ color: "#4285F4" }} />
-              </div>
-              <span className="text-sm font-medium">Google Drive</span>
-            </div>
-
-            {/* Google Calendar */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <SiGooglecalendar className="h-6 w-6" style={{ color: "#4285F4" }} />
-              </div>
-              <span className="text-sm font-medium">Google Calendar</span>
-            </div>
-
-            {/* Notion */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <SiNotion className="h-6 w-6" style={{ color: "#000000" }} />
-              </div>
-              <span className="text-sm font-medium">Notion</span>
-            </div>
-
-            {/* Dropbox */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <SiDropbox className="h-6 w-6" style={{ color: "#0061FF" }} />
-              </div>
-              <span className="text-sm font-medium">Dropbox</span>
-            </div>
-
-            {/* OneDrive */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <OneDriveIcon className="h-6 w-6" style={{ color: "#0078D4" }} />
-              </div>
-              <span className="text-sm font-medium">OneDrive</span>
-            </div>
-
-            {/* Telegram */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaTelegram className="h-6 w-6" style={{ color: "#26A5E4" }} />
-              </div>
-              <span className="text-sm font-medium">Telegram</span>
-            </div>
-
-            {/* Other Email */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaEnvelope className="h-6 w-6" style={{ color: "#888888" }} />
-              </div>
-              <span className="text-sm font-medium">Other Email</span>
-            </div>
-
-            {/* iCloud */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaApple className="h-6 w-6" style={{ color: "#3693F3" }} />
-              </div>
-              <span className="text-sm font-medium">iCloud</span>
-            </div>
-
-            {/* Slack */}
-            <div className="card-3d flex items-center gap-3 rounded-xl border border-white/5 bg-[#2a3444] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center p-1.5">
-                <FaSlack className="h-6 w-6" style={{ color: "#4A154B" }} />
-              </div>
-              <span className="text-sm font-medium">Slack</span>
-            </div>
-
-          </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── PRIVACY ── */}
-      <section id="security" className="perspective-feature border-t border-white/5 px-4 py-24">
-        <div className="feature-block-3d mx-auto max-w-5xl rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/30 to-background p-10 sm:p-16 shadow-2xl shadow-emerald-900/10">
-          <div className="mx-auto max-w-3xl text-center">
-            <h2 className="reveal mb-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">{t("privacyTitle")}</h2>
-            <p className="mb-12 text-muted-foreground text-lg">
-              {t("privacySubtitle")}
-            </p>
-          </div>
-          <div className="grid gap-8 sm:grid-cols-3">
-            {[
-              { icon: Shield, title: t("privacyNoTraining"), desc: t("privacyNoTrainingDesc") },
-              { icon: Lock, title: t("privacyIsolated"), desc: t("privacyIsolatedDesc") },
-              { icon: FileText, title: t("privacyOwnAI"), desc: t("privacyOwnAIDesc") },
-            ].map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="pillar-3d flex flex-col items-center space-y-3 text-center">
-                <div className="pillar-icon-3d flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
-                  <Icon className="h-6 w-6 text-emerald-400" />
-                </div>
-                <h3 className="font-semibold">{title}</h3>
-                <p className="text-sm text-muted-foreground">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── USE CASES ── */}
-      <section className="bg-background border-t border-white/5 px-4 py-24" id="real-use-cases">
-        <div className="mx-auto max-w-5xl">
-          <div className="reveal mb-12 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-white">{t("useCasesTitle")}</h2>
-            <p className="mt-3 text-muted-foreground">{t("useCasesSubtitle")}</p>
-          </div>
-          <div className="perspective-grid">
-            <div className="grid-3d grid gap-6 sm:grid-cols-3">
-              {[
-                {
-                  icon: BarChart3,
-                  title: t("useCaseRestaurant"),
-                  color: "bg-gradient-to-br from-[#022c22] to-[#064e3b]",
-                  benefits: [t("useCaseRestaurantBenefit1"),t("useCaseRestaurantBenefit2"),t("useCaseRestaurantBenefit3"),t("useCaseRestaurantBenefit4")],
-                },
-                {
-                  icon: Home,
-                  title: t("useCaseRealEstate"),
-                  color: "bg-gradient-to-br from-[#1a2e05] to-[#365314]",
-                  benefits: [t("useCaseRealEstateBenefit1"),t("useCaseRealEstateBenefit2"),t("useCaseRealEstateBenefit3"),t("useCaseRealEstateBenefit4")],
-                },
-                {
-                  icon: HeartPulse,
-                  title: t("useCaseWellness"),
-                  color: "bg-gradient-to-br from-[#14532d] to-[#166534]",
-                  benefits: [t("useCaseWellnessBenefit1"),t("useCaseWellnessBenefit2"),t("useCaseWellnessBenefit3"),t("useCaseWellnessBenefit4")],
-                },
-              ].map((uc) => (
-                <div key={uc.title} className="card-3d rounded-xl border border-white/5 bg-[#2a3444] p-4 sm:p-6">
-                <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${uc.color} text-white sm:mb-4 sm:h-12 sm:w-12 sm:rounded-xl`}>
-                  <uc.icon className="h-4 w-4 sm:h-6 sm:w-6" />
-                </div>
-                <h3 className="mb-2 text-base font-semibold sm:mb-4 sm:text-lg">{uc.title}</h3>
-                <ul className="space-y-1 sm:space-y-2">
-                  {uc.benefits.map((b) => (
-                    <li key={b} className="flex items-center gap-2 text-xs text-muted-foreground sm:text-sm">
-                      <Check className="h-3 w-3 shrink-0 text-emerald-400 sm:h-3.5 sm:w-3.5" />{b}
-                    </li>
-                  ))}
-                </ul>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── SOCIAL PROOF ── */}
-      <section className="bg-background border-t border-white/5 px-4 py-24">
-        <div className="mx-auto max-w-5xl">
-          <div className="reveal mb-12 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-white">{t("departmentsTitle")}</h2>
-            <p className="mt-3 text-muted-foreground">{t("departmentsSubtitle")}</p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              { icon: Briefcase, title: t("deptConsulting"), desc: t("deptConsultingDesc") },
-              { icon: MessageSquare, title: t("deptSales"), desc: t("deptSalesDesc") },
-              { icon: Building2, title: t("deptOperations"), desc: t("deptOperationsDesc") },
-              { icon: HeartPulse, title: t("deptSupport"), desc: t("deptSupportDesc") },
-              { icon: GraduationCap, title: t("deptTraining"), desc: t("deptTrainingDesc") },
-              { icon: Shield, title: t("deptCompliance"), desc: t("deptComplianceDesc") },
-            ].map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="rounded-xl border border-white/5 bg-[#2a3444] p-4 transition-colors hover:border-emerald-500/30 sm:p-6">
-                <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/10 sm:mb-4 sm:h-10 sm:w-10 sm:rounded-lg">
-                  <Icon className="h-4 w-4 text-emerald-400 sm:h-5 sm:w-5" />
-                </div>
-                <h3 className="mb-1 text-sm font-semibold sm:mb-2 sm:text-base">{title}</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed sm:text-sm">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── FAQ ── */}
-      <div id="faq">
-        <FaqSection />
+        <h2>Frequently Asked Questions</h2>
+        <h3>Is Exploro OS like ChatGPT?</h3>
+        <p>
+          No. ChatGPT answers from the public internet. Exploro OS answers from your own business documents,
+          emails, and data — with source citations and no hallucinations.
+        </p>
+        <h3>Do I need technical skills to set up Exploro OS?</h3>
+        <p>
+          No. We handle the integration. You provide your documents and brand voice, and we set up the
+          infrastructure for you.
+        </p>
+        <h3>Can Exploro OS browse the web?</h3>
+        <p>
+          Yes. When enabled, Exploro OS can search the web to supplement your knowledge base, always citing
+          sources. You control when web search is active.
+        </p>
+        <h3>What communication channels does Exploro OS support?</h3>
+        <p>
+          WhatsApp, Telegram, email (Gmail and Outlook), and your website chatbot. All channels integrate
+          directly and share information with your AI knowledge base.
+        </p>
+        <h3>Is my data used to train AI models?</h3>
+        <p>
+          No. Your data is never used for model training. Short-term memory is deleted after each session, and
+          your long-term knowledge base is encrypted and isolated.
+        </p>
       </div>
-
-      {/* ── CTA ── */}
-      <section className="perspective-feature border-t border-white/5 px-4 py-24">
-        <div className="feature-block-3d mx-auto max-w-4xl rounded-2xl border border-white/5 bg-[#2a3444] p-12 text-center shadow-2xl shadow-emerald-900/10">
-          <div className="mb-6 flex items-center justify-center">
-            <div className="pillar-icon-3d flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10">
-              <Bot className="h-8 w-8 text-emerald-400" />
-            </div>
-          </div>
-          <h2 className="reveal mb-4 text-3xl font-bold text-white sm:text-5xl">{t("ctaTitle")}</h2>
-          <p className="mb-8 text-lg text-muted-foreground max-w-xl mx-auto">
-            {t("ctaSubtitle")}
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-4">
-            <Button size="lg" onClick={handleCTA} className="bg-emerald-600 hover:bg-emerald-700 text-white px-10">
-              {user ? t("goToChat") : t("ctaStartFree")}
-            </Button>
-            {!user && (
-              <a href="https://calendly.com/exploro-os-support/30min" target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="px-10">
-                  {t("ctaBookDemo")}
-                </Button>
-              </a>
-            )}
-          </div>
-        </div>
-      </section>
-
-    </div>
+      {/* Interactive client-rendered homepage */}
+      <HomeClient />
+    </>
   )
 }
