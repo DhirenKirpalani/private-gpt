@@ -3,8 +3,6 @@
 import { useState } from "react"
 import {
   X, Loader2, Check, Plus, Trash2, UserPlus,
-  TrendingUp, BarChart2, Scale, Settings2, CreditCard, Users,
-  Briefcase, Folder, Lightbulb, Target, ShoppingCart, Globe,
   type LucideIcon,
 } from "lucide-react"
 import { useWorkspace } from "@/app/workspace-provider"
@@ -13,20 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-const ICONS: { emoji: string; label: string; icon: LucideIcon }[] = [
-  { emoji: "🤝", label: "Sales",       icon: TrendingUp   },
-  { emoji: "📈", label: "Marketing",   icon: BarChart2    },
-  { emoji: "⚖️", label: "Legal",       icon: Scale        },
-  { emoji: "🏭", label: "Operations",  icon: Settings2    },
-  { emoji: "💳", label: "Finance",     icon: CreditCard   },
-  { emoji: "🧑‍💼", label: "HR",         icon: Users        },
-  { emoji: "📋", label: "Management",  icon: Briefcase    },
-  { emoji: "📄", label: "General",     icon: Folder       },
-  { emoji: "🚀", label: "Innovation",  icon: Lightbulb    },
-  { emoji: "🎯", label: "Strategy",    icon: Target       },
-  { emoji: "🛍️", label: "Commerce",   icon: ShoppingCart },
-  { emoji: "🌐", label: "Global",      icon: Globe        },
-];
+import { DEPT_ICONS as ICONS, getDeptLabel } from "@/lib/workspace-icons"
 
 type Props = {
   onClose: () => void

@@ -1378,7 +1378,7 @@ export default function CRMPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <div className="relative min-w-0 flex-1 sm:flex-initial">
                       <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                       <input
@@ -1465,7 +1465,7 @@ export default function CRMPage() {
                     <button
                       onClick={() => fetchInbox()}
                       disabled={inboxLoading}
-                      className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40 sm:px-3"
+                      className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
                     >
                       {inboxLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
                       <span className="hidden sm:inline">{inboxLoading ? "Fetching..." : "Fetch Emails"}</span>
@@ -1787,7 +1787,7 @@ export default function CRMPage() {
                       finally { setWhatsAppLoading(false) }
                     }}
                     disabled={whatsappLoading || whatsappConnections.length === 0}
-                    className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40 sm:px-3"
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
                   >
                     {whatsappLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />}
                     <span className="hidden sm:inline">{whatsappLoading ? "Refreshing..." : "Refresh"}</span>
@@ -2035,7 +2035,7 @@ export default function CRMPage() {
                     <button
                       onClick={fetchCalendar}
                       disabled={calendarLoading || calendarConnections.length === 0}
-                      className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40 sm:px-3"
+                      className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
                     >
                       {calendarLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ClipboardList className="h-3.5 w-3.5" />}
                       <span className="hidden sm:inline">{calendarLoading ? "Syncing..." : "Sync Calendar"}</span>

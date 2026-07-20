@@ -22,6 +22,7 @@ import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useWorkspace } from "@/app/workspace-provider"
 import { CreateWorkspaceModal } from "@/components/create-workspace-modal"
 import { deleteWorkspace, type Workspace } from "@/lib/workspace"
+import { getFirstDeptIcon } from "@/lib/workspace-icons"
 
 const countries = [
   "Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda","Argentina","Armenia","Australia","Austria","Azerbaijan",
@@ -1727,7 +1728,9 @@ export default function ProfilePage() {
                         key={ws.id}
                         className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3"
                       >
-                        <span className="text-xl leading-none">{(ws.icon ?? "🏢").split(",")[0].trim() || "🏢"}</span>
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                          {(() => { const Icon = getFirstDeptIcon(ws.icon); return <Icon className="h-4 w-4 text-muted-foreground" /> })()}
+                        </span>
                         <div className="flex-1 min-w-0">
                           <p className="truncate text-sm font-semibold text-white">{ws.name}</p>
                           {ws.description && (

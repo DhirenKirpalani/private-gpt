@@ -72,12 +72,39 @@ export default function SupportPage() {
     setSubmitError("")
 
     let imageUrls: string[] = []
+    let attachments: { filename: string; content: string; contentType: string }[] = []
+
+    // Encode attachments first — this is what actually gets sent in the email
+    try {
+      if (files.length > 0) {
+        attachments = await Promise.all(files.map((f, i) => {
+          return new Promise<{ filename: string; content: string; contentType: string }>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onloadend = () => {
+              const dataUrl = reader.result as string
+              const base64 = dataUrl.split(",")[1]
+              resolve({
+                filename: f.name || `screenshot-${i + 1}.png`,
+                content: base64,
+                contentType: f.type || "image/png",
+              })
+            }
+            reader.onerror = reject
+            reader.readAsDataURL(f)
+          })
+        }))
+      }
+    } catch (err: any) {
+      console.error("Attachment encoding failed:", err)
+    }
+
+    // Upload to Supabase for record-keeping (non-blocking — don't let it prevent the email)
     try {
       if (files.length > 0 && user) {
         imageUrls = await Promise.all(files.map(f => uploadSupportScreenshot(user.id, f)))
       }
     } catch (err: any) {
-      console.error("Screenshot upload failed:", err)
+      console.error("Screenshot upload to Supabase failed:", err)
     }
 
     try {
@@ -85,7 +112,7 @@ export default function SupportPage() {
       const res = await fetch("/api/support", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, message, imageUrls, systemInfo: sys }),
+        body: JSON.stringify({ name, email, message, imageUrls, attachments, systemInfo: sys }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to send")
