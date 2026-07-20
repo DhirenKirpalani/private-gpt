@@ -18,7 +18,7 @@ export const translations = {
     faq: "FAQ",
     contact: "Contact",
     support: "Support",
-    startBuilding: "Start building your Private AI today",
+    startBuilding: "Start building your Private AI Assistant today",
     footerTagline: "Train an AI on your business knowledge and deploy it across your team.",
     getStartedFree: "Unlock Free Trial",
     copyright: "© {year} Secretes Corp. All rights reserved.",
@@ -62,7 +62,7 @@ export const translations = {
 
     // Homepage
     heroBadge: "Private · Secure · Yours",
-    heroTitle: "Turn Your Public AI Assistant Into a Business Knowledge AI Agent",
+    heroTitle: "Turn Your Private AI Assistant Into a Business Knowledge AI Agent",
     heroSubtitle: "Upload your documents, connect WhatsApp, integrate your brand, and search the web to share your expertise. Exploro creates a customized AI agent that integrates workflows with your specific voice and personality.",
     heroStartFree: "Unlock Free Trial",
     heroWatchDemo: "Watch Demo",
@@ -235,8 +235,8 @@ export const translations = {
     pricingComingSoonBadge: "Coming Soon",
     pricingComingSoonFeatures: "Instagram DM Integration,Facebook Messenger Bot,Slack & Microsoft Teams Connect,Advanced AI Agent Workflows,Voice Call AI Assistant,Multi-language Translation Layer,CRM Auto-Sync (HubSpot\, Salesforce),AI Document Generator,Real-time Analytics API,Custom Model Fine-tuning,AI Agent (Avatar),Prompt to Image Generator,Prompt to Short Video Generator",
 
-    ctaTitle: "Build Your Private GPT Today",
-    ctaSubtitle: "Join businesses creating its customized AI Agent trained on their own Knowledge base.",
+    ctaTitle: "Build Your Private AI Assistant Today",
+    ctaSubtitle: "Join businesses creating their customized AI Agent trained on their own Knowledge base.",
     ctaStartFree: "Unlock Free Trial",
     ctaBookDemo: "Book a Demo",
 
@@ -723,7 +723,7 @@ export const translations = {
     faq: "Preguntas Frecuentes",
     contact: "Contacto",
     support: "Soporte",
-    startBuilding: "Empieza a construir tu IA Privada hoy",
+    startBuilding: "Empieza a construir tu Asistente de IA Privado hoy",
     footerTagline: "Entrena una IA con el conocimiento de tu negocio y despliégala en tu equipo.",
     getStartedFree: "Desbloquear Prueba Gratis",
     copyright: "© {year} Secretes Corp. Todos los derechos reservados.",
@@ -767,7 +767,7 @@ export const translations = {
 
     // Homepage
     heroBadge: "Privado · Seguro · Tuyo",
-    heroTitle: "Convierte tu Asistente de IA Público en un Agente de IA de Conocimiento Empresarial",
+    heroTitle: "Convierte tu Asistente de IA Privado en un Agente de IA de Conocimiento Empresarial",
     heroSubtitle: "Sube tus documentos, conecta WhatsApp, integra tu marca y busca en la web para compartir tu experiencia. Exploro crea un agente de IA personalizado que integra flujos de trabajo con tu voz y personalidad específicas.",
     heroStartFree: "Desbloquear Prueba Gratis",
     heroWatchDemo: "Ver Demo",
@@ -940,7 +940,7 @@ export const translations = {
     pricingComingSoonBadge: "Próximamente",
     pricingComingSoonFeatures: "Integración con Instagram DM,Bot de Facebook Messenger,Conexión con Slack y Microsoft Teams,Flujos de trabajo avanzados de Agentes de IA,Asistente de IA para llamadas de voz,Capa de traducción multiidioma,Sincronización automática de CRM (HubSpot\, Salesforce),Generador de documentos con IA,API de analíticas en tiempo real,Ajuste fino de modelos personalizado,Agente de IA (Avatar),Generador de Imágenes por Prompt,Generador de Videos Cortos por Prompt",
 
-    ctaTitle: "Construye tu GPT Privado Hoy",
+    ctaTitle: "Construye tu Asistente de IA Privado Hoy",
     ctaSubtitle: "Únete a negocios creando su agente de IA personalizado entrenado con su propia base de conocimiento.",
     ctaStartFree: "Desbloquear Prueba Gratis",
     ctaBookDemo: "Reservar Demo",

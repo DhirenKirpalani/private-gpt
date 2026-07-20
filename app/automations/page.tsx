@@ -22,7 +22,7 @@ export default function AutomationsPage() {
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted"><Clock className="h-7 w-7 text-muted-foreground" /></div>
           <h1 className="text-2xl font-bold">Automations</h1>
           <p className="text-muted-foreground max-w-sm">{t("automationsComingSoon")}</p>
-          <Link href="/chat" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors">{t("goToChat")} →</Link>
+          <Link href="/chat" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-700/50 hover:scale-105">{t("goToChat")} →</Link>
         </main>
       </div>
     </div>
