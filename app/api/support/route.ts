@@ -5,7 +5,9 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, message, imageUrls, systemInfo } = await req.json()
+    const { name, email, message, imageUrls, attachments, systemInfo } = await req.json()
+
+    console.log("[Support API] Received:", { name, hasAttachments: attachments?.length, hasImageUrls: imageUrls?.length })
 
     if (!name || !email || !message) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -49,6 +51,13 @@ export async function POST(req: NextRequest) {
       replyTo: name + " <" + email + ">",
       subject,
       html,
+      attachments: attachments?.length
+        ? attachments.map((a: { filename: string; content: string; contentType: string }) => ({
+            filename: a.filename,
+            content: a.content,
+            contentType: a.contentType,
+          }))
+        : undefined,
     })
 
     return NextResponse.json({ success: true })

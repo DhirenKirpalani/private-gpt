@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, UserPlus, Trash2, Loader2, Check, X, Settings } from "lucide-react"
+import { getFirstDeptIcon, getDeptLabels } from "@/lib/workspace-icons"
 import Link from "next/link"
 import { useAuth } from "@/app/auth-provider"
 import { useWorkspace } from "@/app/workspace-provider"
@@ -23,20 +24,6 @@ const ROLE_COLORS: Record<string, string> = {
   member: "text-blue-400 border-blue-500/30 bg-blue-500/10",
 }
 
-const ICONS: { emoji: string; label: string }[] = [
-  { emoji: "💼", label: "Sales" },
-  { emoji: "�", label: "Marketing" },
-  { emoji: "⚖️", label: "Legal" },
-  { emoji: "⚙️", label: "Operations" },
-  { emoji: "�", label: "Finance" },
-  { emoji: "�", label: "HR" },
-  { emoji: "�", label: "Management" },
-  { emoji: "�", label: "General" },
-  { emoji: "�", label: "Innovation" },
-  { emoji: "�", label: "Strategy" },
-  { emoji: "�", label: "Commerce" },
-  { emoji: "🌍", label: "Global" },
-]
 
 export default function WorkspaceSettingsPage() {
   const { id } = useParams<{ id: string }>()
@@ -182,16 +169,13 @@ export default function WorkspaceSettingsPage() {
           <Link href="/profile" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xl">
-            {(workspace.icon ?? "🏢").split(",")[0].trim() || "🏢"}
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+            {(() => { const Icon = getFirstDeptIcon(workspace.icon); return <Icon className="h-5 w-5 text-emerald-400" /> })()}
           </div>
           <div>
             <h1 className="text-xl font-bold">{workspace.name}</h1>
             <p className="text-xs text-muted-foreground">
-              {(workspace.icon ?? "").split(",").map(s => s.trim()).filter(Boolean)
-                .map(emoji => ICONS.find(ic => ic.emoji === emoji)?.label)
-                .filter(Boolean)
-                .join(" · ") || "Workspace settings"}
+              {getDeptLabels(workspace.icon).join(" · ") || "Workspace settings"}
             </p>
           </div>
         </div>

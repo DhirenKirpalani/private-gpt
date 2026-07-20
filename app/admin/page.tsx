@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast, Toaster } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
+import { getFirstDeptIcon } from "@/lib/workspace-icons"
 
 const TRIAL_PRESETS = [
   { label: "7 days", value: 7 },
@@ -456,7 +457,7 @@ export default function AdminPage() {
                                 ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                 : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                               }
-                              <span className="text-base leading-none">{ws.icon}</span>
+                              {(() => { const Icon = getFirstDeptIcon(ws.icon); return <Icon className="h-4 w-4 shrink-0 text-muted-foreground" /> })()}
                               <span className="flex-1 truncate text-sm font-medium">{ws.name}</span>
                               <span className="shrink-0 text-xs text-muted-foreground">{ws.members.length} member{ws.members.length !== 1 ? "s" : ""}</span>
                             </button>

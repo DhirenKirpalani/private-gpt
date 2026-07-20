@@ -37,7 +37,7 @@ export function Footer() {
                 <Image src="/assets/images/exploro-icon.svg" alt="Exploro OS" width={40} height={40} unoptimized className="h-10 w-10 object-contain" />
               </Link>
               <a
-                href="https://www.linkedin.com/company/exploro-os/about/"
+                href="https://www.linkedin.com/company/exploro-os/?viewAsMember=true"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center transition-colors hover:opacity-80"
