@@ -20,12 +20,6 @@ export default function SupportPage() {
   const [previews, setPreviews] = useState<string[]>([])
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push("/login")
-    }
-  }, [authLoading, user, router])
-
-  useEffect(() => {
     if (user) {
       setName(user.user_metadata?.full_name || "")
       setEmail(user.email || "")
@@ -50,7 +44,7 @@ export default function SupportPage() {
     setPreviews(prev => prev.filter((_, i) => i !== index))
   }, [])
 
-  if (authLoading || !user) {
+  if (authLoading) {
     return (
       <div className="flex flex-col bg-background min-h-screen items-center justify-center">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600/10">
@@ -110,7 +104,7 @@ export default function SupportPage() {
           {/* Header */}
           <div className="relative flex items-center justify-center">
             <button
-              onClick={() => router.back()}
+              onClick={() => user ? router.back() : router.push("/")}
               className="absolute left-0 flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="Go back"
             >
@@ -147,7 +141,7 @@ export default function SupportPage() {
                 </p>
               </div>
               <button
-                onClick={() => router.back()}
+                onClick={() => user ? router.back() : router.push("/")}
                 className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/[0.07]"
               >
                 <ArrowLeft className="h-4 w-4" /> Go back
