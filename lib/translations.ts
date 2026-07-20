@@ -62,7 +62,7 @@ export const translations = {
 
     // Homepage
     heroBadge: "Private · Secure · Yours",
-    heroTitle: "Turn Your Private GPT Into a Business Knowledge AI Agent",
+    heroTitle: "Turn Your Public AI Assistant Into a Business Knowledge AI Agent",
     heroSubtitle: "Upload your documents, connect WhatsApp, integrate your brand, and search the web to share your expertise. Exploro creates a customized AI agent that integrates workflows with your specific voice and personality.",
     heroStartFree: "Unlock Free Trial",
     heroWatchDemo: "Watch Demo",
@@ -767,7 +767,7 @@ export const translations = {
 
     // Homepage
     heroBadge: "Privado · Seguro · Tuyo",
-    heroTitle: "Convierte tu GPT Privado en un Agente de IA de Conocimiento Empresarial",
+    heroTitle: "Convierte tu Asistente de IA Público en un Agente de IA de Conocimiento Empresarial",
     heroSubtitle: "Sube tus documentos, conecta WhatsApp, integra tu marca y busca en la web para compartir tu experiencia. Exploro crea un agente de IA personalizado que integra flujos de trabajo con tu voz y personalidad específicas.",
     heroStartFree: "Desbloquear Prueba Gratis",
     heroWatchDemo: "Ver Demo",
