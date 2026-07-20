@@ -5,7 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import {
   Search, Upload, FileText, Trash2, Info, X,
-  Filter, File, CheckCircle2, Clock, AlertCircle, BookOpen, User, Plus, ChevronDown, RefreshCw, Menu, PanelLeft, HardDrive,
+  Filter, File, CheckCircle2, Clock, AlertCircle, BookOpen, User, Plus, ChevronDown, RefreshCw, Menu, PanelLeft, HardDrive, Pin, PinOff, Archive, CalendarClock,
 } from "lucide-react"
 import { useGooglePicker, type PickedFile } from "@/components/google-picker"
 import { Label } from "@/components/ui/label"
@@ -19,7 +19,7 @@ import { useWorkspace } from "@/app/workspace-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
 import { ACCEPTED_MIME_TYPES, isAcceptedFile, isCountableDocument } from "@/lib/file-types"
-import { getProfile, uploadDocument, fetchUserDocuments, fetchUserCategories, insertCategory, deleteCategory, deleteDocument, getDocumentPublicUrl, updateDocumentText } from "@/lib/supabase"
+import { getProfile, uploadDocument, fetchUserDocuments, fetchUserCategories, insertCategory, deleteCategory, deleteDocument, getDocumentPublicUrl, updateDocumentText, pinDocument, extendDocumentExpiry, getCalendarConnections } from "@/lib/supabase"
 import { toast, Toaster } from "@/components/ui/toast"
 import { DocumentSkeleton } from "@/components/ui/skeleton"
 
@@ -43,6 +43,9 @@ interface DocItem {
   uploaded: string
   filename: string
   mime_type: string
+  expiresAt: string | null
+  fileArchived: boolean
+  pinned: boolean
 }
 
 function relativeTime(date: Date): string {
@@ -73,6 +76,12 @@ function StatusLabel({ status, translate }: { status: string; translate: (k: str
 const statusColor = (s: string) =>
   s === "indexed"    ? "text-emerald-400" :
   s === "processing" ? "text-yellow-400"  : "text-red-400"
+
+function daysUntilExpiry(expiresAt: string | null): number | null {
+  if (!expiresAt) return null
+  const diff = new Date(expiresAt).getTime() - Date.now()
+  return Math.ceil(diff / (1000 * 60 * 60 * 24))
+}
 
 function getInitials(name: string): string {
   if (!name.trim()) return ""
@@ -120,6 +129,7 @@ export default function KnowledgePage() {
   // Google Drive picker state
   const [driveImporting, setDriveImporting] = useState<string | null>(null)
   const [drivePickerLoading, setDrivePickerLoading] = useState(false)
+  const [driveConnected, setDriveConnected] = useState(false)
   const { openPicker: openGooglePicker, loading: pickerLoading } = useGooglePicker()
 
   useEffect(() => {
@@ -144,6 +154,11 @@ export default function KnowledgePage() {
         }
         setCustomCategories(cats)
         const docs = await fetchUserDocuments(user.id, currentWorkspace?.id)
+        // Check Google Drive connection
+        try {
+          const conns = await getCalendarConnections(user.id)
+          setDriveConnected(conns.some((c: any) => c.provider === "googledrive"))
+        } catch { /* silent */ }
         const mapped: DocItem[] = docs.map((d: any) => ({
           id: d.id,
           name: d.original_filename,
@@ -154,6 +169,9 @@ export default function KnowledgePage() {
           uploaded: relativeTime(new Date(d.created_at)),
           filename: d.filename,
           mime_type: d.mime_type || "",
+          expiresAt: d.expires_at,
+          fileArchived: d.file_archived || false,
+          pinned: d.pinned || false,
         }))
         setDocList(mapped)
       } catch (err) {
@@ -286,6 +304,9 @@ export default function KnowledgePage() {
         uploaded: relativeTime(new Date(d.created_at)),
         filename: d.filename,
         mime_type: d.mime_type || "",
+        expiresAt: d.expires_at,
+        fileArchived: d.file_archived || false,
+        pinned: d.pinned || false,
       }))
       setDocList(mapped)
       setUploadPreview([])
@@ -341,6 +362,9 @@ export default function KnowledgePage() {
             uploaded: relativeTime(new Date(d.created_at)),
             filename: d.filename,
             mime_type: d.mime_type || "",
+            expiresAt: d.expires_at,
+            fileArchived: d.file_archived || false,
+            pinned: d.pinned || false,
           }))
           setDocList(mapped)
         }
@@ -702,6 +726,7 @@ export default function KnowledgePage() {
                   onChange={handleFileChange}
                 />
               </label>
+              {driveConnected && (
               <button
                 onClick={() => handleDriveImport()}
                 disabled={drivePickerLoading || pickerLoading}
@@ -711,6 +736,7 @@ export default function KnowledgePage() {
                 <span className="hidden sm:inline">{drivePickerLoading || pickerLoading ? "Loading..." : "Import from Google Drive"}</span>
                 <span className="sm:hidden">{drivePickerLoading || pickerLoading ? "..." : "Google Drive"}</span>
               </button>
+              )}
             </div>
           )}
 
@@ -719,6 +745,9 @@ export default function KnowledgePage() {
               {docsLoading && <DocumentSkeleton />}
               {!docsLoading && filtered.map(doc => {
                 const docIndex = docList.findIndex(d => d.id === doc.id) + 1
+                const daysLeft = daysUntilExpiry(doc.expiresAt)
+                const isExpiring = !doc.pinned && daysLeft !== null && daysLeft <= 5 && daysLeft > 0
+                const isArchived = doc.fileArchived
                 return (
                   <div
                   key={doc.id}
@@ -732,17 +761,38 @@ export default function KnowledgePage() {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <button
-                        className="block w-full truncate text-left text-sm font-medium hover:text-emerald-400 transition-colors"
-                        onClick={() => {
-                          if (!user) return
-                          const url = getDocumentPublicUrl(user.id, doc.filename)
-                          window.open(url, "_blank")
-                        }}
-                      >
-                        {doc.name}
-                      </button>
-                      <p className="text-xs text-muted-foreground">{categoryDisplay(doc.category, t as unknown as (k: string) => string)} · {t("knowledgePages", { pages: doc.pages })} · {doc.size}</p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="block truncate text-left text-sm font-medium hover:text-emerald-400 transition-colors"
+                          onClick={() => {
+                            if (!user || doc.fileArchived) return
+                            const url = getDocumentPublicUrl(user.id, doc.filename)
+                            window.open(url, "_blank")
+                          }}
+                          disabled={doc.fileArchived}
+                        >
+                          {doc.name}
+                        </button>
+                        {doc.pinned && (
+                          <span className="flex items-center gap-0.5 rounded-full bg-[#FFBF00]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#FFBF00] shrink-0">
+                            <Pin className="h-2.5 w-2.5" /> PINNED
+                          </span>
+                        )}
+                        {isArchived && (
+                          <span className="flex items-center gap-0.5 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-blue-400 shrink-0">
+                            <Archive className="h-2.5 w-2.5" /> ARCHIVED
+                          </span>
+                        )}
+                        {isExpiring && (
+                          <span className="flex items-center gap-0.5 rounded-full bg-yellow-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-yellow-400 shrink-0">
+                            <CalendarClock className="h-2.5 w-2.5" /> {daysLeft}d LEFT
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {categoryDisplay(doc.category, t as unknown as (k: string) => string)} · {t("knowledgePages", { pages: doc.pages })} · {doc.size}
+                        {isArchived && " · file removed, AI still has content"}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-2 sm:justify-start sm:gap-3">
@@ -754,6 +804,41 @@ export default function KnowledgePage() {
                     </div>
                     <p className="hidden text-xs text-muted-foreground sm:block">{doc.uploaded}</p>
                     <div className="relative flex items-center gap-1">
+                      <button
+                        className={cn(
+                          "rounded-md p-1.5 transition-colors hover:bg-muted",
+                          doc.pinned ? "text-[#FFBF00] hover:text-[#FFBF00]" : "text-muted-foreground hover:text-[#FFBF00]"
+                        )}
+                        title={doc.pinned ? "Unpin document" : "Pin document (keep file permanently)"}
+                        onClick={async () => {
+                          try {
+                            await pinDocument(doc.id, !doc.pinned)
+                            setDocList(prev => prev.map(d => d.id === doc.id ? { ...d, pinned: !doc.pinned, expiresAt: !doc.pinned ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() } : d))
+                            toast({ title: doc.pinned ? "Unpinned" : "Pinned", description: doc.pinned ? "Document will expire in 30 days" : "Document kept permanently", variant: "default" })
+                          } catch (err: any) {
+                            toast({ title: "Failed", description: err.message, variant: "error" })
+                          }
+                        }}
+                      >
+                        {doc.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                      </button>
+                      {!doc.pinned && !isArchived && (
+                        <button
+                          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-emerald-400"
+                          title="Extend file retention by 30 days"
+                          onClick={async () => {
+                            try {
+                              await extendDocumentExpiry(doc.id)
+                              setDocList(prev => prev.map(d => d.id === doc.id ? { ...d, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() } : d))
+                              toast({ title: "Extended", description: "File retention reset to 30 days", variant: "default" })
+                            } catch (err: any) {
+                              toast({ title: "Failed", description: err.message, variant: "error" })
+                            }
+                          }}
+                        >
+                          <CalendarClock className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       <button
                         className={cn(
                           "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-emerald-400",
@@ -828,6 +913,7 @@ export default function KnowledgePage() {
                         onChange={handleFileChange}
                       />
                     </label>
+                    {driveConnected && (
                     <button
                       onClick={() => handleDriveImport()}
                       disabled={drivePickerLoading || pickerLoading}
@@ -837,6 +923,7 @@ export default function KnowledgePage() {
                       <span className="hidden sm:inline">{drivePickerLoading || pickerLoading ? "Loading..." : "Import from Google Drive"}</span>
                       <span className="sm:hidden">{drivePickerLoading || pickerLoading ? "..." : "Google Drive"}</span>
                     </button>
+                    )}
                   </div>
                   <p className="font-medium">{t("knowledgeEmptyTitle")}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{t("knowledgeEmptySubtitle")}</p>

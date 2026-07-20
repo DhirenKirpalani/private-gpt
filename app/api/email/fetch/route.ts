@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
             sentThreadIds.add(te.thread_id)
           }
           // Also capture threads with business keywords
-          const text = `${te.subject || ""} ${te.body || ""}`.toLowerCase()
+          const text = `${te.subject || ""}`.toLowerCase()
           if (matchesBusinessKeywords(text)) {
             keywordThreadIds.add(te.thread_id)
           }
@@ -197,11 +197,10 @@ export async function POST(req: NextRequest) {
           }
 
           const subject = getHeader("Subject")
-          const combinedText = `${subject} ${body || html}`.toLowerCase()
           const threadId = d.threadId || d.id
           const isInKeywordThread = keywordThreadIds.has(threadId)
           const isInSentThread = sentThreadIds.has(threadId)
-          if (!matchesBusinessKeywords(combinedText) && !isInKeywordThread && !isInSentThread) {
+          if (!matchesBusinessKeywords(subject.toLowerCase()) && !isInKeywordThread && !isInSentThread) {
             continue
           }
 
@@ -281,7 +280,7 @@ export async function POST(req: NextRequest) {
           if (te.direction === "sent") {
             sentThreadIds.add(te.thread_id)
           }
-          const text = `${te.subject || ""} ${te.body || ""}`.toLowerCase()
+          const text = `${te.subject || ""}`.toLowerCase()
           if (matchesBusinessKeywords(text)) {
             keywordThreadIds.add(te.thread_id)
           }
@@ -290,11 +289,10 @@ export async function POST(req: NextRequest) {
 
         const payloads: any[] = []
         for (const msg of newMsgs) {
-          const combinedText = `${msg.subject || ""} ${msg.bodyPreview || msg.body?.content || ""}`.toLowerCase()
           const threadId = msg.conversationId || msg.id
           const isInKeywordThread = keywordThreadIds.has(threadId)
           const isInSentThread = sentThreadIds.has(threadId)
-          if (!matchesBusinessKeywords(combinedText) && !isInKeywordThread && !isInSentThread) {
+          if (!matchesBusinessKeywords((msg.subject || "").toLowerCase()) && !isInKeywordThread && !isInSentThread) {
             continue
           }
           payloads.push({
@@ -364,7 +362,7 @@ export async function POST(req: NextRequest) {
         // 1. Search by keywords
         for (const keyword of BUSINESS_KEYWORDS) {
           try {
-            const results = await connection.search([["SINCE", imapDate], ["TEXT", keyword]], { bodies: "", struct: true })
+            const results = await connection.search([["SINCE", imapDate], ["SUBJECT", keyword]], { bodies: "", struct: true })
             for (const msg of results) {
               if (msg.attributes?.uid) matchingUids.add(msg.attributes.uid)
             }
@@ -387,7 +385,7 @@ export async function POST(req: NextRequest) {
           if (te.direction === "sent") {
             if (te.message_id_header) sentMessageIds.add(te.message_id_header)
           }
-          const text = `${te.subject || ""} ${te.body || ""}`.toLowerCase()
+          const text = `${te.subject || ""}`.toLowerCase()
           if (matchesBusinessKeywords(text)) {
             keywordThreadIds.add(te.thread_id)
             if (te.message_id_header) keywordMessageIds.add(te.message_id_header)

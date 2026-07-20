@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     // Send email notification to the user
     try {
       await resend.emails.send({
-        from: "Exploro <onboarding@resend.dev>",
+        from: "Exploro <support@exploro-os.com>",
         to: targetEmail,
         subject: `Your Exploro role has been updated to ${ROLE_LABELS[role]}`,
         html: `
