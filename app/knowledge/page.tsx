@@ -5,8 +5,9 @@ import Link from "next/link"
 import Image from "next/image"
 import {
   Search, Upload, FileText, Trash2, Info, X,
-  Filter, File, CheckCircle2, Clock, AlertCircle, BookOpen, User, Plus, ChevronDown, RefreshCw, Menu, PanelLeft, Folder, FolderOpen, ArrowLeft, HardDrive,
+  Filter, File, CheckCircle2, Clock, AlertCircle, BookOpen, User, Plus, ChevronDown, RefreshCw, Menu, PanelLeft, HardDrive,
 } from "lucide-react"
+import { useGooglePicker, type PickedFile } from "@/components/google-picker"
 import { Label } from "@/components/ui/label"
 import { NavRail } from "@/components/nav-rail"
 import { TrialPill } from "@/components/trial-pill"
@@ -117,16 +118,9 @@ export default function KnowledgePage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Google Drive picker state
-  const [driveOpen, setDriveOpen] = useState(false)
-  const [driveLoading, setDriveLoading] = useState(false)
-  const [driveItems, setDriveItems] = useState<any[]>([])
-  const [drivePath, setDrivePath] = useState<{ id: string; name: string }[]>([{ id: "root", name: "My Drive" }])
-  const [driveSearch, setDriveSearch] = useState("")
-  const [driveUploading, setDriveUploading] = useState(false)
-  const [driveCreatingFolder, setDriveCreatingFolder] = useState(false)
-  const [newFolderName, setNewFolderName] = useState("")
   const [driveImporting, setDriveImporting] = useState<string | null>(null)
-  const driveFileInputRef = useRef<HTMLInputElement>(null)
+  const [drivePickerLoading, setDrivePickerLoading] = useState(false)
+  const { openPicker: openGooglePicker, loading: pickerLoading } = useGooglePicker()
 
   useEffect(() => {
     async function load() {
@@ -305,132 +299,56 @@ export default function KnowledgePage() {
   }
 
   // ── Google Drive picker helpers ──
-  const currentFolderId = drivePath[drivePath.length - 1]?.id || "root"
-
-  async function loadDriveItems() {
+  async function handleDriveImport() {
     if (!user) return
-    setDriveLoading(true)
+    setDrivePickerLoading(true)
     try {
-      const res = await fetch("/api/drive/fetch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, parentId: currentFolderId, query: driveSearch }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to load Drive items")
-      setDriveItems(data.files || [])
-    } catch (err: any) {
-      toast({ title: "Drive error", description: err?.message || "Could not load Google Drive", variant: "error" })
-    } finally {
-      setDriveLoading(false)
-    }
-  }
+      // Get Drive access token
+      const tokenRes = await fetch(`/api/drive/token?userId=${user.id}`)
+      const tokenData = await tokenRes.json()
+      if (!tokenRes.ok) throw new Error(tokenData.error || "Failed to get Drive token")
 
-  useEffect(() => {
-    if (driveOpen && user) {
-      loadDriveItems()
-    }
-  }, [driveOpen, currentFolderId, driveSearch])
-
-  function openDriveFolder(item: any) {
-    if (item.isFolder) {
-      setDrivePath(prev => [...prev, { id: item.id, name: item.name }])
-      setDriveSearch("")
-    }
-  }
-
-  function navigateDriveTo(index: number) {
-    setDrivePath(prev => prev.slice(0, index + 1))
-  }
-
-  async function createDriveFolder() {
-    if (!user || !newFolderName.trim()) return
-    setDriveCreatingFolder(true)
-    try {
-      const res = await fetch("/api/drive/folders/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, name: newFolderName.trim(), parentId: currentFolderId }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Folder creation failed")
-      toast({ title: "Folder created", description: data.name, variant: "default" })
-      setNewFolderName("")
-      loadDriveItems()
-    } catch (err: any) {
-      toast({ title: "Folder creation failed", description: err?.message || "Could not create folder", variant: "error" })
-    } finally {
-      setDriveCreatingFolder(false)
-    }
-  }
-
-  async function uploadFileToDrive(file: File) {
-    if (!user) return
-    setDriveUploading(true)
-    try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          const result = reader.result as string
-          resolve(result.split(",")[1])
+      // Open Google Picker
+      await openGooglePicker(tokenData.accessToken, async (files: PickedFile[]) => {
+        const defaultCategory = activeCategory === "All Documents" ? DEFAULT_CATEGORIES[0] : activeCategory
+        for (const file of files) {
+          setDriveImporting(file.id)
+          try {
+            const res = await fetch("/api/drive/import", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: user.id, driveFileId: file.id, category: defaultCategory }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || "Import failed")
+            toast({ title: "Imported from Drive", description: data.name, variant: "default" })
+          } catch (err: any) {
+            toast({ title: "Import failed", description: err?.message || `Could not import ${file.name}`, variant: "error" })
+          } finally {
+            setDriveImporting(null)
+          }
         }
-        reader.onerror = reject
-        reader.readAsDataURL(file)
+        // Refresh document list after all imports
+        if (user) {
+          const docs = await fetchUserDocuments(user.id, currentWorkspace?.id)
+          const mapped: DocItem[] = docs.map((d: any) => ({
+            id: d.id,
+            name: d.original_filename,
+            category: d.category || "Uncategorized",
+            size: formatFileSize(d.file_size_bytes),
+            pages: d.page_count || 0,
+            status: (d.status?.toLowerCase() === "indexed" ? "indexed" : d.status?.toLowerCase() === "failed" ? "error" : "processing") as DocItem["status"],
+            uploaded: relativeTime(new Date(d.created_at)),
+            filename: d.filename,
+            mime_type: d.mime_type || "",
+          }))
+          setDocList(mapped)
+        }
       })
-      const res = await fetch("/api/drive/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          fileName: file.name,
-          mimeType: file.type,
-          content: base64,
-          folderId: currentFolderId,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Upload failed")
-      toast({ title: "Uploaded to Drive", description: data.name, variant: "default" })
-      loadDriveItems()
     } catch (err: any) {
-      toast({ title: "Drive upload failed", description: err?.message || "Could not upload", variant: "error" })
+      toast({ title: "Drive error", description: err?.message || "Could not open Google Drive", variant: "error" })
     } finally {
-      setDriveUploading(false)
-      if (driveFileInputRef.current) driveFileInputRef.current.value = ""
-    }
-  }
-
-  async function importDriveFile(item: any) {
-    if (!user || item.isFolder) return
-    setDriveImporting(item.id)
-    try {
-      const defaultCategory = activeCategory === "All Documents" ? DEFAULT_CATEGORIES[0] : activeCategory
-      const res = await fetch("/api/drive/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, driveFileId: item.id, category: defaultCategory }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Import failed")
-      toast({ title: "Imported from Drive", description: data.name, variant: "default" })
-      // Refresh document list
-      const docs = await fetchUserDocuments(user.id, currentWorkspace?.id)
-      const mapped: DocItem[] = docs.map((d: any) => ({
-        id: d.id,
-        name: d.original_filename,
-        category: d.category || "Uncategorized",
-        size: formatFileSize(d.file_size_bytes),
-        pages: d.page_count || 0,
-        status: (d.status?.toLowerCase() === "indexed" ? "indexed" : d.status?.toLowerCase() === "failed" ? "error" : "processing") as DocItem["status"],
-        uploaded: relativeTime(new Date(d.created_at)),
-        filename: d.filename,
-        mime_type: d.mime_type || "",
-      }))
-      setDocList(mapped)
-    } catch (err: any) {
-      toast({ title: "Import failed", description: err?.message || "Could not import file", variant: "error" })
-    } finally {
-      setDriveImporting(null)
+      setDrivePickerLoading(false)
     }
   }
 
@@ -535,12 +453,6 @@ export default function KnowledgePage() {
               ES
             </button>
           </div>
-          {(() => {
-            const showWorkspace = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
-            return showWorkspace ? (
-              <WorkspaceSelector compact />
-            ) : null
-          })()}
           <TrialPill className="hidden md:flex" />
           <Link href="/profile" className={cn(
             "relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden",
@@ -791,12 +703,13 @@ export default function KnowledgePage() {
                 />
               </label>
               <button
-                onClick={() => setDriveOpen(true)}
-                className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5 sm:w-auto"
+                onClick={() => handleDriveImport()}
+                disabled={drivePickerLoading || pickerLoading}
+                className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5 disabled:opacity-50 sm:w-auto"
               >
                 <HardDrive className="h-4 w-4" />
-                <span className="hidden sm:inline">Import from Google Drive</span>
-                <span className="sm:hidden">Google Drive</span>
+                <span className="hidden sm:inline">{drivePickerLoading || pickerLoading ? "Loading..." : "Import from Google Drive"}</span>
+                <span className="sm:hidden">{drivePickerLoading || pickerLoading ? "..." : "Google Drive"}</span>
               </button>
             </div>
           )}
@@ -916,12 +829,13 @@ export default function KnowledgePage() {
                       />
                     </label>
                     <button
-                      onClick={() => setDriveOpen(true)}
-                      className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5"
+                      onClick={() => handleDriveImport()}
+                      disabled={drivePickerLoading || pickerLoading}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-muted/30 px-5 py-2 text-sm font-medium text-emerald-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-600/5 disabled:opacity-50"
                     >
                       <HardDrive className="h-4 w-4" />
-                      <span className="hidden sm:inline">Import from Google Drive</span>
-                      <span className="sm:hidden">Google Drive</span>
+                      <span className="hidden sm:inline">{drivePickerLoading || pickerLoading ? "Loading..." : "Import from Google Drive"}</span>
+                      <span className="sm:hidden">{drivePickerLoading || pickerLoading ? "..." : "Google Drive"}</span>
                     </button>
                   </div>
                   <p className="font-medium">{t("knowledgeEmptyTitle")}</p>
@@ -1056,166 +970,11 @@ export default function KnowledgePage() {
           </div>
         </div>
       )}
-      {/* Google Drive Picker Modal */}
-      {driveOpen && (
-        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm py-6" onClick={() => setDriveOpen(false)}>
-          <div className="relative mx-4 flex w-full max-w-2xl flex-col max-h-[85vh] rounded-2xl border border-white/10 bg-[#2a3444] shadow-2xl" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex shrink-0 items-center justify-between border-b px-4 py-3 sm:px-6">
-              <div>
-                <h3 className="text-base font-semibold text-white sm:text-lg">Google Drive</h3>
-                <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                  {drivePath.map((folder, index) => (
-                    <span key={folder.id} className="flex items-center gap-1">
-                      {index > 0 && <ChevronDown className="h-3 w-3 -rotate-90" />}
-                      <button
-                        onClick={() => navigateDriveTo(index)}
-                        className={cn(
-                          "hover:text-emerald-400",
-                          index === drivePath.length - 1 ? "text-white" : ""
-                        )}
-                      >
-                        {folder.name}
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <button type="button" onClick={() => setDriveOpen(false)} className="text-muted-foreground hover:text-white transition-colors">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Toolbar */}
-            <div className="flex shrink-0 flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => navigateDriveTo(Math.max(0, drivePath.length - 2))}
-                  disabled={drivePath.length <= 1}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-muted-foreground transition-colors hover:bg-muted hover:text-white disabled:opacity-40"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={driveSearch}
-                    onChange={e => setDriveSearch(e.target.value)}
-                    placeholder="Search files..."
-                    className="h-8 w-40 rounded-lg border border-white/10 bg-background pl-8 pr-3 text-xs text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 sm:w-56"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-600/10">
-                  <Upload className="h-3.5 w-3.5" />
-                  <span>Upload</span>
-                  <input
-                    type="file"
-                    className="hidden"
-                    ref={driveFileInputRef}
-                    onChange={e => {
-                      const file = e.target.files?.[0]
-                      if (file) uploadFileToDrive(file)
-                    }}
-                  />
-                </label>
-                <button
-                  onClick={() => setDriveCreatingFolder(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-600/10"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>New Folder</span>
-                </button>
-              </div>
-            </div>
-
-            {/* New folder input */}
-            {driveCreatingFolder && (
-              <div className="flex items-center gap-2 border-b px-4 py-2 sm:px-6">
-                <input
-                  type="text"
-                  value={newFolderName}
-                  onChange={e => setNewFolderName(e.target.value)}
-                  placeholder="Folder name"
-                  autoFocus
-                  onKeyDown={e => { if (e.key === "Enter") createDriveFolder() }}
-                  className="flex-1 rounded-lg border border-white/10 bg-background px-3 py-1.5 text-xs text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                />
-                <button
-                  onClick={createDriveFolder}
-                  disabled={driveCreatingFolder && !newFolderName.trim()}
-                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  Create
-                </button>
-                <button
-                  onClick={() => { setDriveCreatingFolder(false); setNewFolderName("") }}
-                  className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
-
-            {/* File list */}
-            <div className="flex-1 overflow-y-auto p-2 sm:p-4">
-              {driveLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-                </div>
-              ) : driveItems.length === 0 ? (
-                <div className="py-12 text-center text-sm text-muted-foreground">
-                  No files found in this folder.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {driveItems.map(item => (
-                    <div
-                      key={item.id}
-                      className={cn(
-                        "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all",
-                        item.isFolder
-                          ? "border-white/5 bg-[#1e2533] hover:border-emerald-500/30 hover:bg-emerald-600/5 cursor-pointer"
-                          : "border-white/5 bg-[#1e2533] hover:border-emerald-500/30"
-                      )}
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                        {item.isFolder ? (
-                          <FolderOpen className="h-5 w-5 text-emerald-400" />
-                        ) : (
-                          <File className="h-5 w-5 text-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p
-                          onClick={() => openDriveFolder(item)}
-                          className={cn(
-                            "truncate text-sm font-medium",
-                            item.isFolder ? "cursor-pointer text-emerald-400 hover:underline" : "text-white"
-                          )}
-                        >
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.isFolder ? "Folder" : (item.size ? formatFileSize(item.size) : "—")}
-                        </p>
-                      </div>
-                      {!item.isFolder && (
-                        <button
-                          onClick={() => importDriveFile(item)}
-                          disabled={driveImporting === item.id}
-                          className="shrink-0 rounded-lg bg-emerald-600/10 px-2.5 py-1 text-xs font-semibold text-emerald-400 hover:bg-emerald-600/20 disabled:opacity-50"
-                        >
-                          {driveImporting === item.id ? "..." : "Import"}
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+      {driveImporting && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-[#2a3444] px-8 py-6 shadow-2xl">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+            <p className="text-sm text-muted-foreground">Importing from Google Drive...</p>
           </div>
         </div>
       )}

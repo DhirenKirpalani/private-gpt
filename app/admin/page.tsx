@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Save, ArrowLeft, Users, Clock, TrendingUp, CreditCard, Megaphone, BarChart2, UserCog, ShieldCheck, Building2, ChevronDown, ChevronRight, Crown } from "lucide-react"
+import { Loader2, Save, ArrowLeft, Users, Clock, TrendingUp, CreditCard, Megaphone, BarChart2, UserCog, ShieldCheck, Building2, ChevronDown, ChevronRight, Crown, Shield, User, AlertTriangle, Bell } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/app/auth-provider"
 import { getAppSettings } from "@/lib/app-settings"
@@ -208,24 +208,30 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-6 sm:p-10">
+    <div className="min-h-screen bg-[#0f1520] p-6 sm:p-10">
       <Toaster />
       <div className="mx-auto max-w-3xl space-y-6">
 
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <Link href="/chat" className="text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-5 w-5" />
+        <div className="flex items-center gap-4">
+          <Link href="/chat" className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/5 hover:text-white">
+            <ArrowLeft className="h-4 w-4" />
           </Link>
-          <div>
-            <h1 className="text-xl font-bold">Super Admin</h1>
-            <p className="text-xs text-muted-foreground">Logged in as <span className="text-emerald-400 font-medium">{role}</span></p>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#FFBF00]/10 border border-[#FFBF00]/20">
+            <ShieldCheck className="h-5 w-5 text-[#FFBF00]" />
+          </div>
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-white">Super Admin</h1>
+            <p className="text-xs text-muted-foreground">Platform control panel · Logged in as <span className="text-[#FFBF00] font-medium">{role}</span></p>
           </div>
         </div>
 
         {/* Platform Stats */}
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Platform Overview</h2>
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Users className="h-3.5 w-3.5 text-emerald-400/60" />
+            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Platform Overview</h2>
+          </div>
           {statsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading stats...
@@ -238,7 +244,7 @@ export default function AdminPage() {
                 { label: "Expired Trials", value: stats?.expiredTrials ?? 0, icon: TrendingUp, color: "text-red-400" },
                 { label: "Paid Subscribers", value: stats?.activeSubscriptions ?? 0, icon: CreditCard, color: "text-emerald-400" },
               ].map((stat) => (
-                <div key={stat.label} className="rounded-lg border bg-background p-4 text-center">
+                <div key={stat.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-4 text-center">
                   <stat.icon className={cn("mx-auto mb-2 h-5 w-5", stat.color)} />
                   <p className="text-2xl font-bold">{stat.value}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>
@@ -249,10 +255,10 @@ export default function AdminPage() {
         </div>
 
         {/* Business Metrics */}
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
-            <BarChart2 className="h-4 w-4 text-emerald-400" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Business Metrics</h2>
+            <BarChart2 className="h-3.5 w-3.5 text-emerald-400/60" />
+            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Business Metrics</h2>
           </div>
           {statsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -269,7 +275,7 @@ export default function AdminPage() {
                   { label: "Churn Rate", value: `${stats?.churnRate ?? 0}%`, sub: "of total subs", color: stats?.churnRate && stats.churnRate > 10 ? "text-red-400" : "text-emerald-400" },
                   { label: "Canceled", value: stats?.canceledSubscriptions ?? 0, sub: "all time", color: "text-muted-foreground" },
                 ].map((m) => (
-                  <div key={m.label} className="rounded-lg border bg-background p-3">
+                  <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
                     <p className="text-xs text-muted-foreground">{m.label}</p>
                     <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
@@ -296,10 +302,10 @@ export default function AdminPage() {
         </div>
 
         {/* Revenue & Retention */}
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-emerald-400" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Revenue & Retention</h2>
+            <TrendingUp className="h-3.5 w-3.5 text-emerald-400/60" />
+            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Revenue & Retention</h2>
           </div>
           {statsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -317,7 +323,7 @@ export default function AdminPage() {
                 { label: "User Growth", value: `${stats?.userGrowthRate ?? 0}%`, sub: "last 30 days", color: "text-blue-400" },
                 { label: "Retention 30d", value: `${stats?.retention30d ?? 0}%`, sub: "users active from 30d ago", color: (stats?.retention30d ?? 0) < 50 ? "text-red-400" : "text-emerald-400" },
               ].map((m) => (
-                <div key={m.label} className="rounded-lg border bg-background p-3">
+                <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
                   <p className="text-xs text-muted-foreground">{m.label}</p>
                   <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
@@ -328,10 +334,10 @@ export default function AdminPage() {
         </div>
 
         {/* Usage & Engagement */}
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
-            <BarChart2 className="h-4 w-4 text-blue-400" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Usage & Engagement</h2>
+            <BarChart2 className="h-3.5 w-3.5 text-blue-400/60" />
+            <h2 className="text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest">Usage & Engagement</h2>
           </div>
           {statsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -349,7 +355,7 @@ export default function AdminPage() {
                 { label: "Total Messages", value: stats?.totalChatMessages ?? 0, sub: "all chat messages", color: "text-muted-foreground" },
                 { label: "Users (30d ago)", value: stats?.users30dAgo ?? 0, sub: "registered 30d ago", color: "text-muted-foreground" },
               ].map((m) => (
-                <div key={m.label} className="rounded-lg border bg-background p-3">
+                <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
                   <p className="text-xs text-muted-foreground">{m.label}</p>
                   <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
@@ -360,10 +366,10 @@ export default function AdminPage() {
         </div>
 
         {/* Workspace & Seats */}
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-purple-400" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Workspace & Seats</h2>
+            <Building2 className="h-3.5 w-3.5 text-purple-400/60" />
+            <h2 className="text-[10px] font-semibold text-purple-400/60 uppercase tracking-widest">Workspace & Seats</h2>
           </div>
           {statsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -379,7 +385,7 @@ export default function AdminPage() {
                 { label: "Avg Seats / Team", value: stats?.avgSeatsPerTeam ?? 0, sub: "team plan only", color: "text-[#FFBF00]" },
                 { label: "New Seats (30d)", value: stats?.newSeats30d ?? 0, sub: "members added this month", color: "text-emerald-400" },
               ].map((m) => (
-                <div key={m.label} className="rounded-lg border bg-background p-3">
+                <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
                   <p className="text-xs text-muted-foreground">{m.label}</p>
                   <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
@@ -390,10 +396,10 @@ export default function AdminPage() {
         </div>
 
         {/* Companies & Workspaces */}
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-1 flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-emerald-400" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Companies & Workspaces</h2>
+            <Building2 className="h-3.5 w-3.5 text-emerald-400/60" />
+            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Companies & Workspaces</h2>
           </div>
           <p className="mb-4 text-xs text-muted-foreground">All companies, their workspaces, and member roles across the platform.</p>
 
@@ -486,56 +492,81 @@ export default function AdminPage() {
         </div>
 
         {/* User Management */}
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-1 flex items-center gap-2">
-            <UserCog className="h-4 w-4 text-blue-400" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">User Role Management</h2>
+            <UserCog className="h-3.5 w-3.5 text-blue-400/60" />
+            <h2 className="text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest">User Role Management</h2>
           </div>
-          <p className="mb-4 text-xs text-muted-foreground">Assign or change roles for any user by their email address.</p>
-          <div className="space-y-3">
+          <p className="mb-5 text-xs text-muted-foreground">Assign or change roles for any user. The user will receive an email notification.</p>
+          <div className="space-y-5">
             <div>
-              <Label htmlFor="roleEmail">User email</Label>
+              <Label htmlFor="roleEmail" className="text-sm font-medium text-white/80">User email</Label>
               <Input
                 id="roleEmail"
                 type="email"
                 placeholder="user@example.com"
                 value={roleEmail}
                 onChange={(e) => setRoleEmail(e.target.value)}
-                className="mt-1.5"
+                onKeyDown={(e) => e.key === "Enter" && handleSetRole()}
+                className="mt-1.5 bg-white/[0.03] border-white/10"
               />
             </div>
             <div>
-              <Label htmlFor="roleTarget">Assign role</Label>
-              <div className="mt-1.5 flex flex-wrap gap-2">
-                {["user", "manager", "admin", "super_admin"].map((r) => (
+              <Label className="text-sm font-medium text-white/80">Assign role</Label>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {([
+                  { id: "user", label: "User", desc: "Standard access", icon: User, color: "text-white/60", active: "border-white/30 bg-white/5 text-white" },
+                  { id: "manager", label: "Manager", desc: "Team oversight", icon: Users, color: "text-blue-400", active: "border-blue-500/40 bg-blue-500/10 text-blue-400" },
+                  { id: "admin", label: "Admin", desc: "Full platform", icon: Shield, color: "text-emerald-400", active: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" },
+                  { id: "super_admin", label: "Super Admin", desc: "God mode", icon: ShieldCheck, color: "text-[#FFBF00]", active: "border-[#FFBF00]/40 bg-[#FFBF00]/10 text-[#FFBF00]" },
+                ] as const).map((r) => (
                   <button
-                    key={r}
-                    onClick={() => setRoleTarget(r)}
+                    key={r.id}
+                    onClick={() => setRoleTarget(r.id)}
                     className={cn(
-                      "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
-                      roleTarget === r
-                        ? r === "super_admin"
-                          ? "border-[#FFBF00] bg-[#FFBF00]/10 text-[#FFBF00]"
-                          : "border-emerald-500 bg-emerald-500/10 text-emerald-400"
-                        : "border-border text-muted-foreground hover:border-white/20 hover:text-foreground"
+                      "flex flex-col items-start gap-0.5 rounded-xl border p-3 text-left transition-colors",
+                      roleTarget === r.id ? r.active : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]"
                     )}
                   >
-                    {r === "super_admin" && <ShieldCheck className="mr-1 inline h-3 w-3" />}
-                    {r}
+                    <r.icon className={cn("h-4 w-4 mb-1", roleTarget === r.id ? "" : "text-muted-foreground")} />
+                    <span className="text-xs font-semibold">{r.label}</span>
+                    <span className="text-[10px] text-muted-foreground">{r.desc}</span>
                   </button>
                 ))}
               </div>
             </div>
-            <Button onClick={handleSetRole} disabled={savingRole || !roleEmail.trim()} className="w-full sm:w-auto">
-              {savingRole ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCog className="mr-2 h-4 w-4" />}
-              Update role
-            </Button>
+            {roleTarget === "super_admin" && (
+              <div className="flex items-start gap-2.5 rounded-xl border border-[#FFBF00]/20 bg-[#FFBF00]/5 px-4 py-3">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-[#FFBF00] mt-0.5" />
+                <p className="text-xs text-[#FFBF00]/80">
+                  <span className="font-semibold">Super admin grants full platform control</span> — access to all companies, billing, and the ability to promote other users. Use with extreme caution.
+                </p>
+              </div>
+            )}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSetRole}
+                disabled={savingRole || !roleEmail.trim()}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50",
+                  roleTarget === "super_admin"
+                    ? "border-[#FFBF00]/30 bg-[#FFBF00]/10 text-[#FFBF00] hover:bg-[#FFBF00]/15"
+                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40"
+                )}
+              >
+                {savingRole ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+                Update role & notify user
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Trial Configuration */}
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
-          <h2 className="mb-1 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Trial Configuration</h2>
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-1 flex items-center gap-2">
+            <Clock className="h-3.5 w-3.5 text-[#FFBF00]/60" />
+            <h2 className="text-[10px] font-semibold text-[#FFBF00]/60 uppercase tracking-widest">Trial Configuration</h2>
+          </div>
           <p className="mb-4 text-xs text-muted-foreground">Controls how many days new users get free access when they sign up.</p>
           <div className="space-y-4">
             {/* Presets */}
@@ -578,16 +609,23 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <Button onClick={handleSaveTrial} disabled={saving} className="w-full sm:w-auto">
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            <button
+              onClick={handleSaveTrial}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save trial period
-            </Button>
+            </button>
           </div>
         </div>
 
         {/* Announcement Banner */}
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
-          <h2 className="mb-1 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Announcement Banner</h2>
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-1 flex items-center gap-2">
+            <Megaphone className="h-3.5 w-3.5 text-purple-400/60" />
+            <h2 className="text-[10px] font-semibold text-purple-400/60 uppercase tracking-widest">Announcement Banner</h2>
+          </div>
           <p className="mb-4 text-xs text-muted-foreground">Show a message to all users at the top of the app (e.g. maintenance notice, new feature).</p>
           <div className="space-y-4">
             <label className="flex cursor-pointer items-center gap-3">
@@ -619,10 +657,14 @@ export default function AdminPage() {
                 className="mt-1.5"
               />
             </div>
-            <Button onClick={handleSaveBanner} disabled={savingBanner} className="w-full sm:w-auto">
-              {savingBanner ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Megaphone className="mr-2 h-4 w-4" />}
+            <button
+              onClick={handleSaveBanner}
+              disabled={savingBanner}
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 disabled:opacity-50"
+            >
+              {savingBanner ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
               Save banner
-            </Button>
+            </button>
           </div>
         </div>
 

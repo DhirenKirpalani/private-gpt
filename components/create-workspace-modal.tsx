@@ -1,26 +1,31 @@
 "use client"
 
 import { useState } from "react"
-import { X, Loader2, Check, Plus, Trash2, UserPlus } from "lucide-react"
+import {
+  X, Loader2, Check, Plus, Trash2, UserPlus,
+  TrendingUp, BarChart2, Scale, Settings2, CreditCard, Users,
+  Briefcase, Folder, Lightbulb, Target, ShoppingCart, Globe,
+  type LucideIcon,
+} from "lucide-react"
 import { useWorkspace } from "@/app/workspace-provider"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-const ICONS: { emoji: string; label: string }[] = [
-  { emoji: "🤝", label: "Sales" },
-  { emoji: "📈", label: "Marketing" },
-  { emoji: "⚖️", label: "Legal" },
-  { emoji: "🏭", label: "Operations" },
-  { emoji: "💳", label: "Finance" },
-  { emoji: "🧑‍💼", label: "HR" },
-  { emoji: "📋", label: "Management" },
-  { emoji: "📄", label: "General" },
-  { emoji: "🚀", label: "Innovation" },
-  { emoji: "🎯", label: "Strategy" },
-  { emoji: "🛍️", label: "Commerce" },
-  { emoji: "🌐", label: "Global" },
+const ICONS: { emoji: string; label: string; icon: LucideIcon }[] = [
+  { emoji: "🤝", label: "Sales",       icon: TrendingUp   },
+  { emoji: "📈", label: "Marketing",   icon: BarChart2    },
+  { emoji: "⚖️", label: "Legal",       icon: Scale        },
+  { emoji: "🏭", label: "Operations",  icon: Settings2    },
+  { emoji: "💳", label: "Finance",     icon: CreditCard   },
+  { emoji: "🧑‍💼", label: "HR",         icon: Users        },
+  { emoji: "📋", label: "Management",  icon: Briefcase    },
+  { emoji: "📄", label: "General",     icon: Folder       },
+  { emoji: "🚀", label: "Innovation",  icon: Lightbulb    },
+  { emoji: "🎯", label: "Strategy",    icon: Target       },
+  { emoji: "🛍️", label: "Commerce",   icon: ShoppingCart },
+  { emoji: "🌐", label: "Global",      icon: Globe        },
 ];
 
 type Props = {
@@ -184,7 +189,7 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
                             : "border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:text-white"
                       )}
                     >
-                      <span className="text-sm leading-none">{emoji}</span>
+                      {(() => { const IconComp = ICONS.find(i => i.emoji === emoji)?.icon; return IconComp ? <IconComp className="h-3.5 w-3.5 shrink-0" /> : null })()}
                       <span>{label}</span>
                       {selected && <Check className="h-3 w-3" />}
                       {alreadyUsed && <span className="text-[10px] text-white/20">in use</span>}
@@ -203,7 +208,7 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
                     <div key={emoji} className="rounded-xl border border-white/10 bg-white/[0.02] p-3.5">
                       {/* Department header */}
                       <div className="mb-3 flex items-center gap-2">
-                        <span className="text-base leading-none">{emoji}</span>
+                        {(() => { const IconComp = ICONS.find(i => i.emoji === emoji)?.icon; return IconComp ? <IconComp className="h-4 w-4 text-muted-foreground" /> : null })()}
                         <span className="text-sm font-semibold text-white">{getDeptLabel(emoji)}</span>
                       </div>
 
@@ -267,7 +272,7 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
               </Button>
               <Button
                 onClick={handleCreate}
-                className="w-full sm:flex-1"
+                className="w-full sm:flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-900/30"
                 disabled={loading || selectedDepts.length === 0}
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

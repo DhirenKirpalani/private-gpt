@@ -16,8 +16,7 @@ Exploro OS is an AI business assistant platform that integrates with Google serv
 - `openid` — User authentication
 - `https://www.googleapis.com/auth/userinfo.email` — Identify the user's email address for account linking
 - `https://www.googleapis.com/auth/gmail.readonly` — Read inbox emails so the AI can summarize, draft replies, and provide context-aware responses
-- `https://www.googleapis.com/auth/gmail.modify` — Mark emails as read, apply labels when the AI processes or categorizes messages
-- `https://www.googleapis.com/auth/gmail.labels` — Create and manage labels for AI-organized email categories (e.g., "AI Processed", "Follow-up Needed")
+- `https://www.googleapis.com/auth/gmail.send` — Send emails on behalf of the user (drafts, replies, AI-assisted responses)
 
 **Google Calendar Integration** (OAuth connect: `/api/calendar/oauth/google/connect`)
 - `openid` — User authentication
@@ -27,9 +26,7 @@ Exploro OS is an AI business assistant platform that integrates with Google serv
 **Google Drive Integration** (OAuth connect: `/api/drive/oauth/google/connect`)
 - `openid` — User authentication
 - `https://www.googleapis.com/auth/userinfo.email` — Identify user's email for account linking
-- `https://www.googleapis.com/auth/drive.file` — Import files the user selects into the AI knowledge base for document-based Q&A
-- `https://www.googleapis.com/auth/drive.readonly` — List and read files so the AI can search and reference documents
-- `https://www.googleapis.com/auth/drive.metadata.readonly` — Read file metadata (name, type, size) for displaying the file browser
+- `https://www.googleapis.com/auth/drive.file` — Import files the user selects via Google Picker API into the AI knowledge base for document-based Q&A. Also allows uploading files to the user's Drive from within the app.
 
 **Google Meet Integration** (OAuth connect: `/api/meet/oauth/google/connect`)
 - `openid` — User authentication
@@ -48,11 +45,11 @@ All requested scopes correspond to production-ready, user-facing features availa
 
 Exploro OS is an AI-powered business assistant. Each Google API integration serves a distinct user-facing feature:
 
-- **Gmail**: The AI reads incoming emails to provide summaries, draft responses, and prioritize messages. The `gmail.modify` scope is required to mark emails as read after AI processing and apply organizational labels. `gmail.labels` is needed to create AI-managed labels for categorization. Narrower permissions (readonly only) would prevent the AI from organizing the inbox, which is a core feature.
+- **Gmail**: The AI reads incoming emails to provide summaries, draft responses, and prioritize messages. The `gmail.readonly` scope is used to read email threads and message content. The `gmail.send` scope is required to send AI-drafted replies and user-composed emails on the user's behalf. These are the minimum scopes needed — `gmail.readonly` for reading and `gmail.send` for sending. No label management or email modification is performed.
 
 - **Google Calendar**: The AI creates events on behalf of the user (e.g., "Schedule a meeting with John next Tuesday at 2pm") and displays upcoming events in the dashboard. `calendar.events` is the narrowest scope that allows both reading and creating events. `calendar.readonly` would prevent the AI from creating events, which is a critical feature.
 
-- **Google Drive**: The AI imports user-selected documents into its knowledge base for Q&A. `drive.file` allows app-specific file access (files created or opened by the app). `drive.readonly` is needed to list and read files the user selects for import. `drive.metadata.readonly` is used to display the file picker UI with file names and types.
+- **Google Drive**: The AI imports user-selected documents into its knowledge base for Q&A. We use the Google Picker API to let users select specific files from their Drive. The `drive.file` scope is the narrowest Drive scope and only grants access to files the user explicitly selects via the Picker or files created by the app. No broader Drive access is needed.
 
 - **Google Meet**: The AI generates Meet links when scheduling meetings or when a user requests a video call. `meetings.space.created` is the narrowest Meet scope available.
 
@@ -64,9 +61,9 @@ Exploro OS is an AI-powered business assistant. Each Google API integration serv
 
 The demo video shows:
 1. User connects Gmail via OAuth — consent screen displayed with all scopes visible
-2. AI reads and summarizes emails, drafts replies, marks as read, applies labels
+2. AI reads and summarizes emails, drafts replies, sends responses
 3. User connects Google Calendar — AI creates an event via natural language
-4. User connects Google Drive — imports a document into the knowledge base
+4. User connects Google Drive — uses Google Picker to select a document, imports it into the knowledge base
 5. User connects Google Meet — AI generates a Meet link for a scheduled meeting
 6. All OAuth consent screens shown with scopes fully expanded
 
@@ -95,15 +92,15 @@ Our Privacy Policy is hosted at: https://www.exploro-os.com/privacy
 
 ### Data Access
 Exploro OS accesses the following Google user data:
-- **Gmail**: Email subject, sender, recipient, body content, labels, and thread metadata
+- **Gmail**: Email subject, sender, recipient, body content, and thread metadata
 - **Google Calendar**: Event title, description, start/end time, attendees, location
 - **Google Drive**: File names, file types, file content (for documents imported into the knowledge base)
 - **Google Meet**: Meeting space URLs created by the app
 
 ### Data Use
-- **Gmail data**: Used to provide AI-powered email summaries, draft responses, and inbox organization. Email content is sent to our LLM provider (DeepSeek) to generate contextual responses.
+- **Gmail data**: Used to provide AI-powered email summaries, draft responses, and send emails on the user's behalf. Email content is sent to our LLM provider (DeepSeek) to generate contextual responses.
 - **Calendar data**: Used to display upcoming events in the dashboard and allow the AI to schedule meetings on the user's behalf.
-- **Drive data**: File content is extracted and stored in our database (Supabase) to enable document-based Q&A with the AI assistant.
+- **Drive data**: File content is extracted from user-selected files (via Google Picker API) and stored in our database (Supabase) to enable document-based Q&A with the AI assistant. The app only accesses files the user explicitly selects.
 - **Meet data**: Used to create video meeting links for scheduled events.
 
 ### Data Transfer
@@ -156,7 +153,13 @@ Our application hosts the following compliance statement in our Privacy Policy a
 ---
 
 ## Cloud Application Security Assessment (CASA)
-We understand that apps requesting Restricted scopes require a CASA assessment. We will initiate the CASA process with an authorized assessor if any of our requested scopes are classified as Restricted.
+Our application no longer requests any Restricted scopes. We use only non-sensitive and sensitive scopes:
+- Gmail: `gmail.readonly` (sensitive) and `gmail.send` (sensitive) — no restricted Gmail scopes
+- Drive: `drive.file` (non-sensitive) — no restricted Drive scopes
+- Calendar: `calendar.events` (sensitive) — no restricted Calendar scopes
+- Meet: `meetings.space.created` (sensitive) — no restricted Meet scopes
+
+As we do not request any Restricted scopes, a CASA assessment is not required.
 
 ---
 

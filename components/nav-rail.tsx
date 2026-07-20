@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 import { useAuth } from "@/app/auth-provider"
+import { WorkspaceSelector } from "@/components/workspace-selector"
 
 interface NavRailProps {
   mobileOpen?: boolean
@@ -20,7 +21,8 @@ interface NavRailProps {
 export function NavRail({ mobileOpen, onClose }: NavRailProps) {
   const pathname = usePathname()
   const { t } = useI18n()
-  const { avatarUrl, role } = useAuth()
+  const { avatarUrl, role, subscription } = useAuth()
+  const showWorkspace = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
@@ -67,6 +69,7 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
     { href: "/chat",      icon: MessageSquare, labelKey: "navChat" },
     { href: "/knowledge", icon: BookOpen,      labelKey: "navKnowledge" },
     { href: "/channels",  icon: Plug2,         labelKey: "navChannels" },
+    { href: "/profile",   icon: User,          labelKey: "navProfile" },
   ] as const
 
   const secondary = [
@@ -74,15 +77,11 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
   ] as const
 
   const support = [
-    { href: "/support", icon: Headphones, labelKey: "navTechSupport" },
+    { href: "/support", icon: Headphones, labelKey: "navTechSupport", tooltipKey: "navContactTooltip" },
   ] as const
 
   const admin = [
     { href: "/admin", icon: Shield, labelKey: "navAdmin" },
-  ] as const
-
-  const bottom = [
-    { href: "/profile", icon: User, labelKey: "navProfile" },
   ] as const
 
   // Use static labels for SSR/hydration to avoid language-mismatch errors.
@@ -93,9 +92,13 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
     navProfile: "Profile",
     navCRM: "CRM",
     navAdmin: "Admin",
-    navTechSupport: "Tech Support",
+    navTechSupport: "Contact",
   }
-  const getLabel = (key: keyof typeof labels) => (mounted ? t(key) : labels[key])
+  const tooltips = {
+    navContactTooltip: "Tech Support and Suggestions",
+  }
+  const getLabel = (key: keyof typeof labels) => (mounted ? t(key as any) : labels[key])
+  const getTooltip = (key: keyof typeof tooltips) => (mounted ? t(key as any) : tooltips[key])
 
   if (!mounted) {
     return (
@@ -106,7 +109,9 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
   return (
     <>
       {/* Desktop NavRail — expands on hover */}
-      <nav className="group/nav hidden md:flex h-full w-16 shrink-0 flex-col items-center gap-2 border-r bg-background py-3 overflow-y-auto transition-all duration-200 ease-out hover:w-48 hover:items-stretch hover:px-3">
+      <nav className="group/nav hidden md:flex h-full w-16 shrink-0 flex-col border-r bg-background transition-all duration-200 ease-out hover:w-48">
+        {/* Scrollable nav items */}
+        <div className="flex flex-1 flex-col items-center gap-2 overflow-y-auto scrollbar-exploro py-3 group-hover/nav:items-stretch group-hover/nav:px-3">
         {primary.map(({ href, icon: Icon, labelKey }) => {
           const label = getLabel(labelKey as keyof typeof labels)
           const active = pathname === href
@@ -118,7 +123,7 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
               className={cn(
                 "flex h-11 shrink-0 items-center rounded-xl transition-all duration-200",
                 active
-                  ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
+                  ? "border border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 "w-11 justify-center gap-0 px-0 group-hover/nav:w-full group-hover/nav:justify-start group-hover/nav:gap-3 group-hover/nav:px-2"
               )}
@@ -144,7 +149,7 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
               className={cn(
                 "flex h-11 shrink-0 items-center rounded-xl transition-all duration-200",
                 active
-                  ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
+                  ? "border border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 "w-11 justify-center gap-0 px-0 group-hover/nav:w-full group-hover/nav:justify-start group-hover/nav:gap-3 group-hover/nav:px-2"
               )}
@@ -159,18 +164,19 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
 
         <div className="my-2 h-px w-8 bg-border transition-all duration-200 group-hover/nav:w-full" />
 
-        {support.map(({ href, icon: Icon, labelKey }) => {
+        {support.map(({ href, icon: Icon, labelKey, tooltipKey }) => {
           const label = getLabel(labelKey as keyof typeof labels)
+          const tooltip = tooltipKey ? getTooltip(tooltipKey as keyof typeof tooltips) : label
           const active = pathname === href
           return (
             <Link
               key={href}
               href={href}
-              title={label}
+              title={tooltip}
               className={cn(
                 "flex h-11 shrink-0 items-center rounded-xl transition-all duration-200",
                 active
-                  ? "bg-[#FFBF00] text-white shadow-md"
+                  ? "border border-[#FFBF00]/30 bg-[#FFBF00]/10 text-[#FFBF00]"
                   : "text-[#FFBF00] hover:bg-[#FFBF00]/10",
                 "w-11 justify-center gap-0 px-0 group-hover/nav:w-full group-hover/nav:justify-start group-hover/nav:gap-3 group-hover/nav:px-2"
               )}
@@ -183,7 +189,10 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
           )
         })}
 
-        <div className="mt-auto flex w-full flex-col items-center gap-2 group-hover/nav:items-stretch">
+        </div>{/* end scroll container */}
+
+        {/* Bottom section — outside scroll so dropdown isn't clipped */}
+        <div className="flex w-full flex-col items-center gap-2 border-t border-border pt-3 pb-3 group-hover/nav:items-stretch group-hover/nav:px-3">
           {role === "super_admin" && (
             <>
               <div className="my-2 h-px w-8 bg-border transition-all duration-200 group-hover/nav:w-full" />
@@ -198,7 +207,7 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
                     className={cn(
                       "flex h-11 shrink-0 items-center rounded-xl transition-all duration-200",
                       active
-                        ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
+                        ? "border border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       "w-11 justify-center gap-0 px-0 group-hover/nav:w-full group-hover/nav:justify-start group-hover/nav:gap-3 group-hover/nav:px-2"
                     )}
@@ -212,41 +221,12 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
               })}
             </>
           )}
-          <div className="my-2 h-px w-8 bg-border transition-all duration-200 group-hover/nav:w-full" />
-          {bottom.map(({ href, icon: Icon, labelKey }) => {
-            const label = getLabel(labelKey as keyof typeof labels)
-            const active = pathname === href
-            return (
-              <Link
-                key={href}
-                href={href}
-                title={label}
-                className={cn(
-                  "flex h-11 shrink-0 items-center rounded-xl transition-all duration-200",
-                  active
-                    ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  "w-11 justify-center gap-0 px-0 group-hover/nav:w-full group-hover/nav:justify-start group-hover/nav:gap-3 group-hover/nav:px-2"
-                )}
-              >
-                {href === "/profile" && avatarUrl ? (
-                  <Image
-                    src={avatarUrl}
-                    alt={label}
-                    width={32}
-                    height={32}
-                    className="h-8 w-8 shrink-0 rounded-full object-cover"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
-                  />
-                ) : (
-                  <Icon className="h-5 w-5 shrink-0" />
-                )}
-                <span className="w-0 overflow-hidden whitespace-nowrap text-sm font-medium opacity-0 transition-all duration-200 group-hover/nav:w-auto group-hover/nav:opacity-100">
-                  {label}
-                </span>
-              </Link>
-            )
-          })}
+          {showWorkspace && (
+            <WorkspaceSelector
+              collapsedClassName="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted cursor-pointer group-hover/nav:hidden mt-2"
+              className="hidden group-hover/nav:flex mt-2"
+            />
+          )}
         </div>
       </nav>
 
@@ -255,14 +235,13 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
         <MobileNavDrawer
           onClose={onClose}
           role={role}
-          avatarUrl={avatarUrl}
           pathname={pathname}
           primary={primary}
           secondary={secondary}
           support={support}
           admin={admin}
-          bottom={bottom}
           labels={labels}
+          showWorkspace={showWorkspace}
         />
       )}
     </>
@@ -272,17 +251,16 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
 interface MobileNavDrawerProps {
   onClose?: () => void
   role: string | null
-  avatarUrl: string
   pathname: string
   primary: readonly { href: string; icon: typeof MessageSquare; labelKey: string }[]
   secondary: readonly { href: string; icon: typeof MessageSquare; labelKey: string }[]
   support: readonly { href: string; icon: typeof MessageSquare; labelKey: string }[]
   admin: readonly { href: string; icon: typeof MessageSquare; labelKey: string }[]
-  bottom: readonly { href: string; icon: typeof MessageSquare; labelKey: string }[]
   labels: Record<string, string>
+  showWorkspace: boolean
 }
 
-function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondary, support, admin, bottom, labels }: MobileNavDrawerProps) {
+function MobileNavDrawer({ onClose, role, pathname, primary, secondary, support, admin, labels, showWorkspace }: MobileNavDrawerProps) {
   const [open, setOpen] = useState(false)
   useEffect(() => {
     const t = setTimeout(() => setOpen(true), 10)
@@ -304,18 +282,14 @@ function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondar
           "flex h-12 items-center gap-4 rounded-xl px-3 transition-colors",
           active
             ? isGold
-              ? "bg-[#FFBF00] text-white shadow-md"
-              : "bg-emerald-600 text-white shadow-md shadow-emerald-900/30"
+              ? "border border-[#FFBF00]/30 bg-[#FFBF00]/10 text-[#FFBF00]"
+              : "border border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
             : isGold
               ? "text-[#FFBF00] hover:bg-[#FFBF00]/10 hover:text-[#FFBF00]"
               : "text-muted-foreground hover:bg-muted hover:text-foreground"
         )}
       >
-        {href === "/profile" && avatarUrl ? (
-          <Image src={avatarUrl} alt={label} width={24} height={24} className="h-6 w-6 rounded-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
-        ) : (
-          <Icon className="h-5 w-5 shrink-0" />
-        )}
+        <Icon className="h-5 w-5 shrink-0" />
         <span className="text-sm font-medium">{label}</span>
       </Link>
     )
@@ -373,10 +347,12 @@ function MobileNavDrawer({ onClose, role, avatarUrl, pathname, primary, secondar
           </>
         )}
 
-        <div className="mt-auto flex flex-col gap-1">
-          <div className="h-px bg-border" />
-          {bottom.map(({ href, icon, labelKey }) => renderItem(href, icon, labelKey))}
-        </div>
+        {showWorkspace && (
+          <div className="mt-auto flex flex-col gap-1">
+            <div className="h-px bg-border" />
+            <WorkspaceSelector className="w-full" />
+          </div>
+        )}
       </nav>
       {/* Backdrop */}
       <div className="flex-1 bg-black/60 backdrop-blur-sm transition-opacity duration-300" onClick={onClose} />

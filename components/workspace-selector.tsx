@@ -20,14 +20,19 @@ type Props = {
 function WorkspaceDropdown({
   onClose,
   onNew,
+  sidebar,
 }: {
   onClose: () => void
   onNew: () => void
+  sidebar?: boolean
 }) {
   const { workspaces, currentWorkspace, setCurrentWorkspace } = useWorkspace()
 
   return (
-    <div className="absolute right-0 top-full z-[100] mt-1.5 w-56 min-w-[200px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-white/10 bg-[#131929] shadow-2xl shadow-black/50">
+    <div className={cn(
+      "absolute z-[200] w-56 min-w-[200px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-emerald-500/20 bg-[#0f1520] shadow-2xl shadow-black/70",
+      sidebar ? "bottom-full left-0 mb-1.5" : "right-0 top-full mt-1.5"
+    )}>
       {/* Workspace list */}
       <div className="max-h-52 overflow-y-auto p-1.5">
         {workspaces.filter(ws => ws.name !== "Admin's Workspace").length === 0 ? (
@@ -41,7 +46,7 @@ function WorkspaceDropdown({
                 onClick={() => { setCurrentWorkspace(ws); onClose() }}
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
-                  active ? "bg-emerald-600/10 text-emerald-400" : "hover:bg-white/5 text-white/80 hover:text-white"
+                  active ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20" : "hover:bg-white/5 text-white/80 hover:text-white"
                 )}
               >
                 <span className="text-base leading-none">{ws.icon?.split(",")[0].trim() || "🏢"}</span>
@@ -54,7 +59,7 @@ function WorkspaceDropdown({
       </div>
 
       {/* Footer actions */}
-      <div className="border-t border-white/5 p-1.5 space-y-0.5">
+      <div className="border-t border-emerald-500/10 p-1.5 space-y-0.5">
         {(() => {
           const adminWs = workspaces.find(ws => ws.name === "Admin's Workspace")
           const isPersonal = currentWorkspace?.id === adminWs?.id
@@ -63,7 +68,7 @@ function WorkspaceDropdown({
               onClick={() => { setCurrentWorkspace(adminWs); onClose() }}
               className={cn(
                 "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors",
-                isPersonal ? "bg-white/5 text-white" : "text-muted-foreground hover:bg-white/5 hover:text-white"
+                isPersonal ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20" : "text-muted-foreground hover:bg-white/5 hover:text-white"
               )}
             >
               <User className="h-3.5 w-3.5 shrink-0" />
@@ -74,7 +79,7 @@ function WorkspaceDropdown({
         })()}
         <button
           onClick={() => { onNew(); onClose() }}
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-white"
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-400"
         >
           <Plus className="h-3.5 w-3.5 shrink-0" />
           <span>New workspace</span>
@@ -157,25 +162,25 @@ export function WorkspaceSelector({ className, collapsedClassName, compact }: Pr
         {/* Full selector — visible when nav is expanded (hover) */}
         <div ref={ref} className={cn("relative flex-col gap-1", className)}>
           {/* Section label */}
-          <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-500/60">
             Workspace
           </p>
           <button
             onClick={() => setOpen(v => !v)}
-            className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-2 text-sm transition-all hover:bg-white/[0.08] hover:border-white/20"
+            className="flex w-full items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-2 text-sm transition-all hover:bg-emerald-500/10 hover:border-emerald-500/30"
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-base leading-none">
-              {workspaceLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : icon}
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 text-base leading-none border border-emerald-500/20">
+              {workspaceLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" /> : icon}
             </span>
             <div className="flex-1 min-w-0 text-left">
-              <p className="truncate text-[11px] text-muted-foreground leading-tight">{companyName}</p>
-              <p className="truncate text-sm font-semibold text-white leading-tight">
-                {workspaceLoading ? "Loading…" : (currentWorkspace?.name ?? "Set up workspace")}
+              <p className="truncate text-[10px] text-emerald-400/70 leading-tight font-medium">{companyName}</p>
+              <p className="truncate text-xs font-semibold text-white leading-tight">
+                {workspaceLoading ? "Loading…" : (isPersonalMode ? "Personal" : (currentWorkspace?.name ?? "Set up workspace"))}
               </p>
             </div>
-            <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
+            <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-emerald-400/60 transition-transform duration-200", open && "rotate-180")} />
           </button>
-          {open && <WorkspaceDropdown onClose={() => setOpen(false)} onNew={() => setShowCreate(true)} />}
+          {open && <WorkspaceDropdown onClose={() => setOpen(false)} onNew={() => setShowCreate(true)} sidebar />}
         </div>
 
         {showCreate && <CreateWorkspaceModal onClose={() => setShowCreate(false)} />}

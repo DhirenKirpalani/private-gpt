@@ -22,6 +22,7 @@ export type WorkspaceMember = {
   // Joined from profiles
   email?: string
   full_name?: string
+  contact_email?: string
 }
 
 export async function getWorkspaces(userId: string): Promise<Workspace[]> {
@@ -132,7 +133,27 @@ export async function getWorkspaceMembers(workspaceId: string): Promise<Workspac
     .order("created_at", { ascending: true })
 
   if (error) throw error
-  return (data ?? []) as WorkspaceMember[]
+  const members = (data ?? []) as WorkspaceMember[]
+
+  // Enrich with profile data (name + email)
+  if (members.length > 0) {
+    const userIds = members.map(m => m.user_id)
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, full_name, contact_email")
+      .in("user_id", userIds)
+
+    if (profiles) {
+      const profileMap: Record<string, { full_name?: string; contact_email?: string }> = {}
+      for (const p of profiles) profileMap[p.user_id] = p
+      for (const m of members) {
+        m.full_name = profileMap[m.user_id]?.full_name ?? undefined
+        m.email = profileMap[m.user_id]?.contact_email ?? undefined
+      }
+    }
+  }
+
+  return members
 }
 
 export async function addWorkspaceMember(
