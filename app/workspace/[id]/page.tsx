@@ -264,9 +264,9 @@ export default function WorkspaceSettingsPage() {
                 <div key={m.id} className="flex items-center gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-4 py-2.5">
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium">
-                      {m.full_name || m.email || m.user_id}
+                      {m.full_name || m.email || "Unknown"}
                     </p>
-                    {m.full_name && m.email && (
+                    {m.email && (
                       <p className="truncate text-xs text-muted-foreground">{m.email}</p>
                     )}
                   </div>

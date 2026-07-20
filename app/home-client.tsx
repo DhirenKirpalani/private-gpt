@@ -72,7 +72,7 @@ export default function HomeClient() {
         <div className="animate-fade-in-up mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-400 sm:mb-5 [animation-delay:0ms]">
           {t("heroBadge")}
         </div>
-        <h1 className="animate-fade-in-up mb-4 max-w-5xl pb-2 text-3xl font-extrabold tracking-tight text-white sm:mb-6 sm:text-5xl md:text-7xl [animation-delay:120ms]">
+        <h1 className="animate-fade-in-up mb-4 max-w-6xl pb-2 text-3xl font-extrabold tracking-tight text-white sm:mb-6 sm:text-5xl md:text-7xl [animation-delay:120ms]">
           {t("heroTitle")}
         </h1>
         <p className="animate-fade-in-up mb-2 max-w-2xl text-base text-muted-foreground sm:text-xl [animation-delay:240ms]">
