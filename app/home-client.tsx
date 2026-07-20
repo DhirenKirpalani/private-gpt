@@ -501,12 +501,12 @@ export default function HomeClient() {
             {t("ctaSubtitle")}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <Button size="lg" onClick={handleCTA} className="bg-emerald-600 hover:bg-emerald-700 text-white px-10">
+            <Button size="lg" onClick={handleCTA} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-10 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
               {user ? t("goToChat") : t("ctaStartFree")}
             </Button>
             {!user && (
               <a href="https://calendly.com/exploro-os-support/30min" target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="px-10">
+                <Button size="lg" variant="outline" className="gap-2 px-10 transition-all duration-200 hover:scale-105">
                   {t("ctaBookDemo")}
                 </Button>
               </a>

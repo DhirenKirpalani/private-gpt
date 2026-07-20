@@ -154,7 +154,7 @@ export function Footer() {
 
             <button
               onClick={handleCTA}
-              className="inline-flex items-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/20"
+              className="inline-flex items-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-700/50 hover:scale-105"
             >
               {user ? "Go to Chat" : t("getStartedFree")}
             </button>
