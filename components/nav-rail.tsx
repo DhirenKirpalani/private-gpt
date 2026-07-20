@@ -193,6 +193,12 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
 
         {/* Bottom section — outside scroll so dropdown isn't clipped */}
         <div className="flex w-full flex-col items-center gap-2 border-t border-border pt-3 pb-3 group-hover/nav:items-stretch group-hover/nav:px-3">
+          {showWorkspace && (
+            <WorkspaceSelector
+              collapsedClassName="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted cursor-pointer group-hover/nav:hidden"
+              className="hidden group-hover/nav:flex"
+            />
+          )}
           {role === "super_admin" && (
             <>
               <div className="my-2 h-px w-8 bg-border transition-all duration-200 group-hover/nav:w-full" />
@@ -220,12 +226,6 @@ export function NavRail({ mobileOpen, onClose }: NavRailProps) {
                 )
               })}
             </>
-          )}
-          {showWorkspace && (
-            <WorkspaceSelector
-              collapsedClassName="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted cursor-pointer group-hover/nav:hidden mt-2"
-              className="hidden group-hover/nav:flex mt-2"
-            />
           )}
         </div>
       </nav>
@@ -338,6 +338,13 @@ function MobileNavDrawer({ onClose, role, pathname, primary, secondary, support,
           {support.map(({ href, icon, labelKey }) => renderItem(href, icon, labelKey, "gold"))}
         </div>
 
+        {showWorkspace && (
+          <div className="flex flex-col gap-1">
+            <div className="h-px bg-border" />
+            <WorkspaceSelector className="w-full" />
+          </div>
+        )}
+
         {role === "super_admin" && (
           <>
             <div className="h-px bg-border" />
@@ -345,13 +352,6 @@ function MobileNavDrawer({ onClose, role, pathname, primary, secondary, support,
               {admin.map(({ href, icon, labelKey }) => renderItem(href, icon, labelKey))}
             </div>
           </>
-        )}
-
-        {showWorkspace && (
-          <div className="mt-auto flex flex-col gap-1">
-            <div className="h-px bg-border" />
-            <WorkspaceSelector className="w-full" />
-          </div>
         )}
       </nav>
       {/* Backdrop */}

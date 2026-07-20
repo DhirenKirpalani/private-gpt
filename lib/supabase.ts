@@ -296,6 +296,7 @@ export async function uploadDocument(
       file_size_bytes: file.size,
       status: "INDEXED",
       page_count: pageCount,
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       ...(workspaceId ? { workspace_id: workspaceId } : {}),
     })
     .select()
@@ -305,7 +306,43 @@ export async function uploadDocument(
   return data
 }
 
+export async function archiveExpiredFile(userId: string, filename: string) {
+  const { error } = await supabase.storage
+    .from("knowledge-base")
+    .remove([`${userId}/${filename}`])
+  if (error) console.error("[archiveExpiredFile] Storage delete failed:", error.message)
+  return !error
+}
+
+export async function lazyArchiveDocuments(userId: string) {
+  const now = new Date().toISOString()
+  const { data: expired, error } = await supabase
+    .from("documents")
+    .select("id, filename, pinned, expires_at, file_archived")
+    .eq("user_id", userId)
+    .eq("file_archived", false)
+    .lt("expires_at", now)
+
+  if (error) {
+    console.error("[lazyArchive] Query failed:", error.message)
+    return
+  }
+
+  if (!expired || expired.length === 0) return
+
+  for (const doc of expired) {
+    if (doc.pinned) continue
+    await archiveExpiredFile(userId, doc.filename)
+    await supabase
+      .from("documents")
+      .update({ file_archived: true })
+      .eq("id", doc.id)
+  }
+}
+
 export async function fetchUserDocuments(userId: string, workspaceId?: string) {
+  await lazyArchiveDocuments(userId)
+
   let query = supabase
     .from("documents")
     .select("*")
@@ -387,6 +424,22 @@ export async function fetchDocumentContents(userId: string, workspaceId?: string
   const { data, error } = await query
   if (error) throw error
   return (data ?? []) as { id: string; original_filename: string; category: string; parsed_text: string }[]
+}
+
+export async function pinDocument(documentId: string, pinned: boolean) {
+  const { error } = await supabase
+    .from("documents")
+    .update({ pinned, expires_at: pinned ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() })
+    .eq("id", documentId)
+  if (error) throw error
+}
+
+export async function extendDocumentExpiry(documentId: string) {
+  const { error } = await supabase
+    .from("documents")
+    .update({ expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() })
+    .eq("id", documentId)
+  if (error) throw error
 }
 
 export function getDocumentPublicUrl(userId: string, filename: string) {

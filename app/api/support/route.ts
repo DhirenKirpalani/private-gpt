@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
     ].join("")
 
     await resend.emails.send({
-      from: "Exploro Support <onboarding@resend.dev>",
-      to: process.env.SUPPORT_TO_EMAIL || "support@exploro-os.com",
+      from: "Exploro Support <support@exploro-os.com>",
+      to: "support@exploro-os.com",
       replyTo: name + " <" + email + ">",
       subject,
       html,
