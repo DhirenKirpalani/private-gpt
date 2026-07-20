@@ -543,12 +543,6 @@ export default function ProfilePage() {
               ES
             </button>
           </div>
-          {(() => {
-            const showWorkspace = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
-            return showWorkspace ? (
-              <WorkspaceSelector compact />
-            ) : null
-          })()}
           <TrialPill className="hidden md:flex" />
           <Link href="/chat" className={cn("relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-xs font-bold text-white transition-colors overflow-hidden", form.avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
             {!form.avatarUrl && (form.fullName.trim()

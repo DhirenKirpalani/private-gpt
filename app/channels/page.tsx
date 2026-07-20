@@ -459,12 +459,6 @@ function ChannelsPageContent() {
               </button>
             ))}
           </div>
-          {(() => {
-            const showWorkspace = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
-            return showWorkspace ? (
-              <WorkspaceSelector compact />
-            ) : null
-          })()}
           <TrialPill className="hidden md:flex" />
           <Link href="/profile" className={cn("relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden", authLoading || avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
             {!authLoading && !avatarUrl && (userInitials || <User className="h-5 w-5 md:h-4 md:w-4 text-white" />)}
@@ -535,7 +529,7 @@ function ChannelsPageContent() {
                               if (!user) return
                               window.location.href = `/api/email/oauth/${provider.id}/connect?userId=${user.id}`
                             }}
-                            className="w-full sm:w-auto rounded-lg px-4 py-2 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                            className="w-full sm:w-auto rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
                           >
                             {t("signIn")}
                           </button>
@@ -543,7 +537,7 @@ function ChannelsPageContent() {
                         {(!provider.isOAuth || connected) && (
                           <button
                             onClick={() => connected ? handleDisconnect(provider.id) : openModal(provider)}
-                            className={cn("w-full sm:w-auto rounded-lg px-4 py-2 text-sm font-semibold transition-colors", connected ? "border border-red-500/30 text-red-400 hover:bg-red-500/10" : "bg-emerald-600 text-white hover:bg-emerald-700")}
+                            className={cn("w-full sm:w-auto rounded-lg px-4 py-2 text-sm font-semibold transition-colors", connected ? "border border-red-500/30 text-red-400 hover:bg-red-500/10" : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40")}
                           >
                             {connected ? t("channelsDisconnect") : t("channelsConnect")}
                           </button>
@@ -597,7 +591,7 @@ function ChannelsPageContent() {
                               if (!user) return
                               handleWhatsAppConnect()
                             }}
-                            className="w-full sm:w-auto shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
                           >
                             Connect
                           </button>
@@ -650,7 +644,7 @@ function ChannelsPageContent() {
                             if (!user) return
                             window.location.href = `${ch.oauthPath}?userId=${user.id}`
                           }}
-                          className="w-full sm:w-auto shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                          className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
                         >
                           Connect
                         </button>
@@ -700,7 +694,7 @@ function ChannelsPageContent() {
                             if (!user) return
                             window.location.href = `${ch.oauthPath}?userId=${user.id}`
                           }}
-                          className="w-full sm:w-auto shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                          className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
                         >
                           Connect
                         </button>
@@ -750,7 +744,7 @@ function ChannelsPageContent() {
                             if (!user) return
                             window.location.href = `${ch.oauthPath}?userId=${user.id}`
                           }}
-                          className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                          className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
                         >
                           Connect
                         </button>

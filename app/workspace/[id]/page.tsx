@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, UserPlus, Trash2, Loader2, Crown, Check, X, Settings } from "lucide-react"
+import { ArrowLeft, UserPlus, Trash2, Loader2, Check, X, Settings } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/app/auth-provider"
 import { useWorkspace } from "@/app/workspace-provider"
@@ -175,14 +175,16 @@ export default function WorkspaceSettingsPage() {
   return (
     <div className="min-h-screen bg-background p-6 sm:p-10">
       <Toaster />
-      <div className="mx-auto max-w-2xl space-y-6">
+      <div className="mx-auto max-w-2xl space-y-5">
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Link href="/profile" className="text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-5 w-5" />
+          <Link href="/profile" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" />
           </Link>
-          <span className="text-3xl">{(workspace.icon ?? "🏢").split(",")[0].trim() || "🏢"}</span>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xl">
+            {(workspace.icon ?? "🏢").split(",")[0].trim() || "🏢"}
+          </div>
           <div>
             <h1 className="text-xl font-bold">{workspace.name}</h1>
             <p className="text-xs text-muted-foreground">
@@ -203,58 +205,66 @@ export default function WorkspaceSettingsPage() {
 
         {/* Description */}
         {isOwner && (
-          <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
             <div className="mb-4 flex items-center gap-2">
-              <Settings className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Description</h2>
+              <Settings className="h-3.5 w-3.5 text-emerald-400/60" />
+              <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Description</h2>
             </div>
-            <div className="space-y-4">
-              <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="What does this workspace focus on?" />
-              <Button onClick={handleSaveDesc} disabled={savingDesc}>
-                {savingDesc ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+            <div className="space-y-3">
+              <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="What does this workspace focus on?" className="bg-white/[0.03] border-white/10" />
+              <button
+                onClick={handleSaveDesc}
+                disabled={savingDesc}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 disabled:opacity-50"
+              >
+                {savingDesc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                 Save description
-              </Button>
+              </button>
             </div>
           </div>
         )}
 
         {/* Members */}
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <UserPlus className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Members</h2>
+              <UserPlus className="h-3.5 w-3.5 text-emerald-400/60" />
+              <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Members</h2>
             </div>
             <span className="text-xs text-muted-foreground">
-              {members.length} {members.length === 1 ? "seat" : "seats"} · ${members.length * 50}/mo
+              {members.length} {members.length === 1 ? "seat" : "seats"} · ${members.length * 50} USD/seat/mo
             </span>
           </div>
 
           {/* Invite */}
           {isOwner && (
-            <div className="mb-5 space-y-3 rounded-lg border border-white/5 bg-background p-4">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Invite by email</p>
+            <div className="mb-5 space-y-3 rounded-lg border border-emerald-500/10 bg-emerald-500/5 p-4">
+              <p className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Invite by email</p>
               <div className="flex gap-2">
                 <Input
                   placeholder="colleague@company.com"
                   value={inviteEmail}
                   onChange={e => setInviteEmail(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && handleInvite()}
-                  className="flex-1"
+                  className="flex-1 bg-white/[0.03] border-white/10"
                 />
                 <div className="flex gap-1">
                   {(["admin", "manager", "member"] as WorkspaceRole[]).map(r => (
                     <button key={r} onClick={() => setInviteRole(r)}
                       className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors capitalize",
-                        inviteRole === r ? "border-emerald-500 bg-emerald-500/10 text-emerald-400" : "border-border text-muted-foreground hover:border-white/20"
+                        inviteRole === r ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400" : "border-white/10 text-muted-foreground hover:border-white/20 hover:text-white"
                       )}>
                       {r}
                     </button>
                   ))}
                 </div>
-                <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()} size="sm">
+                <button
+                  onClick={handleInvite}
+                  disabled={inviting || !inviteEmail.trim()}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 transition-colors hover:bg-emerald-500/15 disabled:opacity-50"
+                >
                   {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                </Button>
+                </button>
               </div>
             </div>
           )}
@@ -267,12 +277,14 @@ export default function WorkspaceSettingsPage() {
           ) : (
             <div className="space-y-2">
               {members.map(m => (
-                <div key={m.id} className="flex items-center gap-3 rounded-lg border border-white/5 bg-background px-3 py-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-600/20 text-xs font-bold text-emerald-400">
-                    {m.role === "owner" ? <Crown className="h-4 w-4 text-[#FFBF00]" /> : m.user_id.slice(0, 2).toUpperCase()}
-                  </div>
+                <div key={m.id} className="flex items-center gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-4 py-2.5">
                   <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium">{m.user_id}</p>
+                    <p className="truncate text-sm font-medium">
+                      {m.full_name || m.email || m.user_id}
+                    </p>
+                    {m.full_name && m.email && (
+                      <p className="truncate text-xs text-muted-foreground">{m.email}</p>
+                    )}
                   </div>
                   {isOwner && m.role !== "owner" ? (
                     <div className="flex items-center gap-1.5">

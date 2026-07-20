@@ -741,21 +741,7 @@ export default function CRMPage() {
               ES
             </button>
           </div>
-          {(() => {
-            const showWorkspace = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
-            return showWorkspace ? (
-              <WorkspaceSelector compact />
-            ) : null
-          })()}
           <TrialPill className="hidden md:flex" />
-          <button
-            onClick={() => setPrivacyOpen(true)}
-            className="hidden sm:flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            title="Privacy Notice"
-          >
-            <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">{t("crmPrivacy")}</span>
-          </button>
           <Link href="/profile" className={cn("relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden", avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
             <span className={avatarUrl ? "hidden" : ""}>{getInitials(userName) || <User className="h-5 w-5 md:h-4 md:w-4 text-white" />}</span>
             {avatarUrl && <img src={avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />}
@@ -817,6 +803,17 @@ export default function CRMPage() {
                   )}
                 </button>
               ))}
+            </div>
+
+            {/* Privacy notice — below Calendar tab */}
+            <div className="mt-2 border-t border-border pt-2">
+              <button
+                onClick={() => setPrivacyOpen(true)}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              >
+                <Shield className="h-3.5 w-3.5 shrink-0" />
+                <span>{t("crmPrivacy")}</span>
+              </button>
             </div>
 
           </div>

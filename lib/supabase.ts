@@ -327,7 +327,10 @@ export async function fetchUserCategories(userId: string, workspaceId?: string) 
     .eq("user_id", userId)
     .order("sort_order", { ascending: true })
 
-  if (workspaceId) query = query.eq("workspace_id", workspaceId)
+  if (workspaceId) {
+    // Include both workspace-specific categories AND legacy categories with no workspace_id
+    query = query.or(`workspace_id.eq.${workspaceId},workspace_id.is.null`)
+  }
 
   const { data, error } = await query
   if (error) throw error
