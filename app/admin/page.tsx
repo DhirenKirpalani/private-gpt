@@ -12,12 +12,13 @@ import { Label } from "@/components/ui/label"
 import { toast, Toaster } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 import { getFirstDeptIcon } from "@/lib/workspace-icons"
+import { useI18n } from "@/lib/i18n"
 
 const TRIAL_PRESETS = [
-  { label: "7 days", value: 7 },
-  { label: "14 days", value: 14 },
-  { label: "30 days", value: 30 },
-  { label: "60 days", value: 60 },
+  { value: 7 },
+  { value: 14 },
+  { value: 30 },
+  { value: 60 },
 ]
 
 type Stats = {
@@ -67,6 +68,7 @@ type Stats = {
 export default function AdminPage() {
   const { user, role, loading, refreshSubscription } = useAuth()
   const router = useRouter()
+  const { t } = useI18n()
   const [trialDays, setTrialDays] = useState(15)
   const [saving, setSaving] = useState(false)
   const [savingBanner, setSavingBanner] = useState(false)
@@ -222,8 +224,8 @@ export default function AdminPage() {
             <ShieldCheck className="h-5 w-5 text-[#FFBF00]" />
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-white">Super Admin</h1>
-            <p className="text-xs text-muted-foreground">Platform control panel · Logged in as <span className="text-[#FFBF00] font-medium">{role}</span></p>
+            <h1 className="text-xl font-bold text-white">{t("adminTitle")}</h1>
+            <p className="text-xs text-muted-foreground">{t("adminSubtitle")} · {t("adminLoggedInAs")} <span className="text-[#FFBF00] font-medium">{role}</span></p>
           </div>
         </div>
 
@@ -231,19 +233,19 @@ export default function AdminPage() {
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
             <Users className="h-3.5 w-3.5 text-emerald-400/60" />
-            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Platform Overview</h2>
+            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">{t("adminPlatformOverview")}</h2>
           </div>
           {statsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading stats...
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoadingStats")}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
-                { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, color: "text-blue-400" },
-                { label: "Active Trials", value: stats?.activeTrials ?? 0, icon: Clock, color: "text-[#FFBF00]" },
-                { label: "Expired Trials", value: stats?.expiredTrials ?? 0, icon: TrendingUp, color: "text-red-400" },
-                { label: "Paid Subscribers", value: stats?.activeSubscriptions ?? 0, icon: CreditCard, color: "text-emerald-400" },
+                { label: t("adminTotalUsers"), value: stats?.totalUsers ?? 0, icon: Users, color: "text-blue-400" },
+                { label: t("adminActiveTrials"), value: stats?.activeTrials ?? 0, icon: Clock, color: "text-[#FFBF00]" },
+                { label: t("adminExpiredTrials"), value: stats?.expiredTrials ?? 0, icon: TrendingUp, color: "text-red-400" },
+                { label: t("adminPaidSubscribers"), value: stats?.activeSubscriptions ?? 0, icon: CreditCard, color: "text-emerald-400" },
               ].map((stat) => (
                 <div key={stat.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-4 text-center">
                   <stat.icon className={cn("mx-auto mb-2 h-5 w-5", stat.color)} />
@@ -259,22 +261,22 @@ export default function AdminPage() {
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
             <BarChart2 className="h-3.5 w-3.5 text-emerald-400/60" />
-            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Business Metrics</h2>
+            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">{t("adminBusinessMetrics")}</h2>
           </div>
           {statsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
             </div>
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {[
-                  { label: "MRR", value: `$${stats?.mrr ?? 0}`, sub: "monthly recurring", color: "text-emerald-400" },
-                  { label: "ARR", value: `$${stats?.arr ?? 0}`, sub: "annual run rate", color: "text-emerald-400" },
-                  { label: "ARPU", value: `$${stats?.arpu ?? 0}`, sub: "avg revenue / user", color: "text-blue-400" },
-                  { label: "Conversion", value: `${stats?.conversionRate ?? 0}%`, sub: "trial → paid", color: "text-[#FFBF00]" },
-                  { label: "Churn Rate", value: `${stats?.churnRate ?? 0}%`, sub: "of total subs", color: stats?.churnRate && stats.churnRate > 10 ? "text-red-400" : "text-emerald-400" },
-                  { label: "Canceled", value: stats?.canceledSubscriptions ?? 0, sub: "all time", color: "text-muted-foreground" },
+                  { label: "MRR", value: `$${stats?.mrr ?? 0}`, sub: t("adminMonthlyRecurring"), color: "text-emerald-400" },
+                  { label: "ARR", value: `$${stats?.arr ?? 0}`, sub: t("adminAnnualRunRate"), color: "text-emerald-400" },
+                  { label: "ARPU", value: `$${stats?.arpu ?? 0}`, sub: t("adminAvgRevenueUser"), color: "text-blue-400" },
+                  { label: t("adminConversion"), value: `${stats?.conversionRate ?? 0}%`, sub: t("adminTrialPaid"), color: "text-[#FFBF00]" },
+                  { label: t("adminChurnRate"), value: `${stats?.churnRate ?? 0}%`, sub: t("adminOfTotalSubs"), color: stats?.churnRate && stats.churnRate > 10 ? "text-red-400" : "text-emerald-400" },
+                  { label: t("adminCanceled"), value: stats?.canceledSubscriptions ?? 0, sub: t("adminAllTime"), color: "text-muted-foreground" },
                 ].map((m) => (
                   <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
                     <p className="text-xs text-muted-foreground">{m.label}</p>
@@ -287,17 +289,17 @@ export default function AdminPage() {
               {/* Plan breakdown */}
               {stats?.planCounts && Object.keys(stats.planCounts).length > 0 && (
                 <div>
-                  <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Plan Breakdown</p>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("adminPlanBreakdown")}</p>
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(stats.planCounts).map(([plan, count]) => (
                       <span key={plan} className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400">
-                        {plan}: {count} user{count !== 1 ? "s" : ""}
+                        {plan}: {count} {count !== 1 ? t("adminUsers") : t("adminUser")}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
-              <p className="text-[10px] text-muted-foreground">LTV = ARPU / churn rate. NRR includes seat expansion revenue.</p>
+              <p className="text-[10px] text-muted-foreground">{t("adminLtvFormula")}</p>
             </div>
           )}
         </div>
@@ -306,7 +308,7 @@ export default function AdminPage() {
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
             <TrendingUp className="h-3.5 w-3.5 text-emerald-400/60" />
-            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Revenue & Retention</h2>
+            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">{t("adminRevenueRetention")}</h2>
           </div>
           {statsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -315,14 +317,14 @@ export default function AdminPage() {
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
-                { label: "LTV", value: `$${stats?.ltv ?? 0}`, sub: "lifetime value", color: "text-emerald-400" },
-                { label: "NRR", value: `${stats?.netRevenueRetention ?? 100}%`, sub: "net revenue retention", color: "text-emerald-400" },
-                { label: "Revenue Churn", value: `${stats?.revenueChurnRate ?? 0}%`, sub: "lost MRR / total", color: (stats?.revenueChurnRate ?? 0) > 10 ? "text-red-400" : "text-emerald-400" },
-                { label: "MRR Growth", value: `${stats?.mrrGrowthRate ?? 0}%`, sub: "new MRR / total MRR", color: "text-[#FFBF00]" },
-                { label: "New MRR (30d)", value: `$${stats?.newMrrThisMonth ?? 0}`, sub: "this month", color: "text-emerald-400" },
-                { label: "Solo → Team", value: `${stats?.soloToTeamRate ?? 0}%`, sub: "upgrade rate", color: "text-purple-400" },
-                { label: "User Growth", value: `${stats?.userGrowthRate ?? 0}%`, sub: "last 30 days", color: "text-blue-400" },
-                { label: "Retention 30d", value: `${stats?.retention30d ?? 0}%`, sub: "users active from 30d ago", color: (stats?.retention30d ?? 0) < 50 ? "text-red-400" : "text-emerald-400" },
+                { label: "LTV", value: `$${stats?.ltv ?? 0}`, sub: t("adminLifetimeValue"), color: "text-emerald-400" },
+                { label: "NRR", value: `${stats?.netRevenueRetention ?? 100}%`, sub: t("adminNetRevenueRetention"), color: "text-emerald-400" },
+                { label: t("adminRevenueChurn"), value: `${stats?.revenueChurnRate ?? 0}%`, sub: t("adminLostMrr"), color: (stats?.revenueChurnRate ?? 0) > 10 ? "text-red-400" : "text-emerald-400" },
+                { label: t("adminMrrGrowth"), value: `${stats?.mrrGrowthRate ?? 0}%`, sub: t("adminNewMrrTotal"), color: "text-[#FFBF00]" },
+                { label: t("adminNewMrr30d"), value: `$${stats?.newMrrThisMonth ?? 0}`, sub: t("adminThisMonth"), color: "text-emerald-400" },
+                { label: t("adminSoloToTeam"), value: `${stats?.soloToTeamRate ?? 0}%`, sub: t("adminUpgradeRate"), color: "text-purple-400" },
+                { label: t("adminUserGrowth"), value: `${stats?.userGrowthRate ?? 0}%`, sub: t("adminLast30Days"), color: "text-blue-400" },
+                { label: t("adminRetention30d"), value: `${stats?.retention30d ?? 0}%`, sub: t("adminUsersActive30d"), color: (stats?.retention30d ?? 0) < 50 ? "text-red-400" : "text-emerald-400" },
               ].map((m) => (
                 <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
                   <p className="text-xs text-muted-foreground">{m.label}</p>
@@ -338,23 +340,23 @@ export default function AdminPage() {
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
             <BarChart2 className="h-3.5 w-3.5 text-blue-400/60" />
-            <h2 className="text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest">Usage & Engagement</h2>
+            <h2 className="text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest">{t("adminUsageEngagement")}</h2>
           </div>
           {statsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
-                { label: "DAU", value: stats?.dau ?? 0, sub: "active in last 24h", color: "text-blue-400" },
-                { label: "MAU", value: stats?.mau ?? 0, sub: "total registered", color: "text-blue-400" },
-                { label: "Stickiness", value: `${stats?.stickiness ?? 0}%`, sub: "DAU / MAU ratio", color: (stats?.stickiness ?? 0) > 20 ? "text-emerald-400" : "text-[#FFBF00]" },
-                { label: "Docs / User", value: stats?.docsPerUser ?? 0, sub: "avg documents", color: "text-purple-400" },
-                { label: "Messages / User", value: stats?.messagesPerUser ?? 0, sub: "avg chat messages", color: "text-purple-400" },
-                { label: "Total Docs", value: stats?.totalDocuments ?? 0, sub: "all documents", color: "text-muted-foreground" },
-                { label: "Total Messages", value: stats?.totalChatMessages ?? 0, sub: "all chat messages", color: "text-muted-foreground" },
-                { label: "Users (30d ago)", value: stats?.users30dAgo ?? 0, sub: "registered 30d ago", color: "text-muted-foreground" },
+                { label: "DAU", value: stats?.dau ?? 0, sub: t("adminActive24h"), color: "text-blue-400" },
+                { label: "MAU", value: stats?.mau ?? 0, sub: t("adminTotalRegistered"), color: "text-blue-400" },
+                { label: t("adminStickiness"), value: `${stats?.stickiness ?? 0}%`, sub: t("adminDauMauRatio"), color: (stats?.stickiness ?? 0) > 20 ? "text-emerald-400" : "text-[#FFBF00]" },
+                { label: t("adminDocsPerUser"), value: stats?.docsPerUser ?? 0, sub: t("adminAvgDocuments"), color: "text-purple-400" },
+                { label: t("adminMessagesPerUser"), value: stats?.messagesPerUser ?? 0, sub: t("adminAvgChatMessages"), color: "text-purple-400" },
+                { label: t("adminTotalDocs"), value: stats?.totalDocuments ?? 0, sub: t("adminAllDocuments"), color: "text-muted-foreground" },
+                { label: t("adminTotalMessages"), value: stats?.totalChatMessages ?? 0, sub: t("adminAllChatMessages"), color: "text-muted-foreground" },
+                { label: t("adminUsers30dAgo"), value: stats?.users30dAgo ?? 0, sub: t("adminRegistered30d"), color: "text-muted-foreground" },
               ].map((m) => (
                 <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
                   <p className="text-xs text-muted-foreground">{m.label}</p>
@@ -370,21 +372,21 @@ export default function AdminPage() {
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
             <Building2 className="h-3.5 w-3.5 text-purple-400/60" />
-            <h2 className="text-[10px] font-semibold text-purple-400/60 uppercase tracking-widest">Workspace & Seats</h2>
+            <h2 className="text-[10px] font-semibold text-purple-400/60 uppercase tracking-widest">{t("adminWorkspaceSeats")}</h2>
           </div>
           {statsLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
-                { label: "Total Workspaces", value: stats?.totalWorkspaces ?? 0, sub: "all workspaces", color: "text-blue-400" },
-                { label: "New Workspaces (30d)", value: stats?.newWorkspaces30d ?? 0, sub: "created this month", color: "text-emerald-400" },
-                { label: "Seats / Workspace", value: stats?.seatsPerWorkspace ?? 0, sub: "avg team size", color: "text-purple-400" },
-                { label: "Total Active Seats", value: stats?.totalActiveSeats ?? 0, sub: "team plan seats", color: "text-emerald-400" },
-                { label: "Avg Seats / Team", value: stats?.avgSeatsPerTeam ?? 0, sub: "team plan only", color: "text-[#FFBF00]" },
-                { label: "New Seats (30d)", value: stats?.newSeats30d ?? 0, sub: "members added this month", color: "text-emerald-400" },
+                { label: t("adminTotalWorkspaces"), value: stats?.totalWorkspaces ?? 0, sub: t("adminAllWorkspaces"), color: "text-blue-400" },
+                { label: t("adminNewWorkspaces30d"), value: stats?.newWorkspaces30d ?? 0, sub: t("adminCreatedThisMonth"), color: "text-emerald-400" },
+                { label: t("adminSeatsPerWorkspace"), value: stats?.seatsPerWorkspace ?? 0, sub: t("adminAvgTeamSize"), color: "text-purple-400" },
+                { label: t("adminTotalActiveSeats"), value: stats?.totalActiveSeats ?? 0, sub: t("adminTeamPlanSeats"), color: "text-emerald-400" },
+                { label: t("adminAvgSeatsPerTeam"), value: stats?.avgSeatsPerTeam ?? 0, sub: t("adminTeamPlanOnly"), color: "text-[#FFBF00]" },
+                { label: t("adminNewSeats30d"), value: stats?.newSeats30d ?? 0, sub: t("adminMembersAddedThisMonth"), color: "text-emerald-400" },
               ].map((m) => (
                 <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
                   <p className="text-xs text-muted-foreground">{m.label}</p>
@@ -400,16 +402,16 @@ export default function AdminPage() {
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-1 flex items-center gap-2">
             <Building2 className="h-3.5 w-3.5 text-emerald-400/60" />
-            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Companies & Workspaces</h2>
+            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">{t("adminCompaniesWorkspaces")}</h2>
           </div>
-          <p className="mb-4 text-xs text-muted-foreground">All companies, their workspaces, and member roles across the platform.</p>
+          <p className="mb-4 text-xs text-muted-foreground">{t("adminCompaniesDesc")}</p>
 
           {companiesLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
             </div>
           ) : companies.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No companies found.</p>
+            <p className="text-sm text-muted-foreground">{t("adminNoCompanies")}</p>
           ) : (
             <div className="space-y-2">
               {companies.map(c => (
@@ -444,7 +446,7 @@ export default function AdminPage() {
                   {expandedCompany === c.userId && (
                     <div className="border-t border-white/5 p-3 space-y-2">
                       {c.workspaces.length === 0 ? (
-                        <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces.</p>
+                        <p className="px-2 py-2 text-xs text-muted-foreground">{t("adminNoWorkspaces")}</p>
                       ) : (
                         c.workspaces.map(ws => (
                           <div key={ws.id} className="rounded-lg border border-white/5 bg-white/[0.02] overflow-hidden">
@@ -459,7 +461,7 @@ export default function AdminPage() {
                               }
                               {(() => { const Icon = getFirstDeptIcon(ws.icon); return <Icon className="h-4 w-4 shrink-0 text-muted-foreground" /> })()}
                               <span className="flex-1 truncate text-sm font-medium">{ws.name}</span>
-                              <span className="shrink-0 text-xs text-muted-foreground">{ws.members.length} member{ws.members.length !== 1 ? "s" : ""}</span>
+                              <span className="shrink-0 text-xs text-muted-foreground">{ws.members.length} {ws.members.length !== 1 ? t("adminMembers") : t("adminMember")}</span>
                             </button>
 
                             {/* Expanded: members */}
@@ -496,12 +498,12 @@ export default function AdminPage() {
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-1 flex items-center gap-2">
             <UserCog className="h-3.5 w-3.5 text-blue-400/60" />
-            <h2 className="text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest">User Role Management</h2>
+            <h2 className="text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest">{t("adminUserRoleManagement")}</h2>
           </div>
-          <p className="mb-5 text-xs text-muted-foreground">Assign or change roles for any user. The user will receive an email notification.</p>
+          <p className="mb-5 text-xs text-muted-foreground">{t("adminRoleDesc")}</p>
           <div className="space-y-5">
             <div>
-              <Label htmlFor="roleEmail" className="text-sm font-medium text-white/80">User email</Label>
+              <Label htmlFor="roleEmail" className="text-sm font-medium text-white/80">{t("adminUserEmail")}</Label>
               <Input
                 id="roleEmail"
                 type="email"
@@ -513,13 +515,13 @@ export default function AdminPage() {
               />
             </div>
             <div>
-              <Label className="text-sm font-medium text-white/80">Assign role</Label>
+              <Label className="text-sm font-medium text-white/80">{t("adminAssignRole")}</Label>
               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {([
-                  { id: "user", label: "User", desc: "Standard access", icon: User, color: "text-white/60", active: "border-white/30 bg-white/5 text-white" },
-                  { id: "manager", label: "Manager", desc: "Team oversight", icon: Users, color: "text-blue-400", active: "border-blue-500/40 bg-blue-500/10 text-blue-400" },
-                  { id: "admin", label: "Admin", desc: "Full platform", icon: Shield, color: "text-emerald-400", active: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" },
-                  { id: "super_admin", label: "Super Admin", desc: "God mode", icon: ShieldCheck, color: "text-[#FFBF00]", active: "border-[#FFBF00]/40 bg-[#FFBF00]/10 text-[#FFBF00]" },
+                  { id: "user", label: t("adminRoleUser"), desc: t("adminRoleUserDesc"), icon: User, color: "text-white/60", active: "border-white/30 bg-white/5 text-white" },
+                  { id: "manager", label: t("adminRoleManager"), desc: t("adminRoleManagerDesc"), icon: Users, color: "text-blue-400", active: "border-blue-500/40 bg-blue-500/10 text-blue-400" },
+                  { id: "admin", label: t("adminRoleAdmin"), desc: t("adminRoleAdminDesc"), icon: Shield, color: "text-emerald-400", active: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" },
+                  { id: "super_admin", label: t("adminRoleSuperAdmin"), desc: t("adminRoleSuperAdminDesc"), icon: ShieldCheck, color: "text-[#FFBF00]", active: "border-[#FFBF00]/40 bg-[#FFBF00]/10 text-[#FFBF00]" },
                 ] as const).map((r) => (
                   <button
                     key={r.id}
@@ -540,7 +542,7 @@ export default function AdminPage() {
               <div className="flex items-start gap-2.5 rounded-xl border border-[#FFBF00]/20 bg-[#FFBF00]/5 px-4 py-3">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-[#FFBF00] mt-0.5" />
                 <p className="text-xs text-[#FFBF00]/80">
-                  <span className="font-semibold">Super admin grants full platform control</span> — access to all companies, billing, and the ability to promote other users. Use with extreme caution.
+                  <span className="font-semibold">{t("adminSuperAdminWarning")}</span>{t("adminSuperAdminWarningDesc")}
                 </p>
               </div>
             )}
@@ -556,7 +558,7 @@ export default function AdminPage() {
                 )}
               >
                 {savingRole ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
-                Update role & notify user
+                {t("adminUpdateRoleNotify")}
               </button>
             </div>
           </div>
@@ -566,13 +568,13 @@ export default function AdminPage() {
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-1 flex items-center gap-2">
             <Clock className="h-3.5 w-3.5 text-[#FFBF00]/60" />
-            <h2 className="text-[10px] font-semibold text-[#FFBF00]/60 uppercase tracking-widest">Trial Configuration</h2>
+            <h2 className="text-[10px] font-semibold text-[#FFBF00]/60 uppercase tracking-widest">{t("adminTrialConfig")}</h2>
           </div>
-          <p className="mb-4 text-xs text-muted-foreground">Controls how many days new users get free access when they sign up.</p>
+          <p className="mb-4 text-xs text-muted-foreground">{t("adminTrialDesc")}</p>
           <div className="space-y-4">
             {/* Presets */}
             <div>
-              <Label className="mb-2 block">Quick presets</Label>
+              <Label className="mb-2 block">{t("adminQuickPresets")}</Label>
               <div className="flex flex-wrap gap-2">
                 {TRIAL_PRESETS.map((p) => (
                   <button
@@ -585,7 +587,7 @@ export default function AdminPage() {
                         : "border-border text-muted-foreground hover:border-[#FFBF00]/50 hover:text-foreground"
                     )}
                   >
-                    {p.label}
+                    {p.value} {t("adminDays")}
                   </button>
                 ))}
               </div>
@@ -593,7 +595,7 @@ export default function AdminPage() {
 
             {/* Custom input */}
             <div>
-              <Label htmlFor="trialDays">Custom value (days)</Label>
+              <Label htmlFor="trialDays">{t("adminCustomValue")}</Label>
               <div className="mt-1.5 flex items-center gap-3">
                 <Input
                   id="trialDays"
@@ -605,7 +607,7 @@ export default function AdminPage() {
                   className="w-32"
                 />
                 <span className="text-sm text-muted-foreground">
-                  = <span className="font-semibold text-foreground">{trialDays} days</span> free access per new user
+                  = <span className="font-semibold text-foreground">{trialDays} {t("adminDaysFreeAccess")}</span>
                 </span>
               </div>
             </div>
@@ -616,7 +618,7 @@ export default function AdminPage() {
               className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save trial period
+              {t("adminSaveTrial")}
             </button>
           </div>
         </div>
@@ -625,9 +627,9 @@ export default function AdminPage() {
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-1 flex items-center gap-2">
             <Megaphone className="h-3.5 w-3.5 text-purple-400/60" />
-            <h2 className="text-[10px] font-semibold text-purple-400/60 uppercase tracking-widest">Announcement Banner</h2>
+            <h2 className="text-[10px] font-semibold text-purple-400/60 uppercase tracking-widest">{t("adminAnnouncementBanner")}</h2>
           </div>
-          <p className="mb-4 text-xs text-muted-foreground">Show a message to all users at the top of the app (e.g. maintenance notice, new feature).</p>
+          <p className="mb-4 text-xs text-muted-foreground">{t("adminBannerDesc")}</p>
           <div className="space-y-4">
             <label className="flex cursor-pointer items-center gap-3">
               <button
@@ -645,10 +647,10 @@ export default function AdminPage() {
                   bannerEnabled ? "translate-x-6" : "translate-x-1"
                 )} />
               </button>
-              <span className="text-sm select-none">{bannerEnabled ? "Banner enabled" : "Banner disabled"}</span>
+              <span className="text-sm select-none">{bannerEnabled ? t("adminBannerEnabled") : t("adminBannerDisabled")}</span>
             </label>
             <div>
-              <Label htmlFor="bannerText">Message</Label>
+              <Label htmlFor="bannerText">{t("adminMessage")}</Label>
               <Input
                 id="bannerText"
                 type="text"
@@ -664,7 +666,7 @@ export default function AdminPage() {
               className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 disabled:opacity-50"
             >
               {savingBanner ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
-              Save banner
+              {t("adminSaveBanner")}
             </button>
           </div>
         </div>

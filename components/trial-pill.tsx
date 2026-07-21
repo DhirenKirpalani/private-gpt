@@ -4,9 +4,11 @@ import Link from "next/link"
 import { useAuth } from "@/app/auth-provider"
 import { getTrialDaysLeft, isTrialExpired } from "@/lib/subscription"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n"
 
 export function TrialPill({ className }: { className?: string }) {
   const { subscription } = useAuth()
+  const { t } = useI18n()
   const daysLeft = getTrialDaysLeft(subscription)
   const expired = isTrialExpired(subscription)
 
@@ -21,7 +23,7 @@ export function TrialPill({ className }: { className?: string }) {
           className
         )}
       >
-        Subscribe
+        {t("trialSubscribe")}
       </Link>
     )
   }
@@ -36,7 +38,7 @@ export function TrialPill({ className }: { className?: string }) {
         className
       )}
     >
-      {daysLeft === 1 ? "Free trial ends in 1 day" : `Free trial ends in ${daysLeft} days`}
+      {daysLeft === 1 ? t("trialEndsInOneDay") : t("trialEndsIn", { days: daysLeft! })}
     </Link>
   )
 }

@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast, Toaster } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n"
 
 const ROLE_COLORS: Record<string, string> = {
   owner:  "text-[#FFBF00] border-[#FFBF00]/30 bg-[#FFBF00]/10",
@@ -30,6 +31,7 @@ export default function WorkspaceSettingsPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { workspaces, currentWorkspace, refreshWorkspaces, setCurrentWorkspace } = useWorkspace()
+  const { t } = useI18n()
 
   const workspace = workspaces.find(w => w.id === id)
   const isOwner = workspace?.owner_id === user?.id
@@ -154,7 +156,7 @@ export default function WorkspaceSettingsPage() {
   if (!workspace) {
     return (
       <div className="flex h-screen items-center justify-center text-muted-foreground">
-        Workspace not found.
+        {t("wsSettingsNotFound")}
       </div>
     )
   }
@@ -175,7 +177,7 @@ export default function WorkspaceSettingsPage() {
           <div>
             <h1 className="text-xl font-bold">{workspace.name}</h1>
             <p className="text-xs text-muted-foreground">
-              {getDeptLabels(workspace.icon).join(" · ") || "Workspace settings"}
+              {getDeptLabels(workspace.icon).join(" · ") || t("wsSettingsTitle")}
             </p>
           </div>
         </div>
@@ -192,17 +194,17 @@ export default function WorkspaceSettingsPage() {
           <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
             <div className="mb-4 flex items-center gap-2">
               <Settings className="h-3.5 w-3.5 text-emerald-400/60" />
-              <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Description</h2>
+              <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">{t("wsSettingsDescription")}</h2>
             </div>
             <div className="space-y-3">
-              <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="What does this workspace focus on?" className="bg-white/[0.03] border-white/10" />
+              <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder={t("wsSettingsDescPlaceholder")} className="bg-white/[0.03] border-white/10" />
               <button
                 onClick={handleSaveDesc}
                 disabled={savingDesc}
                 className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 disabled:opacity-50"
               >
                 {savingDesc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                Save description
+                {t("wsSettingsSaveDesc")}
               </button>
             </div>
           </div>
@@ -213,20 +215,20 @@ export default function WorkspaceSettingsPage() {
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <UserPlus className="h-3.5 w-3.5 text-emerald-400/60" />
-              <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Members</h2>
+              <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">{t("wsSettingsMembers")}</h2>
             </div>
             <span className="text-xs text-muted-foreground">
-              {members.length} {members.length === 1 ? "seat" : "seats"} · ${members.length * 50} USD/seat/mo
+              {members.length} {members.length === 1 ? t("wsSettingsSeat") : t("wsSettingsSeats")} · ${members.length * 50} USD/seat/mo
             </span>
           </div>
 
           {/* Invite */}
           {isOwner && (
             <div className="mb-5 space-y-3 rounded-lg border border-emerald-500/10 bg-emerald-500/5 p-4">
-              <p className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Invite by email</p>
+              <p className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">{t("wsSettingsInviteByEmail")}</p>
               <div className="flex gap-2">
                 <Input
-                  placeholder="colleague@company.com"
+                  placeholder={t("wsSettingsInvitePlaceholder")}
                   value={inviteEmail}
                   onChange={e => setInviteEmail(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && handleInvite()}
@@ -256,7 +258,7 @@ export default function WorkspaceSettingsPage() {
           {/* Member list */}
           {membersLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading members...
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("wsSettingsLoadingMembers")}
             </div>
           ) : (
             <div className="space-y-2">
@@ -287,7 +289,7 @@ export default function WorkspaceSettingsPage() {
                     </div>
                   ) : (
                     <span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", ROLE_COLORS[m.role] ?? "")}>
-                      {m.role}
+                      {m.role === "owner" ? t("wsSettingsRoleOwner") : m.role === "admin" ? t("wsSettingsRoleAdmin") : m.role === "manager" ? t("wsSettingsRoleManager") : t("wsSettingsRoleMember")}
                     </span>
                   )}
                 </div>
@@ -299,29 +301,29 @@ export default function WorkspaceSettingsPage() {
         {/* Danger zone */}
         {isOwner && workspaces.length > 1 && (
           <div className="rounded-xl border border-red-500/20 bg-card p-6 shadow-sm">
-            <h2 className="mb-1 text-sm font-semibold text-red-400 uppercase tracking-wide">Danger Zone</h2>
-            <p className="mb-4 text-xs text-muted-foreground">Deleting this workspace is permanent. All documents, chats, and categories in this workspace will be removed.</p>
+            <h2 className="mb-1 text-sm font-semibold text-red-400 uppercase tracking-wide">{t("wsSettingsDangerZone")}</h2>
+            <p className="mb-4 text-xs text-muted-foreground">{t("wsSettingsDangerDesc")}</p>
 
             {!confirmDelete ? (
               <Button variant="outline" onClick={() => setConfirmDelete(true)} disabled={deleting}
                 className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300">
                 <Trash2 className="mr-2 h-4 w-4" />
-                Delete workspace
+                {t("wsSettingsDeleteBtn")}
               </Button>
             ) : (
               <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 space-y-3">
                 <p className="text-sm font-medium text-red-300">
-                  Delete <span className="font-bold">&ldquo;{workspace.name}&rdquo;</span>? This cannot be undone.
+                  {t("wsSettingsDeleteConfirm", { name: workspace.name })}
                 </p>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)} disabled={deleting}
                     className="flex-1">
-                    Cancel
+                    {t("wsSettingsDeleteCancel")}
                   </Button>
                   <Button size="sm" onClick={handleDelete} disabled={deleting}
                     className="flex-1 bg-red-600 text-white hover:bg-red-700 border-0">
                     {deleting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-2 h-3.5 w-3.5" />}
-                    Yes, delete it
+                    {t("wsSettingsDeleteYes")}
                   </Button>
                 </div>
               </div>

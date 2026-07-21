@@ -28,7 +28,7 @@ const sections = {
     { icon: Scale, title: "20. GOVERNING LAW", body: `These Terms shall be governed by and construed under the laws of Mexico without regard to conflict of law principles.` },
     { icon: Mail, title: "21. DISPUTE RESOLUTION", body: `Any dispute arising from these Terms shall first be addressed through good-faith negotiation. If unresolved, disputes shall be submitted to binding arbitration or competent courts located in Mexico City unless prohibited by applicable law.` },
     { icon: Clock, title: "22. CHANGES TO TERMS", body: `Exploro OS may update these Terms periodically. Material changes will be communicated through the Platform or other reasonable means. Continued use of the Platform constitutes acceptance of updated Terms.` },
-    { icon: FileText, title: "23. CONTACT INFORMATION", body: `Questions regarding these Terms may be directed to: earth@urbanseed.net.` },
+    { icon: FileText, title: "23. CONTACT INFORMATION", body: `Questions regarding these Terms may be directed to: support@exploro-os.com.` },
   ],
   es: [
     { icon: FileText, title: "1. DEFINICIONES", body: `"Exploro OS" significa Exploro OS, sus empresas matrices, subsidiarias, afiliadas, sucesores y cesionarios. "Usuario" significa cualquier persona física o jurídica que acceda o utilice la Plataforma.` },
@@ -53,7 +53,7 @@ const sections = {
     { icon: Scale, title: "20. LEY APLICABLE", body: `Estos Términos se regirán e interpretarán de acuerdo con las leyes de México sin considerar los principios de conflicto de leyes.` },
     { icon: Mail, title: "21. RESOLUCIÓN DE DISPUTAS", body: `Cualquier disputa derivada de estos Términos se abordará primero a través de una negociación de buena fe. Si no se resuelve, las disputas se someterán a arbitraje vinculante o tribunales competentes ubicados en la Ciudad de México.` },
     { icon: Clock, title: "22. CAMBIOS EN LOS TÉRMINOS", body: `Exploro OS puede actualizar estos Términos periódicamente. Los cambios materiales se comunicarán a través de la Plataforma u otros medios razonables. El uso continuo de la Plataforma constituye la aceptación de los Términos actualizados.` },
-    { icon: FileText, title: "23. INFORMACIÓN DE CONTACTO", body: `Las preguntas sobre estos Términos pueden dirigirse a: earth@urbanseed.net.` },
+    { icon: FileText, title: "23. INFORMACIÓN DE CONTACTO", body: `Las preguntas sobre estos Términos pueden dirigirse a: support@exploro-os.com.` },
   ],
 }
 
@@ -105,9 +105,9 @@ export default function TermsPage() {
 
         <div className="mt-12 rounded-2xl border border-emerald-500/20 bg-emerald-600/5 p-6 text-center">
           <p className="text-sm text-emerald-400">
-            If you have any questions about these Terms of Service, please contact us at{" "}
-            <a href="mailto:earth@urbanseed.net" className="underline hover:text-emerald-300">
-              earth@urbanseed.net
+            {lang === "es" ? "Si tienes alguna pregunta sobre estos Términos de Servicio, contáctanos en" : "If you have any questions about these Terms of Service, please contact us at"}{" "}
+            <a href="mailto:support@exploro-os.com" className="underline hover:text-emerald-300">
+              support@exploro-os.com
             </a>
           </p>
         </div>

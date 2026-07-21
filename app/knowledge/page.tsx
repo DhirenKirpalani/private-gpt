@@ -498,7 +498,7 @@ export default function KnowledgePage() {
         {/* Sidebar: categories */}
         <aside className={cn(
           "flex w-56 shrink-0 flex-col border-r border-white/5 bg-[#2a3444] overflow-hidden",
-          "absolute inset-y-0 left-0 z-30 md:static md:z-auto",
+          "fixed inset-y-0 left-0 z-30 md:static md:z-auto md:inset-auto",
           !catSidebarOpen && "hidden md:flex"
         )}>
           <div className="flex items-center justify-between px-3 pt-3 md:hidden">
@@ -642,7 +642,7 @@ export default function KnowledgePage() {
             <div className="relative flex items-center gap-1.5 sm:gap-2" ref={filterRef}>
               <button
                 onClick={() => setCatSidebarOpen(true)}
-                className="hidden items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted sm:px-3 sm:py-1.5"
+                className="flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted sm:px-3 sm:py-1.5 md:hidden"
               >
                 <PanelLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 <span className="hidden sm:inline">{t("knowledgeCategories")}</span>
@@ -656,10 +656,10 @@ export default function KnowledgePage() {
                 onClick={() => setFilterOpen(!filterOpen)}
               >
                 <Filter className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                {statusFilter === "all" ? t("knowledgeFilter") : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
+                {statusFilter === "all" ? t("knowledgeFilter") : statusFilter === "indexed" ? t("knowledgeStatusIndexed") : statusFilter === "processing" ? t("knowledgeStatusProcessing") : t("knowledgeStatusError")}
               </button>
               {filterOpen && (
-                <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-xl border border-white/10 bg-[#1e2533] py-1 shadow-2xl">
+                <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-xl border border-white/10 bg-[#1e2533] py-1 shadow-2xl">
                   {["all", "indexed", "processing", "error"].map(s => (
                     <button
                       key={s}
@@ -669,7 +669,7 @@ export default function KnowledgePage() {
                       )}
                       onClick={() => { setStatusFilter(s); setFilterOpen(false) }}
                     >
-                      <span>{s === "all" ? "All Status" : s.charAt(0).toUpperCase() + s.slice(1)}</span>
+                      <span>{s === "all" ? t("knowledgeAllStatus") : s === "indexed" ? t("knowledgeStatusIndexed") : s === "processing" ? t("knowledgeStatusProcessing") : t("knowledgeStatusError")}</span>
                       {statusFilter === s && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
                     </button>
                   ))}

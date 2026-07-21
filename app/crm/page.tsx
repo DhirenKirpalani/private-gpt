@@ -1342,10 +1342,10 @@ export default function CRMPage() {
                 {/* Email Toolbar */}
                 <div className="flex flex-col gap-2 border-b bg-card/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
                   <div className="flex items-center gap-2 sm:gap-3">
-                    <h1 className="text-base font-bold sm:text-lg">Email</h1>
+                    <h1 className="text-base font-bold sm:text-lg">{t("crmEmailTabTitle")}</h1>
                     <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-                      <button onClick={() => setEmailView("kanban")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", emailView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Kanban</button>
-                      <button onClick={() => setEmailView("table")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", emailView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Table</button>
+                      <button onClick={() => setEmailView("kanban")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", emailView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{t("crmKanban")}</button>
+                      <button onClick={() => setEmailView("table")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", emailView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{t("crmTable")}</button>
                     </div>
                     {/* Channel selector */}
                     {channels.filter(c => c.type === "email").length > 0 && (
@@ -1385,7 +1385,7 @@ export default function CRMPage() {
                         value={emailSearch}
                         onChange={e => setEmailSearch(e.target.value)}
                         className="w-full rounded-lg border bg-background py-1.5 pl-8 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 sm:w-56"
-                        placeholder="Search emails..."
+                        placeholder={t("crmSearchEmails")}
                       />
                     </div>
                     <div className="relative">
@@ -1394,7 +1394,7 @@ export default function CRMPage() {
                         className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors", emailFilterOpen || emailFilter.direction !== "all" || emailFilter.read !== "all" ? "bg-emerald-600/10 border-emerald-500/30 text-emerald-400" : "hover:bg-accent")}
                       >
                         <Filter className="h-3.5 w-3.5" />
-                        Filter
+                        {t("crmFilter")}
                         {(emailFilter.direction !== "all" || emailFilter.read !== "all") && (
                           <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
                             {(emailFilter.direction !== "all" ? 1 : 0) + (emailFilter.read !== "all" ? 1 : 0)}
@@ -1404,23 +1404,23 @@ export default function CRMPage() {
                       {emailFilterOpen && (
                         <div className="absolute right-0 top-full z-40 mt-1 w-56 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl p-3 space-y-3">
                           <div>
-                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Direction</p>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{t("crmDirection")}</p>
                             <div className="flex gap-1">
                               {(["all", "received", "sent"] as const).map(d => (
                                 <button key={d} onClick={() => setEmailFilter(f => ({ ...f, direction: d }))}
                                   className={cn("flex-1 rounded-lg py-1 text-[11px] font-medium capitalize border transition-colors", emailFilter.direction === d ? "bg-emerald-600/20 border-emerald-500/40 text-emerald-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}>
-                                  {d === "all" ? "All" : d === "received" ? "Inbox" : "Sent"}
+                                  {d === "all" ? t("crmDirectionAll") : d === "received" ? t("crmDirectionInbox") : t("crmDirectionSent")}
                                 </button>
                               ))}
                             </div>
                           </div>
                           <div>
-                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Read status</p>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{t("crmReadStatus")}</p>
                             <div className="flex gap-1">
                               {(["all", "unread", "read"] as const).map(r => (
                                 <button key={r} onClick={() => setEmailFilter(f => ({ ...f, read: r }))}
                                   className={cn("flex-1 rounded-lg py-1 text-[11px] font-medium capitalize border transition-colors", emailFilter.read === r ? "bg-emerald-600/20 border-emerald-500/40 text-emerald-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}>
-                                  {r === "all" ? "All" : r}
+                                  {r === "all" ? t("crmReadAll") : r === "unread" ? t("crmColUnread") : t("crmColRead")}
                                 </button>
                               ))}
                             </div>
@@ -1439,7 +1439,7 @@ export default function CRMPage() {
                         className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors", keywordFilter ? "bg-amber-600/10 border-amber-500/30 text-amber-400" : "hover:bg-accent")}
                       >
                         <Tag className="h-3.5 w-3.5" />
-                        {keywordFilter ? keywordFilter : "Keyword"}
+                        {keywordFilter ? keywordFilter : t("crmKeyword")}
                       </button>
                       {keywordFilterOpen && (
                         <div className="absolute right-0 top-full z-40 mt-1 w-56 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl p-3 space-y-2 max-h-80 overflow-y-auto">
@@ -1468,8 +1468,8 @@ export default function CRMPage() {
                       className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
                     >
                       {inboxLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-                      <span className="hidden sm:inline">{inboxLoading ? "Fetching..." : "Fetch Emails"}</span>
-                      <span className="sm:hidden">{inboxLoading ? "..." : "Fetch"}</span>
+                      <span className="hidden sm:inline">{inboxLoading ? t("crmFetching") : t("crmFetchEmails")}</span>
+                      <span className="sm:hidden">{inboxLoading ? "..." : t("crmFetchShort")}</span>
                     </button>
                   </div>
                 </div>
@@ -1515,7 +1515,7 @@ export default function CRMPage() {
                                   title="Click to rename"
                                   className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer hover:opacity-75 transition-opacity", col.color)}
                                   onClick={() => setEditingEmailCol(col.id)}
-                                >{col.label}</span>
+                                >{col.id === "unread" ? t("crmColUnread") : col.id === "read" ? t("crmColRead") : col.id === "sent" ? t("crmColSent") : col.label}</span>
                               )}
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">{items.length}</span>
                               <button
@@ -1527,7 +1527,7 @@ export default function CRMPage() {
                             {/* Cards */}
                             <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1 pb-4">
                               {items.length === 0 ? (
-                                <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">Drop emails here</p></div>
+                                <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">{t("crmDropEmails")}</p></div>
                               ) : items.map((msg: any) => (
                                 <div
                                   key={msg.id}
@@ -1569,7 +1569,7 @@ export default function CRMPage() {
                         }}
                         className="flex h-10 w-64 shrink-0 items-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground hover:border-emerald-500/50 hover:text-emerald-400 transition-colors px-4 self-start"
                       >
-                        <Plus className="h-4 w-4" /> Add Column
+                        <Plus className="h-4 w-4" /> {t("crmAddColumn")}
                       </button>
                     </div>
                   </div>
@@ -1584,16 +1584,16 @@ export default function CRMPage() {
                 {!activeCh.connected && inboxMessages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <Mail className="mb-2 h-6 w-6 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">No email account connected</p>
+                    <p className="text-sm text-muted-foreground">{t("crmNoEmailAccount")}</p>
                     <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">
-                      Go to Channels to connect →
+                      {t("crmGoToChannelsConnect")}
                     </Link>
                   </div>
                 ) : inboxMessages.filter((m: any) => !activeCh.id || m.provider === activeCh.id).length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <Mail className="mb-2 h-6 w-6 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
-                      {inboxFetched ? "No emails found" : "Click Fetch Emails to load your inbox"}
+                      {inboxFetched ? t("crmNoEmails") : t("crmClickFetch")}
                     </p>
                   </div>
                 ) : emailView === "table" ? (
@@ -1762,10 +1762,10 @@ export default function CRMPage() {
                 {/* Messages Toolbar */}
                 <div className="flex flex-col gap-2 border-b bg-card/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
                   <div className="flex items-center gap-2 sm:gap-3">
-                    <h1 className="text-base font-bold sm:text-lg">Messages</h1>
+                    <h1 className="text-base font-bold sm:text-lg">{t("crmMessagesTitle")}</h1>
                     <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-                      <button onClick={() => setMessagesView("kanban")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", messagesView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Kanban</button>
-                      <button onClick={() => setMessagesView("table")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", messagesView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Table</button>
+                      <button onClick={() => setMessagesView("kanban")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", messagesView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{t("crmKanban")}</button>
+                      <button onClick={() => setMessagesView("table")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", messagesView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{t("crmTable")}</button>
                     </div>
                     {channels.filter(c => c.type === "whatsapp").map(ch => (
                       <span key={ch.id} className="hidden sm:flex items-center gap-1.5 rounded-full border border-white/10 bg-muted/50 px-3 py-1.5 text-xs font-medium">
@@ -1790,8 +1790,8 @@ export default function CRMPage() {
                     className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
                   >
                     {whatsappLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />}
-                    <span className="hidden sm:inline">{whatsappLoading ? "Refreshing..." : "Refresh"}</span>
-                    <span className="sm:hidden">{whatsappLoading ? "..." : "Refresh"}</span>
+                    <span className="hidden sm:inline">{whatsappLoading ? t("crmRefreshing") : t("crmRefresh")}</span>
+                    <span className="sm:hidden">{whatsappLoading ? "..." : t("crmRefresh")}</span>
                   </button>
                   </div>
                 </div>
@@ -1817,7 +1817,7 @@ export default function CRMPage() {
                                   onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingMsgCol(null) }}
                                 />
                               ) : (
-                                <span title="Click to rename" className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer hover:opacity-75", col.color)} onClick={() => setEditingMsgCol(col.id)}>{col.label}</span>
+                                <span title="Click to rename" className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer hover:opacity-75", col.color)} onClick={() => setEditingMsgCol(col.id)}>{col.id === "unread" ? t("crmColUnread") : col.id === "read" ? t("crmColRead") : col.id === "sent" ? t("crmColSent") : col.label}</span>
                               )}
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">{items.length}</span>
                               <button title="Delete column" onClick={() => msgKanbanCols.length > 1 && setMsgKanbanCols(prev => prev.filter(c => c.id !== col.id))}
@@ -1825,7 +1825,7 @@ export default function CRMPage() {
                             </div>
                             <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1 pb-4">
                               {items.length === 0 ? (
-                                <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">Drop messages here</p></div>
+                                <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">{t("crmDropMessages")}</p></div>
                               ) : items.map((msg: any) => (
                                 <div key={msg.id} draggable
                                   onDragStart={e => { dragMsgId.current = msg.id; e.dataTransfer.effectAllowed = "move" }}
@@ -1843,7 +1843,7 @@ export default function CRMPage() {
                       })}
                       <button onClick={() => { const id = `col-${Date.now()}`; setMsgKanbanCols(prev => [...prev, { id, label: "New Column", color: COL_COLORS[msgKanbanCols.length % COL_COLORS.length] }]); setTimeout(() => setEditingMsgCol(id), 50) }}
                         className="flex h-10 w-64 shrink-0 items-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground hover:border-emerald-500/50 hover:text-emerald-400 transition-colors px-4 self-start">
-                        <Plus className="h-4 w-4" /> Add Column
+                        <Plus className="h-4 w-4" /> {t("crmAddColumn")}
                       </button>
                     </div>
                   </div>
@@ -1853,13 +1853,13 @@ export default function CRMPage() {
                 {whatsappConnections.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <Phone className="mb-2 h-6 w-6 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">No WhatsApp account connected</p>
-                    <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">Go to Channels to connect →</Link>
+                    <p className="text-sm text-muted-foreground">{t("crmNoWhatsAppAccount")}</p>
+                    <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">{t("crmGoToChannelsConnect")}</Link>
                   </div>
                 ) : whatsappMessages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <Phone className="mb-2 h-6 w-6 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">{whatsappFetched ? "No messages yet" : "Click Refresh to load messages"}</p>
+                    <p className="text-sm text-muted-foreground">{whatsappFetched ? t("crmNoMessages") : t("crmClickRefresh")}</p>
                   </div>
                 ) : messagesView === "table" ? (
                   <div className="rounded-xl border overflow-x-auto" onClick={() => setMsgStatusOpen(null)}>
@@ -2016,10 +2016,10 @@ export default function CRMPage() {
                 {/* Calendar Toolbar */}
                 <div className="flex flex-col gap-2 border-b bg-card/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
                   <div className="flex items-center gap-2 sm:gap-3">
-                    <h1 className="text-base font-bold sm:text-lg">Calendar</h1>
+                    <h1 className="text-base font-bold sm:text-lg">{t("crmCalendarTitle")}</h1>
                     <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-                      <button onClick={() => setCalendarView("kanban")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", calendarView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Kanban</button>
-                      <button onClick={() => setCalendarView("table")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", calendarView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>Table</button>
+                      <button onClick={() => setCalendarView("kanban")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", calendarView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{t("crmKanban")}</button>
+                      <button onClick={() => setCalendarView("table")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", calendarView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{t("crmTable")}</button>
                     </div>
                     {channels.filter(c => c.type === "calendar").map(ch => (
                       <span key={ch.id} className="hidden sm:flex items-center gap-1.5 rounded-full border border-white/10 bg-muted/50 px-3 py-1.5 text-xs font-medium">
@@ -2030,7 +2030,7 @@ export default function CRMPage() {
                   </div>
                   <div className="flex items-center justify-end gap-2 sm:gap-3">
                     <button className="flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium hover:bg-accent transition-colors sm:px-3">
-                      <Filter className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Filter</span>
+                      <Filter className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{t("crmFilter")}</span>
                     </button>
                     <button
                       onClick={fetchCalendar}
@@ -2038,8 +2038,8 @@ export default function CRMPage() {
                       className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
                     >
                       {calendarLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ClipboardList className="h-3.5 w-3.5" />}
-                      <span className="hidden sm:inline">{calendarLoading ? "Syncing..." : "Sync Calendar"}</span>
-                      <span className="sm:hidden">{calendarLoading ? "..." : "Sync"}</span>
+                      <span className="hidden sm:inline">{calendarLoading ? t("crmSyncing") : t("crmSyncCalendarBtn")}</span>
+                      <span className="sm:hidden">{calendarLoading ? "..." : t("crmSyncShort")}</span>
                     </button>
                   </div>
                 </div>
@@ -2073,7 +2073,7 @@ export default function CRMPage() {
                                   onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingCalCol(null) }}
                                 />
                               ) : (
-                                <span title="Click to rename" className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer hover:opacity-75", col.color)} onClick={() => setEditingCalCol(col.id)}>{col.label}</span>
+                                <span title="Click to rename" className={cn("rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer hover:opacity-75", col.color)} onClick={() => setEditingCalCol(col.id)}>{col.id === "today" ? t("crmColToday") : col.id === "week" ? t("crmColThisWeek") : col.id === "upcoming" ? t("crmColUpcoming") : col.label}</span>
                               )}
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">{items.length}</span>
                               <button title="Delete column" onClick={() => calKanbanCols.length > 1 && setCalKanbanCols(prev => prev.filter(c => c.id !== col.id))}
@@ -2081,7 +2081,7 @@ export default function CRMPage() {
                             </div>
                             <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1 pb-4">
                               {items.length === 0 ? (
-                                <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">Drop events here</p></div>
+                                <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">{t("crmDropEvents")}</p></div>
                               ) : items.map((ev: any) => (
                                 <div key={ev.id} draggable
                                   onDragStart={e => { dragCalId.current = ev.id; e.dataTransfer.effectAllowed = "move" }}
@@ -2104,7 +2104,7 @@ export default function CRMPage() {
                       })}
                       <button onClick={() => { const id = `col-${Date.now()}`; setCalKanbanCols(prev => [...prev, { id, label: "New Column", color: COL_COLORS[calKanbanCols.length % COL_COLORS.length] }]); setTimeout(() => setEditingCalCol(id), 50) }}
                         className="flex h-10 w-64 shrink-0 items-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground hover:border-emerald-500/50 hover:text-emerald-400 transition-colors px-4 self-start">
-                        <Plus className="h-4 w-4" /> Add Column
+                        <Plus className="h-4 w-4" /> {t("crmAddColumn")}
                       </button>
                     </div>
                   </div>
@@ -2427,9 +2427,9 @@ export default function CRMPage() {
             </button>
             <div className="mb-4 flex items-center gap-3">
               <Shield className="h-6 w-6 text-emerald-400" />
-              <h3 className="text-lg font-semibold text-white">Private Data Legal Notice</h3>
+              <h3 className="text-lg font-semibold text-white">{t("crmLegalTitle")}</h3>
             </div>
-            <p className="mb-4 text-sm text-muted-foreground">Your customer data is protected under the following applicable laws:</p>
+            <p className="mb-4 text-sm text-muted-foreground">{t("crmLegalIntro")}</p>
             <div className="mb-4 grid gap-2">
               {[
                 { j: "Mexico", l: "LFPDPPP" },
@@ -2446,9 +2446,9 @@ export default function CRMPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <h4 className="mb-1.5 text-sm font-semibold text-white">Your rights (GDPR Art. 17 & 20 / LFPDPPP Art. 22-26):</h4>
+                <h4 className="mb-1.5 text-sm font-semibold text-white">{t("crmLegalRights")}</h4>
                 <ul className="space-y-1">
-                  {["Full ownership of your data", "Export your data at any time", "Request permanent deletion within 30 days of cancellation"].map((r, i) => (
+                  {[t("crmLegalRight1"), t("crmLegalRight2"), t("crmLegalRight3")].map((r, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
                       <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />{r}
                     </li>
@@ -2456,9 +2456,9 @@ export default function CRMPage() {
                 </ul>
               </div>
               <div>
-                <h4 className="mb-1.5 text-sm font-semibold text-white">Platform obligations:</h4>
+                <h4 className="mb-1.5 text-sm font-semibold text-white">{t("crmLegalObligations")}</h4>
                 <ul className="space-y-1">
-                  {["We act exclusively as Data Processor", "You remain the Data Controller", "Your data never trains public AI models"].map((o, i) => (
+                  {[t("crmLegalObligation1"), t("crmLegalObligation2"), t("crmLegalObligation3")].map((o, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
                       <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />{o}
                     </li>
@@ -2466,19 +2466,19 @@ export default function CRMPage() {
                 </ul>
               </div>
               <div>
-                <h4 className="mb-1.5 text-sm font-semibold text-white">Source transparency:</h4>
+                <h4 className="mb-1.5 text-sm font-semibold text-white">{t("crmLegalTransparency")}</h4>
                 <ul className="space-y-1">
-                  {["Every response cites internal vs external sources", "External web research includes citations", "Minimum hallucinated data — you verify before use"].map((t, i) => (
+                  {[t("crmLegalTransparency1"), t("crmLegalTransparency2"), t("crmLegalTransparency3")].map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />{t}
+                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />{item}
                     </li>
                   ))}
                 </ul>
               </div>
               <div>
-                <h4 className="mb-1.5 text-sm font-semibold text-white">Limitation of liability:</h4>
+                <h4 className="mb-1.5 text-sm font-semibold text-white">{t("crmLegalLiability")}</h4>
                 <ul className="space-y-1">
-                  {["We are not liable for decisions you make based on AI-generated outputs", "We are not liable for third-party platform interruptions"].map((l, i) => (
+                  {[t("crmLegalLiability1"), t("crmLegalLiability2")].map((l, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
                       <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />{l}
                     </li>
@@ -2487,12 +2487,12 @@ export default function CRMPage() {
               </div>
             </div>
             <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-600/5 p-4">
-              <p className="text-sm text-emerald-400">By continuing to use this CRM dashboard, you confirm acceptance of these legal terms.</p>
+              <p className="text-sm text-emerald-400">{t("crmLegalAccept")}</p>
             </div>
             <div className="mt-3 flex items-center justify-center gap-3 text-xs text-muted-foreground">
-              <Link href="/privacy" className="underline hover:text-emerald-400 transition-colors">Privacy Policy</Link>
+              <Link href="/privacy" className="underline hover:text-emerald-400 transition-colors">{t("crmPrivacyPolicy")}</Link>
               <span className="text-white/20">|</span>
-              <Link href="/terms" className="underline hover:text-emerald-400 transition-colors">Terms of Service</Link>
+              <Link href="/terms" className="underline hover:text-emerald-400 transition-colors">{t("crmTermsOfService")}</Link>
             </div>
           </div>
         </div>
