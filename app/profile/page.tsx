@@ -6,6 +6,7 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Search, Save, Info, X, ChevronDown, Check, Loader2, User, LogOut, Menu, CreditCard, ArrowRight, Building2, Plus, Settings, Trash2 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
+import { NotificationBell } from "@/components/notification-bell"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -545,6 +546,7 @@ export default function ProfilePage() {
             </button>
           </div>
           <TrialPill className="hidden md:flex" />
+          <NotificationBell />
           <Link href="/chat" className={cn("relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-xs font-bold text-white transition-colors overflow-hidden", form.avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
             {!form.avatarUrl && (form.fullName.trim()
               ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase"
-import { syncStripeSeats } from "@/lib/stripe-seats"
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,7 +9,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    if (!["owner", "admin", "manager", "member"].includes(role)) {
+    if (!["admin", "manager", "member"].includes(role)) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 })
     }
 
@@ -27,71 +26,112 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    // Check if user already exists in Supabase Auth
+    // Check for existing pending invitation
+    const { data: existing } = await supabase
+      .from("workspace_invitations")
+      .select("id, status")
+      .eq("workspace_id", workspaceId)
+      .eq("invited_email", email)
+      .eq("status", "pending")
+      .single()
+
+    if (existing) {
+      return NextResponse.json({ error: "A pending invitation already exists for this email" }, { status: 400 })
+    }
+
+    // Check if user is already a member
     const { data: userList } = await supabase.auth.admin.listUsers()
     const targetUser = userList?.users?.find(u => u.email === email)
 
     if (targetUser) {
-      // User exists — add to workspace_members directly
       if (targetUser.id === requestingUserId) {
         return NextResponse.json({ error: "You are already a member of this workspace" }, { status: 400 })
       }
 
-      const { error } = await supabase
+      const { data: existingMember } = await supabase
         .from("workspace_members")
-        .upsert(
-          { workspace_id: workspaceId, user_id: targetUser.id, role, invited_by: requestingUserId },
-          { onConflict: "workspace_id,user_id" }
-        )
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", targetUser.id)
+        .single()
 
-      if (error) throw error
+      if (existingMember) {
+        return NextResponse.json({ error: "User is already a member of this workspace" }, { status: 400 })
+      }
+    }
 
-      // Sync Stripe seats (+1)
-      await syncStripeSeats(requestingUserId)
+    // Get inviter profile for notification
+    const { data: inviterProfile } = await supabase
+      .from("profiles")
+      .select("full_name, contact_email")
+      .eq("user_id", requestingUserId)
+      .single()
 
-      // Send notification email via Supabase invite
+    // Create invitation record with token
+    const { data: invitation, error: inviteError } = await supabase
+      .from("workspace_invitations")
+      .insert({
+        workspace_id: workspaceId,
+        invited_email: email,
+        role,
+        invited_by: requestingUserId,
+        status: "pending",
+      })
+      .select("token")
+      .single()
+
+    if (inviteError) throw inviteError
+
+    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || ""}/invite?token=${invitation.token}`
+    const wsName = workspaceName || workspace.name
+
+    if (targetUser) {
+      // User exists — create in-app notification
+      await supabase
+        .from("notifications")
+        .insert({
+          user_id: targetUser.id,
+          type: "workspace_invite",
+          title: `You've been invited to join ${wsName}`,
+          body: `${inviterProfile?.full_name || inviterProfile?.contact_email || "Someone"} invited you to join "${wsName}" as ${role}.`,
+          data: {
+            workspace_id: workspaceId,
+            workspace_name: wsName,
+            role,
+            token: invitation.token,
+            inviter_name: inviterProfile?.full_name || inviterProfile?.contact_email,
+          },
+        })
+
+      // Also send email via Supabase
       await supabase.auth.admin.inviteUserByEmail(email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || ""}/chat`,
+        redirectTo: inviteUrl,
       })
 
       return NextResponse.json({
         success: true,
-        userId: targetUser.id,
-        invited: true,
+        inviteUrl,
         message: `Invitation sent to ${email}`,
       })
     } else {
-      // User doesn't exist — invite via Supabase to create account + send email
-      const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || ""}/chat`,
+      // User doesn't exist — send Supabase invite to create account
+      const { error: emailError } = await supabase.auth.admin.inviteUserByEmail(email, {
+        redirectTo: inviteUrl,
         data: {
           workspace_id: workspaceId,
-          workspace_name: workspaceName || workspace.name,
+          workspace_name: wsName,
           invited_by: requestingUserId,
           role,
+          invite_token: invitation.token,
         },
       })
 
-      if (inviteError) throw inviteError
-
-      // Store pending invitation in workspace_members with a placeholder
-      // The user will be fully linked when they accept the invite and sign up
-      if (inviteData?.user?.id) {
-        await supabase
-          .from("workspace_members")
-          .upsert(
-            { workspace_id: workspaceId, user_id: inviteData.user.id, role, invited_by: requestingUserId },
-            { onConflict: "workspace_id,user_id" }
-          )
-
-        // Sync Stripe seats (+1)
-        await syncStripeSeats(requestingUserId)
-      }
+      if (emailError) throw emailError
 
       return NextResponse.json({
         success: true,
-        invited: true,
-        message: `Invitation email sent to ${email}. They'll join the workspace after signing up.`,
+        inviteUrl,
+        message: `Invitation email sent to ${email}. They'll join after signing up.`,
       })
     }
   } catch (err: any) {

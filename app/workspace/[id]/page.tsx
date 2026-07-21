@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, UserPlus, Trash2, Loader2, Check, X, Settings } from "lucide-react"
+import { ArrowLeft, UserPlus, Trash2, Loader2, Check, X, Settings, Copy, Clock } from "lucide-react"
 import { getFirstDeptIcon, getDeptLabels } from "@/lib/workspace-icons"
 import Link from "next/link"
 import { useAuth } from "@/app/auth-provider"
@@ -41,6 +41,9 @@ export default function WorkspaceSettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>("admin")
   const [inviting, setInviting] = useState(false)
+  const [lastInviteUrl, setLastInviteUrl] = useState("")
+  const [copied, setCopied] = useState(false)
+  const [pendingInvites, setPendingInvites] = useState<any[]>([])
 
   const [editDesc, setEditDesc] = useState(workspace?.description ?? "")
   const [savingDesc, setSavingDesc] = useState(false)
@@ -54,6 +57,12 @@ export default function WorkspaceSettingsPage() {
       setMembersLoading(true)
       const m = await getWorkspaceMembers(id)
       setMembers(m)
+      // Also load pending invitations
+      const inviteRes = await fetch(`/api/workspace/invitations?workspaceId=${id}`)
+      if (inviteRes.ok) {
+        const inviteData = await inviteRes.json()
+        setPendingInvites(inviteData.invitations || [])
+      }
     } catch {
     } finally {
       setMembersLoading(false)
@@ -81,7 +90,8 @@ export default function WorkspaceSettingsPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to invite")
-      toast({ title: "Member added", description: `${inviteEmail} added as ${inviteRole}.` })
+      toast({ title: "Invitation sent", description: data.message || `Invitation sent to ${inviteEmail}.` })
+      if (data.inviteUrl) setLastInviteUrl(data.inviteUrl)
       setInviteEmail("")
       await loadMembers()
     } catch (err: any) {
@@ -252,6 +262,41 @@ export default function WorkspaceSettingsPage() {
                   {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                 </button>
               </div>
+              {lastInviteUrl && (
+                <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={lastInviteUrl}
+                    className="flex-1 bg-transparent text-xs text-muted-foreground outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(lastInviteUrl)
+                      setCopied(true)
+                      setTimeout(() => setCopied(false), 2000)
+                    }}
+                    className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-white"
+                  >
+                    {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              )}
+              {pendingInvites.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest">Pending invitations</p>
+                  {pendingInvites.map(inv => (
+                    <div key={inv.id} className="flex items-center gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-4 py-2">
+                      <Clock className="h-3.5 w-3.5 shrink-0 text-[#FFBF00]" />
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-sm font-medium">{inv.invited_email}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{inv.role} · Pending</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

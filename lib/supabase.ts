@@ -1149,3 +1149,68 @@ export async function uploadSupportScreenshot(userId: string, file: File) {
   const { data } = supabase.storage.from("support-screenshots").getPublicUrl(filePath)
   return data.publicUrl
 }
+
+// ─── Notifications ───
+
+export type Notification = {
+  id: string
+  user_id: string
+  type: string
+  title: string
+  body: string | null
+  data: any
+  read: boolean
+  created_at: string
+}
+
+export async function getNotifications(userId: string): Promise<Notification[]> {
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(50)
+
+  if (error) throw error
+  return (data ?? []) as Notification[]
+}
+
+export async function markNotificationRead(notificationId: string): Promise<void> {
+  const { error } = await supabase
+    .from("notifications")
+    .update({ read: true })
+    .eq("id", notificationId)
+
+  if (error) throw error
+}
+
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from("notifications")
+    .update({ read: true })
+    .eq("user_id", userId)
+    .eq("read", false)
+
+  if (error) throw error
+}
+
+export function subscribeToNotifications(
+  userId: string,
+  callback: (payload: { eventType: string; new: any; old: any }) => void
+) {
+  const channel = supabase
+    .channel("notifications")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: any) => callback(payload)
+    )
+    .subscribe()
+
+  return channel
+}
