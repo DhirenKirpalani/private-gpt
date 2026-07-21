@@ -42,7 +42,8 @@ export function isActive(sub: Subscription | null): boolean {
 }
 
 export function isPaid(sub: Subscription | null): boolean {
-  return isActive(sub)
+  if (!sub) return false
+  return sub.status === "active"
 }
 
 export function isTrialExpired(sub: Subscription | null): boolean {

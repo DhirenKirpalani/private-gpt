@@ -171,6 +171,7 @@ export default function ChatPage() {
   const channelsPanelRef = useRef<HTMLDivElement>(null)
   const [channelsLoading, setChannelsLoading] = useState(false)
   const [connectedChannels, setConnectedChannels] = useState<{ id: string; name: string; icon: React.ReactNode; connected: boolean; detail?: string }[]>([])
+  const driveConnected = connectedChannels.some(ch => ch.id === "googledrive" && ch.connected)
 
   const [uploadPreview, setUploadPreview] = useState<{ file: File; category: string }[]>([])
   const [openCategoryIndex, setOpenCategoryIndex] = useState<number | null>(null)
@@ -1389,8 +1390,8 @@ export default function ChatPage() {
                       {showKbPanel && (
                         <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
                           <div className="border-b border-white/5 px-3 py-2">
-                            <p className="text-xs font-semibold text-white">Knowledge Base</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">Click a doc or type #N to reference it</p>
+                            <p className="text-xs font-semibold text-white">{t("chatKnowledgeBase")}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{t("chatKbPanelHint")}</p>
                           </div>
                           <div className="max-h-48 overflow-y-auto py-1">
                             {kbLoading && (
@@ -1399,7 +1400,7 @@ export default function ChatPage() {
                               </div>
                             )}
                             {!kbLoading && kbDocs.length === 0 && (
-                              <p className="px-3 py-4 text-xs text-muted-foreground text-center">No documents uploaded yet.</p>
+                              <p className="px-3 py-4 text-xs text-muted-foreground text-center">{t("chatKbEmpty")}</p>
                             )}
                             {!kbLoading && kbDocs.map(doc => (
                               <button
@@ -1427,8 +1428,9 @@ export default function ChatPage() {
                         )}
                       >
                         <Paperclip className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Upload</span>
+                        <span className="hidden sm:inline">{t("chatUpload")}</span>
                       </button>
+                      {driveConnected && (
                       <button
                         type="button"
                         onClick={() => driveFileInputRef.current?.click()}
@@ -1440,8 +1442,9 @@ export default function ChatPage() {
                         )}
                       >
                         <HardDrive className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Drive</span>
+                        <span className="hidden sm:inline">{t("chatDrive")}</span>
                       </button>
+                      )}
                       {/* Knowledge Base button */}
                       <button
                         onClick={() => handleTabClick("knowledge")}
@@ -1454,15 +1457,15 @@ export default function ChatPage() {
                         )}
                       >
                         <BookOpen className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Knowledge Base</span>
+                        <span className="hidden sm:inline">{t("chatKnowledgeBase")}</span>
                       </button>
                       {/* Channels button with dropdown */}
                       <div className="relative" ref={channelsPanelRef}>
                         {showChannelsPanel && (
                           <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
                             <div className="border-b border-white/5 px-3 py-2">
-                              <p className="text-xs font-semibold text-white">Channels</p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">Connected messaging and calendar accounts</p>
+                              <p className="text-xs font-semibold text-white">{t("chatChannels")}</p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">{t("chatChannelsPanelHint")}</p>
                             </div>
                             <div className="max-h-48 overflow-y-auto py-1">
                               {channelsLoading && (
@@ -1471,7 +1474,7 @@ export default function ChatPage() {
                                 </div>
                               )}
                               {!channelsLoading && connectedChannels.filter(ch => ch.connected).length === 0 && (
-                                <p className="px-3 py-4 text-xs text-muted-foreground text-center">No channels connected.</p>
+                                <p className="px-3 py-4 text-xs text-muted-foreground text-center">{t("chatChannelsEmpty")}</p>
                               )}
                               {!channelsLoading && connectedChannels.filter(ch => ch.connected).map((ch, i) => (
                                 <button
@@ -1501,7 +1504,7 @@ export default function ChatPage() {
                           )}
                         >
                           <Radio className="h-3.5 w-3.5" />
-                          <span className="hidden sm:inline">Channels</span>
+                          <span className="hidden sm:inline">{t("chatChannels")}</span>
                         </button>
                       </div>
                       {/* Web Search button */}
@@ -1516,7 +1519,7 @@ export default function ChatPage() {
                         )}
                       >
                         <Globe className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Web Search</span>
+                        <span className="hidden sm:inline">{t("chatWebSearch")}</span>
                       </button>
                     </div>
                     <button
@@ -1763,8 +1766,8 @@ export default function ChatPage() {
                     {showKbPanel && (
                       <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
                         <div className="border-b border-white/5 px-3 py-2">
-                          <p className="text-xs font-semibold text-white">Knowledge Base</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">Click a doc or type #N to reference it</p>
+                          <p className="text-xs font-semibold text-white">{t("chatKnowledgeBase")}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">{t("chatKbPanelHint")}</p>
                         </div>
                         <div className="max-h-48 overflow-y-auto py-1">
                           {kbLoading && (
@@ -1773,7 +1776,7 @@ export default function ChatPage() {
                             </div>
                           )}
                           {!kbLoading && kbDocs.length === 0 && (
-                            <p className="px-3 py-4 text-xs text-muted-foreground text-center">No documents uploaded yet.</p>
+                            <p className="px-3 py-4 text-xs text-muted-foreground text-center">{t("chatKbEmpty")}</p>
                           )}
                           {!kbLoading && kbDocs.map(doc => (
                             <button
@@ -1801,8 +1804,9 @@ export default function ChatPage() {
                       )}
                     >
                       <Paperclip className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">Upload</span>
+                      <span className="hidden sm:inline">{t("chatUpload")}</span>
                     </button>
+                    {driveConnected && (
                     <button
                       type="button"
                       onClick={() => driveFileInputRef.current?.click()}
@@ -1814,8 +1818,9 @@ export default function ChatPage() {
                       )}
                     >
                       <HardDrive className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">Drive</span>
+                      <span className="hidden sm:inline">{t("chatDrive")}</span>
                     </button>
+                    )}
                     {/* Knowledge Base button */}
                     <button
                       onClick={() => handleTabClick("knowledge")}
@@ -1828,15 +1833,15 @@ export default function ChatPage() {
                       )}
                     >
                       <BookOpen className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">Knowledge Base</span>
+                      <span className="hidden sm:inline">{t("chatKnowledgeBase")}</span>
                     </button>
                     {/* Channels button with dropdown */}
                     <div className="relative" ref={channelsPanelRef}>
                       {showChannelsPanel && (
                         <div className="absolute bottom-full mb-2 left-0 z-50 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
                           <div className="border-b border-white/5 px-3 py-2">
-                            <p className="text-xs font-semibold text-white">Channels</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">Connected messaging and calendar accounts</p>
+                            <p className="text-xs font-semibold text-white">{t("chatChannels")}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{t("chatChannelsPanelHint")}</p>
                           </div>
                           <div className="max-h-48 overflow-y-auto py-1">
                             {channelsLoading && (
@@ -1845,7 +1850,7 @@ export default function ChatPage() {
                               </div>
                             )}
                             {!channelsLoading && connectedChannels.filter(ch => ch.connected).length === 0 && (
-                              <p className="px-3 py-4 text-xs text-muted-foreground text-center">No channels connected.</p>
+                              <p className="px-3 py-4 text-xs text-muted-foreground text-center">{t("chatChannelsEmpty")}</p>
                             )}
                             {!channelsLoading && connectedChannels.filter(ch => ch.connected).map((ch, i) => (
                               <button
@@ -1875,7 +1880,7 @@ export default function ChatPage() {
                         )}
                       >
                         <Radio className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Channels</span>
+                        <span className="hidden sm:inline">{t("chatChannels")}</span>
                       </button>
                     </div>
                     {/* Web Search button */}
@@ -1890,7 +1895,7 @@ export default function ChatPage() {
                       )}
                     >
                       <Globe className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">Web Search</span>
+                      <span className="hidden sm:inline">{t("chatWebSearch")}</span>
                     </button>
                   </div>
                   <button

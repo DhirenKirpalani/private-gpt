@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-
+import { useI18n } from "@/lib/i18n"
 import { DEPT_ICONS as ICONS, getDeptLabel } from "@/lib/workspace-icons"
 
 type Props = {
@@ -20,6 +20,7 @@ type Props = {
 
 export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
   const { createAndSelectWorkspace, workspaces } = useWorkspace()
+  const { t } = useI18n()
   const [selectedDepts, setSelectedDepts] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -74,8 +75,24 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
 
   const getDeptLabel = (emoji: string) => ICONS.find(i => i.emoji === emoji)?.label ?? emoji
 
+  const deptLabelMap: Record<string, string> = {
+    "🤝": t("wsDeptSales"),
+    "📈": t("wsDeptMarketing"),
+    "⚖️": t("wsDeptLegal"),
+    "🏭": t("wsDeptOperations"),
+    "💳": t("wsDeptFinance"),
+    "🧑\u200d💼": t("wsDeptHR"),
+    "🏢": t("wsDeptManagement"),
+    "🌐": t("wsDeptGeneral"),
+    "💡": t("wsDeptInnovation"),
+    "🎯": t("wsDeptStrategy"),
+    "🛒": t("wsDeptCommerce"),
+    "🌍": t("wsDeptGlobal"),
+  }
+  const getTranslatedDeptLabel = (emoji: string) => deptLabelMap[emoji] ?? getDeptLabel(emoji)
+
   const handleCreate = async () => {
-    if (selectedDepts.length === 0) { setError("Select at least one department"); return }
+    if (selectedDepts.length === 0) { setError(t("createWorkspaceErrorSelect")); return }
     setLoading(true)
     setError("")
     try {
@@ -122,7 +139,7 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
       onCreated?.(ws.id)
       onClose()
     } catch (err: any) {
-      setError(err.message || "Failed to create workspace")
+      setError(err.message || t("createWorkspaceErrorFailed"))
     } finally {
       setLoading(false)
     }
@@ -140,7 +157,7 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
 
         <div className="p-5 sm:p-6 max-h-[80vh] overflow-y-auto">
           <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Create workspace</h2>
+            <h2 className="text-lg font-semibold">{t("createWorkspaceTitle")}</h2>
             <button
               onClick={onClose}
               className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/10 hover:text-white transition-colors"
@@ -153,8 +170,8 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
             {/* Department selection */}
             <div>
               <Label className="mb-2 block">
-                Departments{" "}
-                <span className="text-muted-foreground text-xs">(select all that apply)</span>
+                {t("createWorkspaceDepts")}{" "}
+                <span className="text-muted-foreground text-xs">{t("createWorkspaceDeptsHint")}</span>
               </Label>
               <div className="flex flex-wrap gap-2">
                 {ICONS.map(({ emoji, label }) => {
@@ -175,9 +192,9 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
                       )}
                     >
                       {(() => { const IconComp = ICONS.find(i => i.emoji === emoji)?.icon; return IconComp ? <IconComp className="h-3.5 w-3.5 shrink-0" /> : null })()}
-                      <span>{label}</span>
+                      <span>{deptLabelMap[emoji] ?? label}</span>
                       {selected && <Check className="h-3 w-3" />}
-                      {alreadyUsed && <span className="text-[10px] text-white/20">in use</span>}
+                      {alreadyUsed && <span className="text-[10px] text-white/20">{t("createWorkspaceInUse")}</span>}
                     </button>
                   )
                 })}
@@ -194,12 +211,12 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
                       {/* Department header */}
                       <div className="mb-3 flex items-center gap-2">
                         {(() => { const IconComp = ICONS.find(i => i.emoji === emoji)?.icon; return IconComp ? <IconComp className="h-4 w-4 text-muted-foreground" /> : null })()}
-                        <span className="text-sm font-semibold text-white">{getDeptLabel(emoji)}</span>
+                        <span className="text-sm font-semibold text-white">{getTranslatedDeptLabel(emoji)}</span>
                       </div>
 
                       {/* Description */}
                       <Input
-                        placeholder="What does this department focus on?"
+                        placeholder={t("createWorkspaceDeptFocus")}
                         value={data.description}
                         onChange={e => updateDeptDesc(emoji, e.target.value)}
                         className="mb-3 text-xs"
@@ -209,13 +226,13 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
                       <div className="space-y-2">
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <UserPlus className="h-3 w-3" />
-                          <span>Add team members by email</span>
+                          <span>{t("createWorkspaceAddMembers")}</span>
                         </div>
                         {data.members.map((email, idx) => (
                           <div key={idx} className="flex items-center gap-2">
                             <Input
                               type="email"
-                              placeholder="colleague@company.com"
+                              placeholder={t("createWorkspaceMemberPlaceholder")}
                               value={email}
                               onChange={e => updateDeptMember(emoji, idx, e.target.value)}
                               className="text-xs"
@@ -234,7 +251,7 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
                           onClick={() => addDeptMember(emoji)}
                           className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
                         >
-                          <Plus className="h-3 w-3" /> Add another member
+                          <Plus className="h-3 w-3" /> {t("createWorkspaceAddAnother")}
                         </button>
                       </div>
                     </div>
@@ -253,7 +270,7 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
                 className="w-full sm:flex-1"
                 disabled={loading}
               >
-                Cancel
+                {t("createWorkspaceCancel")}
               </Button>
               <Button
                 onClick={handleCreate}
@@ -261,7 +278,7 @@ export function CreateWorkspaceModal({ onClose, onCreated }: Props) {
                 disabled={loading || selectedDepts.length === 0}
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Create workspace
+                {t("createWorkspaceCreate")}
               </Button>
             </div>
           </div>

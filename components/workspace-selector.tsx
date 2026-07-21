@@ -7,6 +7,7 @@ import { useWorkspace } from "@/app/workspace-provider"
 import { useAuth } from "@/app/auth-provider"
 import { cn } from "@/lib/utils"
 import { CreateWorkspaceModal } from "./create-workspace-modal"
+import { useI18n } from "@/lib/i18n"
 import Link from "next/link"
 
 type Props = {
@@ -28,16 +29,17 @@ function WorkspaceDropdown({
   sidebar?: boolean
 }) {
   const { workspaces, currentWorkspace, setCurrentWorkspace } = useWorkspace()
+  const { t } = useI18n()
 
   return (
     <div className={cn(
-      "absolute z-[200] w-56 min-w-[200px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-emerald-500/20 bg-[#0f1520] shadow-2xl shadow-black/70",
+      "absolute z-[200] w-64 min-w-[220px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-emerald-500/20 bg-[#0f1520] shadow-2xl shadow-black/70",
       sidebar ? "bottom-full left-0 mb-1.5" : "right-0 top-full mt-1.5"
     )}>
       {/* Workspace list */}
       <div className="max-h-52 overflow-y-auto p-1.5">
         {workspaces.filter(ws => ws.name !== "Admin's Workspace").length === 0 ? (
-          <p className="px-3 py-3 text-xs text-muted-foreground text-center">No workspaces yet</p>
+          <p className="px-3 py-3 text-xs text-muted-foreground text-center">{t("profileNoWorkspaces")}</p>
         ) : (
           workspaces.filter(ws => ws.name !== "Admin's Workspace").map(ws => {
             const active = currentWorkspace?.id === ws.id
@@ -75,7 +77,7 @@ function WorkspaceDropdown({
               )}
             >
               <User className="h-3.5 w-3.5 shrink-0" />
-              <span>Personal mode</span>
+              <span className="truncate">{t("profilePersonalMode")}</span>
               {isPersonal && <Check className="h-3.5 w-3.5 shrink-0 ml-auto text-emerald-400" />}
             </button>
           ) : null
@@ -85,7 +87,7 @@ function WorkspaceDropdown({
           className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-400"
         >
           <Plus className="h-3.5 w-3.5 shrink-0" />
-          <span>New workspace</span>
+          <span className="truncate">{t("profileNewWorkspace")}</span>
         </button>
         {currentWorkspace && (
           <Link
@@ -94,7 +96,7 @@ function WorkspaceDropdown({
             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-white"
           >
             <Settings className="h-3.5 w-3.5 shrink-0" />
-            <span>Workspace settings</span>
+            <span className="truncate">{t("profileWorkspaceSettings")}</span>
           </Link>
         )}
       </div>

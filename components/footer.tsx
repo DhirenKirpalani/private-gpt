@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { FaLinkedin, FaFacebook } from "react-icons/fa"
 import { useI18n } from "@/lib/i18n"
 import { useAuth } from "@/app/auth-provider"
+import { cn } from "@/lib/utils"
 
 export function Footer() {
   const pathname = usePathname()
@@ -156,7 +157,7 @@ export function Footer() {
               onClick={handleCTA}
               className="inline-flex items-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-700/50 hover:scale-105"
             >
-              {user ? "Go to Chat" : t("getStartedFree")}
+              {user ? t("goToChat") : t("getStartedFree")}
             </button>
           </div>
         </div>
@@ -167,26 +168,38 @@ export function Footer() {
             {t("copyright", { year: new Date().getFullYear() })}
           </p>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
             <Link
               href="/privacy"
-              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className={cn(
+                "group relative px-1 py-1 text-xs font-medium transition-colors duration-200",
+                pathname === "/privacy" ? "text-white" : "text-muted-foreground hover:text-white"
+              )}
             >
-              {t("privacy")}
+              <span className={cn("absolute bottom-0 left-1 right-1 h-px rounded-full bg-emerald-400 transition-transform duration-300 ease-out origin-left", pathname === "/privacy" ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100")} />
+              <span className="relative z-10 whitespace-nowrap">{t("privacy")}</span>
             </Link>
 
             <Link
               href="/terms"
-              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className={cn(
+                "group relative px-1 py-1 text-xs font-medium transition-colors duration-200",
+                pathname === "/terms" ? "text-white" : "text-muted-foreground hover:text-white"
+              )}
             >
-              {t("terms")}
+              <span className={cn("absolute bottom-0 left-1 right-1 h-px rounded-full bg-emerald-400 transition-transform duration-300 ease-out origin-left", pathname === "/terms" ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100")} />
+              <span className="relative z-10 whitespace-nowrap">{t("terms")}</span>
             </Link>
 
             <Link
               href="/disclaimer"
-              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className={cn(
+                "group relative px-1 py-1 text-xs font-medium transition-colors duration-200",
+                pathname === "/disclaimer" ? "text-white" : "text-muted-foreground hover:text-white"
+              )}
             >
-              Disclaimer
+              <span className={cn("absolute bottom-0 left-1 right-1 h-px rounded-full bg-emerald-400 transition-transform duration-300 ease-out origin-left", pathname === "/disclaimer" ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100")} />
+              <span className="relative z-10 whitespace-nowrap">{t("disclaimer")}</span>
             </Link>
           </div>
         </div>

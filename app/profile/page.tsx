@@ -1308,7 +1308,7 @@ export default function ProfilePage() {
                     <div className="mb-2 flex items-center gap-3">
                       <Image
                         src={form.logoUrl}
-                        alt="Company logo"
+                        alt={t("profileCompanyLogo")}
                         width={160}
                         height={40}
                         className="h-10 w-auto max-w-[160px] rounded object-contain"
@@ -1321,7 +1321,7 @@ export default function ProfilePage() {
                       {t("profileBrowse")}
                     </div>
                     <span className="truncate text-muted-foreground">
-                      {form.logoUrl ? "Change logo" : t("profilePlaceholderLogo")}
+                      {form.logoUrl ? t("profileChangeLogo") : t("profilePlaceholderLogo")}
                     </span>
                     <input
                       type="file"
@@ -1360,7 +1360,7 @@ export default function ProfilePage() {
                   <div className="grid grid-cols-2 gap-3">
                     {/* Primary Color */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Primary Color</Label>
+                      <Label className="text-xs text-muted-foreground">{t("profileLabelPrimaryColor")}</Label>
                       <div className="flex items-center gap-2">
                         <div className="relative">
                           <button
@@ -1404,7 +1404,7 @@ export default function ProfilePage() {
                     </div>
                     {/* Secondary Color */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Secondary (optional)</Label>
+                      <Label className="text-xs text-muted-foreground">{t("profileLabelSecondaryColor")}</Label>
                       <div className="flex items-center gap-2">
                         <div className="relative">
                           <button
@@ -1450,7 +1450,7 @@ export default function ProfilePage() {
 
                   {/* Style */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Style Preference</Label>
+                    <Label className="text-xs text-muted-foreground">{t("profileLabelStylePref")}</Label>
                     <div className="grid grid-cols-3 gap-0.5 rounded-lg border border-white/10 p-0.5">
                       {(["minimal", "editorial", "cinematic"] as const).map(s => (
                         <button
@@ -1464,7 +1464,7 @@ export default function ProfilePage() {
                               : "text-muted-foreground hover:text-white"
                           )}
                         >
-                          {s}
+                          {s === "minimal" ? t("profileStyleMinimal") : s === "editorial" ? t("profileStyleEditorial") : t("profileStyleCinematic")}
                         </button>
                       ))}
                     </div>
@@ -1472,7 +1472,7 @@ export default function ProfilePage() {
 
                   {/* Mood */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Mood (optional)</Label>
+                    <Label className="text-xs text-muted-foreground">{t("profileLabelMood")}</Label>
                     <div className="grid grid-cols-2 gap-0.5 rounded-lg border border-white/10 p-0.5 sm:grid-cols-4">
                       {(["calm", "bold", "luxury", "futuristic"] as const).map(m => (
                         <button
@@ -1486,7 +1486,7 @@ export default function ProfilePage() {
                               : "text-muted-foreground hover:text-white"
                           )}
                         >
-                          {m}
+                          {m === "calm" ? t("profileMoodCalm") : m === "bold" ? t("profileMoodBold") : m === "luxury" ? t("profileMoodLuxury") : t("profileMoodFuturistic")}
                         </button>
                       ))}
                     </div>
@@ -1494,7 +1494,7 @@ export default function ProfilePage() {
 
                   {/* Input Style */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Chat Input Style</Label>
+                    <Label className="text-xs text-muted-foreground">{t("profileLabelChatInputStyle")}</Label>
                     <div className="grid grid-cols-2 w-48 rounded-lg border border-white/10 p-0.5">
                       {(["dark", "light"] as const).map(s => (
                         <button
@@ -1511,7 +1511,7 @@ export default function ProfilePage() {
                               : "text-muted-foreground hover:text-white"
                           )}
                         >
-                          {s}
+                          {s === "dark" ? t("profileInputStyleDark") : t("profileInputStyleLight")}
                         </button>
                       ))}
                     </div>
@@ -1685,7 +1685,7 @@ export default function ProfilePage() {
                     }
                   }
                   if (channels.length === 0) {
-                    channels.push({ name: "No channels connected", connected: false })
+                    channels.push({ name: t("profileNoChannels"), connected: false })
                   }
                   return channels.map(ch => (
                     <span
@@ -1709,19 +1709,19 @@ export default function ProfilePage() {
               <section className="rounded-2xl border border-white/10 bg-[#2a3444] p-5 sm:p-8">
                 <div className="mb-4 flex items-center justify-between">
                   <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
-                    <Building2 className="h-5 w-5 text-emerald-400" /> Workspaces
+                    <Building2 className="h-5 w-5 text-emerald-400" /> {t("profileWorkspaces")}
                   </h3>
                   <Button
                     onClick={() => setShowCreateWorkspace(true)}
                     className="bg-emerald-600 hover:bg-emerald-700 gap-2"
                     size="sm"
                   >
-                    <Plus className="h-4 w-4" /> New
+                    <Plus className="h-4 w-4" /> {t("profileWorkspacesNew")}
                   </Button>
                 </div>
                 <div className="space-y-2">
                   {workspaces.filter(ws => ws.name !== "Admin's Workspace").length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">No workspaces yet. Create one to get started.</p>
+                    <p className="text-sm text-muted-foreground py-4 text-center">{t("profileWorkspacesEmpty")}</p>
                   ) : (
                     workspaces.filter(ws => ws.name !== "Admin's Workspace").map(ws => (
                       <div
@@ -1761,13 +1761,13 @@ export default function ProfilePage() {
                                 }}
                                 className="rounded-md bg-red-500/10 px-2 py-1 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
                               >
-                                Confirm
+                                {t("profileWorkspacesConfirm")}
                               </button>
                               <button
                                 onClick={() => setConfirmDeleteId(null)}
                                 className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-white transition-colors"
                               >
-                                Cancel
+                                {t("profileWorkspacesCancel")}
                               </button>
                             </div>
                           ) : (
@@ -1792,38 +1792,38 @@ export default function ProfilePage() {
             {/* Billing & Subscription */}
             <section className="rounded-2xl border border-white/10 bg-[#2a3444] p-5 sm:p-8">
               <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-                <CreditCard className="h-5 w-5 text-emerald-400" /> Billing & Subscription
+                <CreditCard className="h-5 w-5 text-emerald-400" /> {t("profileBilling")}
               </h3>
               <div className="space-y-4">
                 <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
                   <div>
-                    <p className="text-sm text-muted-foreground">Current Plan</p>
+                    <p className="text-sm text-muted-foreground">{t("profileCurrentPlan")}</p>
                     <p className="text-base font-semibold text-white">{planName(subscription)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-muted-foreground">Status</p>
+                    <p className="text-sm text-muted-foreground">{t("profileStatus")}</p>
                     <p className={cn(
                       "text-base font-semibold",
                       isPaid(subscription) ? "text-emerald-400" : "text-muted-foreground"
                     )}>
-                      {isPaid(subscription) ? "Active" : "Free"}
+                      {isPaid(subscription) ? t("profileStatusActive") : t("profileStatusFree")}
                     </p>
                   </div>
                 </div>
                 {subscription?.current_period_end && (
                   <p className="text-sm text-muted-foreground">
-                    Renews on {new Date(subscription.current_period_end).toLocaleDateString()}
+                    {t("profileRenews", { date: new Date(subscription.current_period_end).toLocaleDateString() })}
                   </p>
                 )}
                 <div className="flex flex-wrap gap-3">
                   {isPaid(subscription) ? (
                     <BillingPortalButton userId={user?.id} className="border-white/10">
-                      Manage Billing
+                      {t("profileManageBilling")}
                     </BillingPortalButton>
                   ) : (
                     <Link href="/pricing">
                       <Button className="bg-emerald-600 hover:bg-emerald-700 gap-2">
-                        Upgrade Plan <ArrowRight className="h-4 w-4" />
+                        {t("profileUpgradePlan")} <ArrowRight className="h-4 w-4" />
                       </Button>
                     </Link>
                   )}
