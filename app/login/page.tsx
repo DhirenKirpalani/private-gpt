@@ -34,13 +34,15 @@ function LoginContent() {
     if (fromConfirm) setConfirmedEmail(true)
   }, [searchParams])
 
+  const inviteToken = searchParams.get("invite")
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
     setLoading(true)
     try {
       await signIn(email, password)
-      router.push("/profile")
+      router.push(inviteToken ? `/invite?token=${inviteToken}` : "/profile")
     } catch (err: any) {
       setError(err.message || "Invalid email or password.")
     } finally {

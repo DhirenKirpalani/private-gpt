@@ -2,9 +2,9 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { Eye, EyeOff, CheckCircle2, Loader2 } from "lucide-react"
+import { useState, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Eye, EyeOff, CheckCircle2, Loader2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,10 +20,12 @@ const perkKeys = [
   "signupPerk3",
 ] as const
 
-export default function SignupPage() {
+function SignupForm() {
   const { t } = useI18n()
   const { refreshSubscription } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const inviteToken = searchParams.get("invite")
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -34,6 +36,21 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [inviteInfo, setInviteInfo] = useState<{ workspace_name?: string; inviter_name?: string; invited_email?: string } | null>(null)
+
+  // Load invite info if token present
+  useEffect(() => {
+    if (!inviteToken) return
+    fetch(`/api/workspace/invitation?token=${inviteToken}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && data.status === "pending") {
+          setInviteInfo(data)
+          if (data.invited_email) setEmail(data.invited_email)
+        }
+      })
+      .catch(() => {})
+  }, [inviteToken])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,7 +71,7 @@ export default function SignupPage() {
           await startTrial(user.id)
           await refreshSubscription()
         }
-        router.push("/profile")
+        router.push(inviteToken ? `/invite?token=${inviteToken}` : "/profile")
       } catch (loginErr: any) {
         if (loginErr.message?.toLowerCase().includes("email not confirmed") || loginErr.message?.toLowerCase().includes("not confirmed")) {
           setSuccess("Account created! Please check your email and click the confirmation link. Then come back and log in.")
@@ -125,6 +142,16 @@ export default function SignupPage() {
         </Link>
 
         <div className="w-full max-w-sm">
+          {inviteInfo && (
+            <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+              <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+                <Users className="h-3.5 w-3.5 text-emerald-400" />
+              </div>
+              <p className="text-sm leading-relaxed text-emerald-300">
+                You've been invited to join <span className="font-semibold">{inviteInfo.workspace_name}</span> by {inviteInfo.inviter_name}. Sign up to accept the invitation.
+              </p>
+            </div>
+          )}
           <div className="mb-6 text-center md:text-left sm:mb-7">
             <h1 className="gradient-text-shimmer text-2xl font-bold tracking-tight pb-1 sm:text-3xl">{t("createAccount")}</h1>
             <p className="mt-2 text-sm text-muted-foreground">{t("getStartedFreeTagline")}</p>
@@ -137,7 +164,7 @@ export default function SignupPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">{t("email")}</Label>
-              <Input id="email" type="email" placeholder="name@company.com" value={email} onChange={e => setEmail(e.target.value)} required />
+              <Input id="email" type="email" placeholder="name@company.com" value={email} onChange={e => setEmail(e.target.value)} required readOnly={!!inviteInfo?.invited_email} className={inviteInfo?.invited_email ? "opacity-60 cursor-not-allowed" : ""} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password">{t("password")}</Label>
@@ -202,5 +229,17 @@ export default function SignupPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+      </div>
+    }>
+      <SignupForm />
+    </Suspense>
   )
 }

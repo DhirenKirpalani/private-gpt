@@ -10,6 +10,7 @@ import {
 import { useGooglePicker, type PickedFile } from "@/components/google-picker"
 import { Label } from "@/components/ui/label"
 import { NavRail } from "@/components/nav-rail"
+import { NotificationBell } from "@/components/notification-bell"
 import { TrialPill } from "@/components/trial-pill"
 import { TrialPaywall } from "@/components/trial-paywall"
 import { AnnouncementBanner } from "@/components/announcement-banner"
@@ -478,6 +479,7 @@ export default function KnowledgePage() {
             </button>
           </div>
           <TrialPill className="hidden md:flex" />
+          <NotificationBell />
           <Link href="/profile" className={cn(
             "relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-[10px] md:text-xs font-bold text-white transition-colors overflow-hidden",
             authLoading || avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500"
