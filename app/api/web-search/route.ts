@@ -205,9 +205,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if the query contains a URL — if so, fetch the page content directly
+    // Match full URLs (https://example.com) or bare domains (example.com)
     const urlMatch = query.match(/(https?:\/\/[^\s]+)/i)
-    if (urlMatch) {
-      const targetUrl = urlMatch[1]
+    const bareDomainMatch = !urlMatch && query.match(/\b([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?(?:\/[^\s]*)?)\b/i)
+    if (urlMatch || bareDomainMatch) {
+      const rawUrl = urlMatch ? urlMatch[1] : (bareDomainMatch ? bareDomainMatch[1] : "")
+      const targetUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`
       try {
         const pageRes = await fetch(targetUrl, {
           headers: { "User-Agent": "Mozilla/5.0 (compatible; ExploroBot/1.0)" },

@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60000),
     })
 
     if (!response.ok) {
@@ -59,6 +60,9 @@ export async function POST(req: NextRequest) {
     console.log(`[CHAT] finish_reason=${finishReason} content_length=${content.length} has_action=${content.includes("<!--ACTION:")}`)
     return NextResponse.json({ content })
   } catch (err: any) {
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+      return NextResponse.json({ error: "The AI service took too long to respond. Please try again." }, { status: 504 })
+    }
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })
   }
 }
