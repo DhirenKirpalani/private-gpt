@@ -258,7 +258,6 @@ export default function ChatPage() {
             body: JSON.stringify({ url: profile.website }),
           }).then(r => r.json()).then(d => { if (d.content) setWebsiteContent(d.content) }).catch(() => {})
         }
-        await loadConversations()
         // Input style from profile
         const inputStyle = profile?.input_style
         if (inputStyle) {
@@ -588,13 +587,16 @@ export default function ChatPage() {
       let webSearchContext = ""
       let wsData: any = null
       if (actuallySearchingWeb) {
-        const lastUserMsg = nextMessages.findLast(m => m.role === "user")
-        if (lastUserMsg?.content) {
+        // Build search query from recent user messages for context-aware results
+        const userMsgs = nextMessages.filter(m => m.role === "user")
+        const recentUserMsgs = userMsgs.slice(-3)
+        const searchQuery = recentUserMsgs.map(m => m.content).join(" ").slice(0, 500)
+        if (searchQuery) {
           try {
             const wsRes = await fetch("/api/web-search", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query: lastUserMsg.content }),
+              body: JSON.stringify({ query: searchQuery }),
             })
             if (wsRes.ok) {
               wsData = await wsRes.json()
@@ -772,7 +774,7 @@ export default function ChatPage() {
             pageCount = data.pageCount || 0
           }
         }
-        const doc = await uploadDocument(user.id, file, category, pageCount)
+        const doc = await uploadDocument(user.id, file, category, pageCount, currentWorkspace?.id)
         try {
           const parseRes = await fetch("/api/parse-document", {
             method: "POST",
@@ -1047,7 +1049,7 @@ export default function ChatPage() {
     if (!user) return
     setKbLoading(true)
     try {
-      const docs = await fetchUserDocuments(user.id)
+      const docs = await fetchUserDocuments(user.id, currentWorkspace?.id)
       setKbDocs(docs.map((d: any, i: number) => ({
         id: d.id,
         index: i + 1,

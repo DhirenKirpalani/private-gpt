@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { ChevronDown, Plus, Settings, Check, Loader2, Building2, User } from "lucide-react"
+import { ChevronDown, Plus, Settings, Check, Loader2, Building2, Home } from "lucide-react"
 import { getFirstDeptIcon } from "@/lib/workspace-icons"
 import { useWorkspace } from "@/app/workspace-provider"
 import { useAuth } from "@/app/auth-provider"
@@ -76,7 +76,7 @@ function WorkspaceDropdown({
                 isPersonal ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20" : "text-muted-foreground hover:bg-white/5 hover:text-white"
               )}
             >
-              <User className="h-3.5 w-3.5 shrink-0" />
+              <Home className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">{t("profilePersonalMode")}</span>
               {isPersonal && <Check className="h-3.5 w-3.5 shrink-0 ml-auto text-emerald-400" />}
             </button>
@@ -123,6 +123,7 @@ export function WorkspaceSelector({ className, collapsedClassName, compact }: Pr
   const companyName = profile?.company_name || profile?.full_name || "My Company"
   const isPersonalMode = currentWorkspace?.name === "Admin's Workspace"
   const displayName = isPersonalMode ? "Personal" : (currentWorkspace?.name ?? "Workspace")
+  const ActiveIcon = isPersonalMode ? Home : WorkspaceIcon
 
   // ── Compact pill (top navbar usage) ──────────────────────────────────────
   if (compact) {
@@ -135,7 +136,7 @@ export function WorkspaceSelector({ className, collapsedClassName, compact }: Pr
           >
             {workspaceLoading
               ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <WorkspaceIcon className="h-3.5 w-3.5" />
+              : <ActiveIcon className="h-3.5 w-3.5" />
             }
             <span className="hidden sm:inline max-w-[110px] truncate">
               {workspaceLoading ? "…" : displayName}
@@ -155,12 +156,12 @@ export function WorkspaceSelector({ className, collapsedClassName, compact }: Pr
       <>
         {/* Icon only — visible when nav is collapsed */}
         <div
-          title={currentWorkspace ? `${companyName} › ${currentWorkspace.name}` : "Workspace"}
+          title={currentWorkspace ? (isPersonalMode ? "Personal" : `${companyName} › ${currentWorkspace.name}`) : "Workspace"}
           className={collapsedClassName}
         >
           {workspaceLoading
             ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            : <WorkspaceIcon className="h-4 w-4" />
+            : <ActiveIcon className="h-4 w-4" />
           }
         </div>
 
@@ -175,7 +176,7 @@ export function WorkspaceSelector({ className, collapsedClassName, compact }: Pr
             className="flex w-full items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-2 text-sm transition-all hover:bg-emerald-500/10 hover:border-emerald-500/30"
           >
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 text-base leading-none border border-emerald-500/20">
-              {workspaceLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" /> : <WorkspaceIcon className="h-3.5 w-3.5" />}
+              {workspaceLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" /> : <ActiveIcon className="h-3.5 w-3.5" />}
             </span>
             <div className="flex-1 min-w-0 text-left">
               <p className="truncate text-[10px] text-emerald-400/70 leading-tight font-medium">{companyName}</p>
@@ -211,7 +212,7 @@ export function WorkspaceSelector({ className, collapsedClassName, compact }: Pr
         >
           {/* Icon */}
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.08] text-xl leading-none">
-            {workspaceLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : <WorkspaceIcon className="h-4 w-4" />}
+            {workspaceLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : <ActiveIcon className="h-4 w-4" />}
           </span>
 
           {/* Text */}
