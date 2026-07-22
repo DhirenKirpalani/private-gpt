@@ -96,8 +96,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const currentUser = await getUser()
           setUser(currentUser)
           if (currentUser) {
-            await loadProfile(currentUser.id)
-            await loadSubscription(currentUser.id)
+            await Promise.all([
+              loadProfile(currentUser.id),
+              loadSubscription(currentUser.id),
+            ])
           }
         }
       } catch {
@@ -114,8 +116,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const newUser = newSession?.user ?? null
       setUser(newUser)
       if (newUser) {
-        await loadProfile(newUser.id)
-        await loadSubscription(newUser.id)
+        await Promise.all([
+          loadProfile(newUser.id),
+          loadSubscription(newUser.id),
+        ])
       } else {
         setProfile(null)
         setAvatarUrl("")
