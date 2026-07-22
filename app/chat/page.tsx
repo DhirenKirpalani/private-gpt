@@ -505,7 +505,10 @@ export default function ChatPage() {
         `# CRITICAL: EMAIL SENDING PROTOCOL`,
         `You CANNOT send emails yourself. You do NOT have the ability to send emails. NEVER tell the user "I have sent the email" or "The email has been sent" — that would be a lie.`,
         `When the user asks you to send an email, you MUST do the following:`,
-        `1. Write the email draft (subject + body) in your response`,
+        `1. Write the email draft in this exact format:`,
+        `   To: recipient@example.com`,
+        `   Subject: Subject here`,
+        `   Body: Email body here`,
         `2. At the VERY END of your response, append this exact format (it will become a Send button):`,
         `<!--ACTION:{"type":"send_email","to":"recipient@example.com","subject":"Subject here","body":"Email body here"}-->`,
         `3. Tell the user: "Please review the draft above and click the Send Email button to send it."`,
@@ -516,8 +519,10 @@ export default function ChatPage() {
         `- The "body" field MUST be the full email body text (use \\n for line breaks)`,
         `- If there is a CC recipient, add a "cc" field. Otherwise omit it.`,
         `- The action block MUST be the LAST thing in your response, after the draft`,
-        `- NEVER skip the action block. Without it, the email cannot be sent.`,
+        `- NEVER skip the action block. Without it, the email cannot be sent and the user will have no button to click.`,
         `- Do NOT say "I have sent the email" — you have NOT sent it. The user must click the button.`,
+        `- REMINDER: You MUST ALWAYS append the <!--ACTION:...--> block when drafting an email. If you write an email draft without the action block, the user cannot send it. This is NON-NEGOTIABLE.`,
+        `- Even if you think the email is informational or educational, if the user asked you to "send" or "create" an email, you MUST include the action block.`,
         ``,
         `# CRITICAL: CALENDAR EVENT PROTOCOL`,
         `Similarly, you CANNOT create calendar events yourself. When the user asks to create an event, draft it and append:`,
@@ -663,7 +668,7 @@ export default function ChatPage() {
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || "Request failed")
       // Extract any AI action blocks for inline confirm buttons
-      const extracted = extractAiAction(data.content)
+      const extracted = extractAiAction(data.content, userMsg.content)
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -742,7 +747,7 @@ export default function ChatPage() {
         }
       }
       if (uploadedCount > 0) {
-        toast({ title: "Uploaded to Drive", description: `${uploadedCount} file(s) uploaded`, variant: "default" })
+        toast({ title: "Uploaded to Drive", description: `${uploadedCount} file(s) uploaded`, variant: "success" })
       }
       if (lastError) {
         toast({ title: "Some uploads failed", description: lastError, variant: "error" })
@@ -792,7 +797,7 @@ export default function ChatPage() {
           console.error("[PARSE DOCUMENT] Network/exception:", err)
         }
       }
-      toast({ title: "Uploaded", description: `${uploadPreview.length} document(s) uploaded to Knowledge Base.`, variant: "default" })
+      toast({ title: "Uploaded", description: `${uploadPreview.length} document(s) uploaded to Knowledge Base.`, variant: "success" })
       setUploadPreview([])
       setOpenCategoryIndex(null)
       // Refresh KB docs if panel might be open
@@ -842,11 +847,51 @@ export default function ChatPage() {
   }
 
   // Detect AI action blocks (<!--ACTION:{...}-->) and return stripped content + action data
-  function extractAiAction(content: string): { content: string; action?: { type: string; [key: string]: any } } {
+  function extractAiAction(content: string, userMessage?: string): { content: string; action?: { type: string; [key: string]: any } } {
     // Use [\s\S] to match across newlines — AI may generate multi-line JSON
     const match = content.match(/<!--ACTION:({[\s\S]+?})-->/)
     if (!match) {
-      console.log("[AI ACTION] No action block found in message")
+      console.log("[AI ACTION] No action block found in message — checking for email draft fallback")
+      // Fallback: detect email draft pattern and auto-generate action block
+      const subjectMatch = content.match(/Subject:\s*(.+)/i)
+      // Try to find recipient: first in AI response "To:" line, then in user's message
+      let toEmail: string | null = null
+      const toInContent = content.match(/(?:To|to):\s*([^\s<]+@[^\s>]+)/i)
+      if (toInContent) {
+        toEmail = toInContent[1].trim()
+      } else if (userMessage) {
+        const emailInUserMsg = userMessage.match(/([^\s<]+@[^\s>]+)/i)
+        if (emailInUserMsg) {
+          toEmail = emailInUserMsg[1].trim()
+        } else {
+          const nameInUserMsg = userMessage.match(/(?:to|email to|send.*to)\s+([^\s,]+)/i)
+          if (nameInUserMsg) toEmail = nameInUserMsg[1].trim()
+        }
+      }
+      // Check if the message looks like an email draft (has Subject: and a recipient)
+      if (subjectMatch && toEmail) {
+        const to = toEmail
+        const subject = subjectMatch[1].trim()
+        // Extract body — everything after "Body:" or after the subject line
+        const bodyMatch = content.match(/Body:\s*([\s\S]*?)(?:Please review|Best regards|$)/i)
+        let body = ""
+        if (bodyMatch) {
+          body = bodyMatch[1].trim()
+        } else {
+          // Try to extract from after Subject line to end
+          const afterSubject = content.split(subjectMatch[0])[1]
+          if (afterSubject) {
+            body = afterSubject.replace(/^[\s\n]*Body:?\s*/i, "").trim()
+          }
+        }
+        if (to && subject && body) {
+          console.log(`[AI ACTION] Fallback: auto-generating send_email action to=${to} subject=${subject}`)
+          return {
+            content: content.replace(/Please review the draft above[\s\S]*$/, "").trim(),
+            action: { type: "send_email", to, subject, body }
+          }
+        }
+      }
       return { content }
     }
     try {

@@ -486,6 +486,15 @@ export async function saveEmailConnection(conn: Partial<EmailConnection>): Promi
 }
 
 export async function deleteEmailConnection(userId: string, provider: string): Promise<void> {
+  // Delete associated email messages first
+  const { error: msgError } = await supabase
+    .from("email_messages")
+    .delete()
+    .eq("user_id", userId)
+    .eq("provider", provider)
+  if (msgError) console.error("[deleteEmailConnection] Failed to delete messages:", msgError.message)
+
+  // Then delete the connection
   const { error } = await supabase
     .from("email_connections")
     .delete()
@@ -964,6 +973,14 @@ export async function getCalendarEvents(userId: string): Promise<CalendarEvent[]
 }
 
 export async function deleteCalendarConnection(userId: string, connectionId: string) {
+  // Delete associated calendar events first
+  const { error: eventError } = await supabase
+    .from("calendar_events")
+    .delete()
+    .eq("user_id", userId)
+    .eq("connection_id", connectionId)
+  if (eventError) console.error("[deleteCalendarConnection] Failed to delete events:", eventError.message)
+
   const { error } = await supabase
     .from("calendar_connections")
     .delete()
@@ -1028,6 +1045,14 @@ export async function saveWhatsAppConnection(userId: string, phoneNumberId: stri
 }
 
 export async function deleteWhatsAppConnection(userId: string, connectionId: string) {
+  // Delete associated WhatsApp messages first
+  const { error: msgError } = await supabase
+    .from("whatsapp_messages")
+    .delete()
+    .eq("user_id", userId)
+    .eq("connection_id", connectionId)
+  if (msgError) console.error("[deleteWhatsAppConnection] Failed to delete messages:", msgError.message)
+
   const { error } = await supabase
     .from("whatsapp_connections")
     .delete()

@@ -343,7 +343,7 @@ export default function KnowledgePage() {
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || "Import failed")
-            toast({ title: "Imported from Drive", description: data.name, variant: "default" })
+            toast({ title: "Imported from Drive", description: data.name, variant: "success" })
           } catch (err: any) {
             toast({ title: "Import failed", description: err?.message || `Could not import ${file.name}`, variant: "error" })
           } finally {
@@ -406,7 +406,7 @@ export default function KnowledgePage() {
           await updateDocumentText(doc.id, text)
           console.log("[FRONTEND PARSE] DB update successful")
           setDocList(prev => prev.map(d => d.id === doc.id ? { ...d, status: "indexed" } : d))
-          toast({ title: "Parsed", description: `${doc.name} — ${text.length} chars extracted (${responseData.debug?.method || "unknown"})`, variant: "default" })
+          toast({ title: "Parsed", description: `${doc.name} — ${text.length} chars extracted (${responseData.debug?.method || "unknown"})`, variant: "success" })
         } else {
           console.error("[FRONTEND PARSE] Empty or error text returned:", text)
           toast({ title: "Parse empty/error", description: `Server returned: "${text}". Check server console.`, variant: "error" })
@@ -816,7 +816,7 @@ export default function KnowledgePage() {
                           try {
                             await pinDocument(doc.id, !doc.pinned)
                             setDocList(prev => prev.map(d => d.id === doc.id ? { ...d, pinned: !doc.pinned, expiresAt: !doc.pinned ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() } : d))
-                            toast({ title: doc.pinned ? "Unpinned" : "Pinned", description: doc.pinned ? "Document will expire in 30 days" : "Document kept permanently", variant: "default" })
+                            toast({ title: doc.pinned ? "Unpinned" : "Pinned", description: doc.pinned ? "Document will expire in 30 days" : "Document kept permanently", variant: "success" })
                           } catch (err: any) {
                             toast({ title: "Failed", description: err.message, variant: "error" })
                           }
@@ -832,7 +832,7 @@ export default function KnowledgePage() {
                             try {
                               await extendDocumentExpiry(doc.id)
                               setDocList(prev => prev.map(d => d.id === doc.id ? { ...d, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() } : d))
-                              toast({ title: "Extended", description: "File retention reset to 30 days", variant: "default" })
+                              toast({ title: "Extended", description: "File retention reset to 30 days", variant: "success" })
                             } catch (err: any) {
                               toast({ title: "Failed", description: err.message, variant: "error" })
                             }
@@ -875,7 +875,7 @@ export default function KnowledgePage() {
                                 try {
                                   await deleteDocument(doc.id)
                                   setDocList(prev => prev.filter(d => d.id !== doc.id))
-                                  toast({ title: "Deleted", description: doc.name, variant: "default" })
+                                  toast({ title: "Deleted", description: doc.name, variant: "success" })
                                 } catch (err: any) {
                                   toast({ title: "Delete failed", description: err.message || "Delete failed", variant: "error" })
                                 }

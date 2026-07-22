@@ -14,6 +14,7 @@ export default function SupportPage() {
   const [email, setEmail] = useState("")
   const [message, setMessage] = useState("")
   const [sent, setSent] = useState(false)
+  const [ticketNumber, setTicketNumber] = useState("")
   const [submitError, setSubmitError] = useState("")
   const [files, setFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
@@ -116,6 +117,7 @@ export default function SupportPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to send")
+      setTicketNumber(data.ticketNumber || "")
       setSent(true)
     } catch (err: any) {
       setSubmitError(err.message || "Something went wrong. Please email us directly.")
@@ -163,6 +165,11 @@ export default function SupportPage() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-white">Message sent!</h2>
+                {ticketNumber && (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Your ticket: <span className="font-mono font-semibold text-emerald-400">{ticketNumber}</span>
+                  </p>
+                )}
                 <p className="mt-1 text-sm text-muted-foreground">
                   We&apos;ll get back to you at <span className="text-emerald-400">{email}</span> within 24 hours.
                 </p>

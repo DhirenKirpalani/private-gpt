@@ -66,6 +66,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
+    // Convert plain text body to HTML with clickable links
+    const bodyToHtml = (text: string) => {
+      const escaped = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+      return `<p>${escaped
+        .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#10b981;text-decoration:underline;">$1</a>')
+        .replace(/\n/g, "<br>")}</p>`
+    }
+
     // Build headers for threading
     const replyHeaders: string[] = []
     if (originalMessageId) {
@@ -91,7 +102,7 @@ export async function POST(req: NextRequest) {
       .select("full_name, company_name")
       .eq("user_id", userId)
       .maybeSingle()
-    const senderName = profile?.company_name || profile?.full_name || conn.email_address || conn.smtp_user
+    const senderName = profile?.full_name || profile?.company_name || conn.email_address || conn.smtp_user
 
     let messageId = ""
 
@@ -100,16 +111,21 @@ export async function POST(req: NextRequest) {
       const accessToken = await refreshIfNeeded(conn)
 
       if (conn.oauth_provider === "google") {
-        // Send via Gmail API
+        // Encode non-ASCII subjects for MIME headers (RFC 2047)
+        const encodeMimeHeader = (value: string) => {
+          if (/^[\x00-\x7F]*$/.test(value)) return value
+          return `=?utf-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`
+        }
         const mimeParts = [
           `To: ${to}`,
           ...(cc ? [`Cc: ${cc}`] : []),
-          `From: ${conn.email_address}`,
-          `Subject: ${subject}`,
+          `From: ${senderName} <${conn.email_address}>`,
+          `Subject: ${encodeMimeHeader(subject)}`,
           ...replyHeaders,
           `Content-Type: text/html; charset=utf-8`,
+          "MIME-Version: 1.0",
           "",
-          html || `<p>${body.replace(/\n/g, "<br>")}</p>`,
+          html || bodyToHtml(body),
         ]
         const raw = Buffer.from(mimeParts.join("\n")).toString("base64url")
 
@@ -140,10 +156,10 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({
             message: {
               subject,
-              body: { contentType: "HTML", content: html || `<p>${body.replace(/\n/g, "<br>")}</p>` },
+              body: { contentType: "HTML", content: html || bodyToHtml(body) },
               toRecipients: [{ emailAddress: { address: to } }],
               ...(cc ? { ccRecipients: cc.split(",").map((addr: string) => ({ emailAddress: { address: addr.trim() } })) } : {}),
-              from: { emailAddress: { address: conn.email_address } },
+              from: { emailAddress: { name: senderName, address: conn.email_address } },
             },
             saveToSentItems: true,
           }),
@@ -184,7 +200,7 @@ export async function POST(req: NextRequest) {
         cc: cc || undefined,
         subject,
         text: body,
-        html: html || `<p>${body.replace(/\n/g, "<br>")}</p>`,
+        html: html || bodyToHtml(body),
         inReplyTo: originalMessageId ? `<${originalMessageId}>` : undefined,
         references: originalMessageId ? `<${originalMessageId}>` : undefined,
       })
@@ -198,7 +214,7 @@ export async function POST(req: NextRequest) {
       connection_id: conn.id,
       provider: providerId,
       direction: "sent",
-      from_address: conn.email_address || conn.smtp_user || conn.email_account,
+      from_address: `${senderName} <${conn.email_address || conn.smtp_user || conn.email_account}>`,
       to_address: to,
       cc_address: cc || null,
       subject,

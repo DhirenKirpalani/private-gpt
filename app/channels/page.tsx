@@ -78,7 +78,7 @@ function ChannelsPageContent() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
   const [testing, setTesting] = useState(false)
-  const [oauthMsg, setOauthMsg] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [autoFetching, setAutoFetching] = useState(false)
 
   // Compose email modal
   const [composeOpen, setComposeOpen] = useState(false)
@@ -145,32 +145,49 @@ function ChannelsPageContent() {
     const drive = searchParams.get("drive")
     const meet = searchParams.get("meet")
     const whatsapp = searchParams.get("whatsapp")
+    const showToast = (title: string, description: string, variant: "success" | "error" = "success") => {
+      setTimeout(() => toast({ title, description, variant }), 100)
+    }
+    const autoFetchEmails = (providerId: string) => {
+      if (!user) return
+      setTimeout(() => {
+        setAutoFetching(true)
+        fetch("/api/email/fetch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id, providerId }),
+        }).then(r => r.json()).then(data => {
+          console.log(`[AUTO-FETCH] Fetched ${data.fetched || 0} emails for ${providerId}`)
+          setAutoFetching(false)
+        }).catch(err => {
+          console.error(`[AUTO-FETCH] Failed:`, err?.message)
+          setAutoFetching(false)
+        })
+      }, 2000)
+    }
     if (success === "connected" || calendar === "connected") {
       const channelName = email ? `${email} Gmail` : "Google Calendar"
-      toast({ title: "Connected", description: `${channelName} has been connected.`, variant: "default" })
-      setOauthMsg({ type: "success", text: `${channelName} connected successfully` })
+      showToast("Connected", `${channelName} has been connected.`, "success")
+      if (success === "connected") autoFetchEmails("gmail")
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (drive === "connected") {
-      toast({ title: "Connected", description: "Google Drive has been connected.", variant: "default" })
-      setOauthMsg({ type: "success", text: "Google Drive connected successfully" })
+      showToast("Connected", "Google Drive has been connected.", "success")
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (meet === "connected") {
-      toast({ title: "Connected", description: "Google Meet has been connected.", variant: "default" })
-      setOauthMsg({ type: "success", text: "Google Meet connected successfully" })
+      showToast("Connected", "Google Meet has been connected.", "success")
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (whatsapp === "1") {
-      toast({ title: "Connected", description: "WhatsApp Business has been connected.", variant: "default" })
-      setOauthMsg({ type: "success", text: "WhatsApp Business connected successfully" })
+      showToast("Connected", "WhatsApp Business has been connected.", "success")
       loadConnections()
       window.history.replaceState({}, "", window.location.pathname)
     } else if (error) {
       if (error.includes("No WhatsApp phone number")) {
         setWaSetupOpen(true)
       } else {
-        setOauthMsg({ type: "error", text: error })
+        showToast("Connection Error", error, "error")
       }
       window.history.replaceState({}, "", window.location.pathname)
     }
@@ -254,11 +271,19 @@ function ChannelsPageContent() {
     console.log(`[CHANNELS DISCONNECT] Disconnecting provider=${providerId}`)
     const channelName = providerId === "gmail" ? "Gmail" : providerId === "outlook" ? "Outlook" : providerId
     try {
-      await deleteEmailConnection(user.id, providerId)
+      const res = await fetch("/api/email/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, providerId }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Failed to disconnect")
+      }
       console.log(`[CHANNELS DISCONNECT] Deleted from DB`)
       setEmailConnections(prev => { const next = { ...prev }; delete next[providerId]; return next })
       console.log(`[CHANNELS DISCONNECT] Updated local state`)
-      toast({ title: "Disconnected", description: `${channelName} has been disconnected.`, variant: "default" })
+      toast({ title: "Disconnected", description: `${channelName} has been disconnected.`, variant: "success" })
     } catch (e: any) {
       console.error(`[CHANNELS DISCONNECT] Error:`, e?.message)
       toast({ title: "Error", description: `Failed to disconnect ${channelName}.`, variant: "error" })
@@ -273,7 +298,7 @@ function ChannelsPageContent() {
       if (conn) {
         await deleteCalendarConnection(user.id, conn.id)
         setCalendarConnections(prev => { const next = { ...prev }; delete next[providerId]; return next })
-        toast({ title: "Disconnected", description: `${channelName} has been disconnected.`, variant: "default" })
+        toast({ title: "Disconnected", description: `${channelName} has been disconnected.`, variant: "success" })
       }
     } catch {
       toast({ title: "Error", description: `Failed to disconnect ${channelName}.`, variant: "error" })
@@ -305,7 +330,7 @@ function ChannelsPageContent() {
       `width=${width},height=${height},top=${top},left=${left},popup=1,toolbar=no,menubar=no`
     )
     if (!popup) {
-      setOauthMsg({ type: "error", text: "Popup blocked. Please allow popups for this site." })
+      toast({ title: "Error", description: "Popup blocked. Please allow popups for this site.", variant: "error" })
     }
   }
 
@@ -315,13 +340,13 @@ function ChannelsPageContent() {
       if (event.data?.type !== "WHATSAPP_OAUTH") return
       const { success, error, phoneNumber } = event.data
       if (success) {
-        setOauthMsg({ type: "success", text: `WhatsApp Business connected${phoneNumber ? `: ${phoneNumber}` : ""}` })
+        toast({ title: "Connected", description: `WhatsApp Business connected${phoneNumber ? `: ${phoneNumber}` : ""}`, variant: "success" })
         loadConnections()
       } else {
         if (error?.includes("No WhatsApp phone number")) {
           setWaSetupOpen(true)
         } else {
-          setOauthMsg({ type: "error", text: error || "WhatsApp connection failed" })
+          toast({ title: "Connection Error", description: error || "WhatsApp connection failed", variant: "error" })
         }
       }
     }
@@ -336,7 +361,7 @@ function ChannelsPageContent() {
       if (conn) {
         await deleteWhatsAppConnection(user.id, conn.id)
         setWhatsAppConnections(prev => { const next = { ...prev }; delete next[phoneNumberId]; return next })
-        toast({ title: "Disconnected", description: "WhatsApp has been disconnected.", variant: "default" })
+        toast({ title: "Disconnected", description: "WhatsApp has been disconnected.", variant: "success" })
       }
     } catch {
       toast({ title: "Error", description: "Failed to disconnect WhatsApp.", variant: "error" })
@@ -472,13 +497,16 @@ function ChannelsPageContent() {
       <AnnouncementBanner />
       <TrialPaywall />
 
-      {/* OAuth callback toast */}
-      {oauthMsg && (
-        <div className={cn("fixed left-1/2 top-4 z-[80] -translate-x-1/2 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all", oauthMsg.type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
-          {oauthMsg.text}
-          <button onClick={() => setOauthMsg(null)} className="ml-2 opacity-70 hover:opacity-100">
-            <X className="inline h-3 w-3" />
-          </button>
+      {/* OAuth messages now use the unified toast system */}
+
+      {/* Auto-fetch loading indicator */}
+      {autoFetching && (
+        <div className="fixed bottom-4 right-4 z-[90] flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-950/80 px-4 py-3 shadow-xl backdrop-blur-md">
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+          <div>
+            <p className="text-sm font-semibold text-emerald-100">Fetching your emails...</p>
+            <p className="text-xs text-emerald-300/70">This may take a few seconds</p>
+          </div>
         </div>
       )}
 

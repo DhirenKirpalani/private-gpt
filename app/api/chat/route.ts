@@ -4,9 +4,9 @@ const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 
 const MAX_TOKENS_MAP: Record<string, number> = {
-  Standard: 4000,
-  Detailed: 6000,
-  Comprehensive: 8000,
+  Standard: 6000,
+  Detailed: 8000,
+  Comprehensive: 10000,
 }
 
 export async function POST(req: NextRequest) {

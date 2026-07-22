@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
+import { usePathname } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import {
   Search, Plus, Phone, Mail, MapPin, Building2,
-  Filter, CircleDollarSign, ChevronDown, X,
+  Filter, CircleDollarSign, ChevronDown, ChevronUp, X,
   ClipboardList, FileText, Send, Inbox,
   Star, StarOff, Shield, User, Loader2, Reply, Trash2, Check, Pencil, Menu, PanelLeft, Tag,
   LayoutDashboard, MessageSquare, Calendar,
@@ -54,6 +55,7 @@ type Contact = { id: string; name: string; company: string | null; role: string 
 export default function CRMPage() {
   const { user, subscription, role } = useAuth()
   const { t, lang, setLang } = useI18n()
+  const pathname = usePathname()
   const [navOpen, setNavOpen] = useState(false)
   const [crmSidebarOpen, setCrmSidebarOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -80,6 +82,7 @@ export default function CRMPage() {
   const [inboxMessages, setInboxMessages] = useState<any[]>([])
   const [inboxLoading, setInboxLoading] = useState(false)
   const [inboxFetched, setInboxFetched] = useState(false)
+  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set())
 
   // Email composer state
   const [composeTo, setComposeTo] = useState("")
@@ -107,7 +110,7 @@ export default function CRMPage() {
   const [contactEmailFilter, setContactEmailFilter] = useState<string | null>(null)
   const [keywordFilter, setKeywordFilter] = useState<string | null>(null)
   const [keywordFilterOpen, setKeywordFilterOpen] = useState(false)
-  const EMAIL_KEYWORDS = ["proposal", "invoice", "contract", "quote", "purchase order", "po", "payment", "receipt", "agreement", "deal", "billing", "estimate", "refund", "opportunity", "milestone", "deliverable", "deadline", "legal", "sow", "rfp", "nda", "msa", "scope of work"]
+  const EMAIL_KEYWORDS = ["proposal", "invoice", "contract", "quote", "purchase order", "payment", "receipt", "agreement", "deal", "billing", "estimate", "refund", "opportunity", "sow", "rfp", "nda", "msa", "scope of work"]
 
   // Email kanban state
   const [emailKanbanCols, setEmailKanbanCols] = useState<KanbanCol[]>([
@@ -345,25 +348,29 @@ export default function CRMPage() {
                 const received = msgs.filter((m: any) => m.direction === "received")
                 setInboxMessages(received)
                 if (received.length > 0) setInboxFetched(true)
+              } else {
+                setEmailMessages([])
+                setInboxMessages([])
+                setInboxFetched(false)
               }
             }).catch((err) => { console.error("[LOAD] getEmailMessages failed:", err) })
-          : Promise.resolve(),
+          : (() => { setEmailMessages([]); setInboxMessages([]); setInboxFetched(false); return Promise.resolve() })(),
         calConnsRes.status === "fulfilled" && calConnsRes.value.length > 0
           ? getCalendarEvents(user.id).then((events: any[]) => {
               setCalendarEvents(events)
               if (events.length > 0) setCalendarFetched(true)
             }).catch(() => {})
-          : Promise.resolve(),
+          : (() => { setCalendarEvents([]); setCalendarFetched(false); return Promise.resolve() })(),
         waConnsRes.status === "fulfilled" && waConnsRes.value.length > 0
           ? getWhatsAppMessages(user.id).then((msgs: any[]) => {
               setWhatsAppMessages(msgs)
               if (msgs.length > 0) setWhatsAppFetched(true)
             }).catch(() => {})
-          : Promise.resolve(),
+          : (() => { setWhatsAppMessages([]); setWhatsAppFetched(false); return Promise.resolve() })(),
       ])
     }
     load()
-  }, [user])
+  }, [user, pathname])
 
   // Live sync via Supabase Realtime
   useEffect(() => {
@@ -531,6 +538,64 @@ export default function CRMPage() {
     const t = setTimeout(() => { upsertKanbanCols(user.id, "calendar", calKanbanCols).catch(() => {}) }, 600)
     return () => clearTimeout(t)
   }, [user, calKanbanCols])
+
+  // Reload email data when Email tab is activated
+  useEffect(() => {
+    if (!user || activeTab !== "Email") return
+    getEmailConnections(user.id).then(async (conns: any[]) => {
+      setEmailConnections(conns)
+      if (conns.length === 0) {
+        setEmailMessages([])
+        setInboxMessages([])
+        setInboxFetched(false)
+        // Reload contacts to reflect email disconnect cleanup
+        getContacts(user.id).then((cs: any[]) => {
+          setContacts(cs.map((c: any) => ({
+            id: c.id, name: c.name, email: c.email, phone: c.phone,
+            company: c.company, tags: c.tags || [], starred: c.starred,
+            role: c.role || "", location: c.location || "",
+            lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+            dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
+          })))
+        }).catch(() => {})
+      } else {
+        // Load from DB first (instant display)
+        const loadFromDB = () => getEmailMessages(user.id).then((msgs: any[]) => {
+          setEmailMessages(msgs)
+          const received = msgs.filter((m: any) => m.direction === "received")
+          setInboxMessages(received)
+          setInboxFetched(received.length > 0 || msgs.some((m: any) => m.direction === "sent"))
+        }).catch(() => {})
+
+        await loadFromDB()
+
+        // Auto-fetch from Gmail in background, then reload from DB
+        const conn = conns.find((c: any) => c.status === "connected")
+        if (conn) {
+          setInboxLoading(true)
+          try {
+            await fetch("/api/email/fetch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: user.id, providerId: conn.provider }),
+            })
+            await loadFromDB()
+            // Fetch again to get thread replies that were just matched
+            await fetch("/api/email/fetch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: user.id, providerId: conn.provider }),
+            })
+            await loadFromDB()
+          } catch (e) {
+            console.error("[EMAIL TAB] Auto-fetch failed:", e)
+          } finally {
+            setInboxLoading(false)
+          }
+        }
+      }
+    }).catch(() => {})
+  }, [user, activeTab])
 
   // Fetch inbox emails + auto-import contacts
   const fetchInbox = async (pageToken?: string) => {
@@ -1488,8 +1553,30 @@ export default function CRMPage() {
                           .filter((m: any) => emailFilter.read === "all" || (emailFilter.read === "read" ? m.read : !m.read))
                           .filter((m: any) => !contactEmailFilter || (m.from_address || "").includes(contactEmailFilter) || (m.to_address || "").includes(contactEmailFilter))
                           .filter((m: any) => !keywordFilter || (m.subject || "").toLowerCase().includes(keywordFilter) || (m.body || "").toLowerCase().includes(keywordFilter))
+                        // Group by thread_id — one card per thread
+                        const threadGroups = new Map<string, any[]>()
+                        for (const m of allMsgs) {
+                          const tid = m.thread_id || m.id
+                          if (!threadGroups.has(tid)) threadGroups.set(tid, [])
+                          threadGroups.get(tid)!.push(m)
+                        }
                         const getColId = (m: any) => emailCardCols[m.id] || (m.direction === "sent" ? "sent" : m.read ? "read" : "unread")
-                        const items = allMsgs.filter(m => getColId(m) === col.id)
+                        const getThreadColId = (msgs: any[]) => {
+                          const custom = msgs.find(m => emailCardCols[m.id])?.id
+                          if (custom) return emailCardCols[custom]
+                          if (msgs.some(m => m.direction === "sent") && !msgs.some(m => m.direction === "received")) return "sent"
+                          if (msgs.some(m => !m.read)) return "unread"
+                          return "read"
+                        }
+                        const threadItems = Array.from(threadGroups.entries()).map(([tid, msgs]) => {
+                          msgs.sort((a: any, b: any) => {
+                            const da = a.received_at ? new Date(a.received_at).getTime() : a.sent_at ? new Date(a.sent_at).getTime() : 0
+                            const db = b.received_at ? new Date(b.received_at).getTime() : b.sent_at ? new Date(b.sent_at).getTime() : 0
+                            return db - da
+                          })
+                          return { threadId: tid, msgs, latest: msgs[0] }
+                        })
+                        const items = threadItems.filter(t => getThreadColId(t.msgs) === col.id)
                         return (
                           <div
                             key={col.id}
@@ -1530,9 +1617,13 @@ export default function CRMPage() {
                             <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1 pb-4">
                               {items.length === 0 ? (
                                 <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">{t("crmDropEmails")}</p></div>
-                              ) : items.map((msg: any) => (
+                              ) : items.map((item: any) => {
+                                const msg = item.latest
+                                const replyCount = item.msgs.length
+                                const isCardExpanded = expandedThreads.has(item.threadId)
+                                return (
                                 <div
-                                  key={msg.id}
+                                  key={item.threadId}
                                   draggable
                                   onDragStart={e => { dragEmailId.current = msg.id; e.dataTransfer.effectAllowed = "move" }}
                                   className="w-full rounded-xl border bg-card p-4 text-left shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-grab active:cursor-grabbing active:opacity-60 active:scale-95"
@@ -1547,7 +1638,26 @@ export default function CRMPage() {
                                       } catch { /* ignore */ }
                                     }
                                   }}>
-                                    <p className="text-sm font-semibold mb-1 truncate">{msg.subject || "(No subject)"}</p>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <p className="text-sm font-semibold truncate flex-1">{msg.subject || "(No subject)"}</p>
+                                      {replyCount > 1 && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setExpandedThreads(prev => {
+                                              const next = new Set(prev)
+                                              if (next.has(item.threadId)) next.delete(item.threadId)
+                                              else next.add(item.threadId)
+                                              return next
+                                            })
+                                          }}
+                                          className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+                                        >
+                                          {isCardExpanded ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
+                                          {replyCount}
+                                        </button>
+                                      )}
+                                    </div>
                                     <p className="text-xs text-muted-foreground truncate">{msg.direction === "sent" ? `To: ${msg.to_address}` : msg.from_address}</p>
                                     <p className="text-xs text-muted-foreground truncate mt-1">{msg.body?.slice(0, 80) || ""}</p>
                                     <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
@@ -1555,8 +1665,31 @@ export default function CRMPage() {
                                       <span>{msg.received_at ? new Date(msg.received_at).toLocaleDateString() : msg.sent_at ? new Date(msg.sent_at).toLocaleDateString() : ""}</span>
                                     </div>
                                   </button>
+                                  {/* Expandable thread preview */}
+                                  {isCardExpanded && replyCount > 1 && (
+                                    <div className="mt-3 space-y-1.5 border-t border-white/5 pt-3">
+                                      {item.msgs.map((m: any) => (
+                                        <div
+                                          key={m.id}
+                                          className={cn(
+                                            "rounded-lg px-2.5 py-2 text-[11px]",
+                                            m.direction === "sent" ? "bg-emerald-950/20 border border-emerald-500/10" : "bg-white/[0.03] border border-white/5"
+                                          )}
+                                        >
+                                          <div className="flex items-center justify-between mb-0.5">
+                                            <span className="font-medium text-white/80 truncate">{m.direction === "sent" ? `To: ${m.to_address}` : m.from_address}</span>
+                                            <span className="text-[9px] text-muted-foreground shrink-0 ml-2">
+                                              {m.received_at ? new Date(m.received_at).toLocaleDateString() : m.sent_at ? new Date(m.sent_at).toLocaleDateString() : ""}
+                                            </span>
+                                          </div>
+                                          <p className="text-muted-foreground truncate">{m.body?.slice(0, 100) || "(No content)"}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           </div>
                         )
@@ -1591,7 +1724,7 @@ export default function CRMPage() {
                       {t("crmGoToChannelsConnect")}
                     </Link>
                   </div>
-                ) : inboxMessages.filter((m: any) => !activeCh.id || m.provider === activeCh.id).length === 0 ? (
+                ) : [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")].filter((m: any) => !activeCh.id || m.provider === activeCh.id).length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <Mail className="mb-2 h-6 w-6 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
@@ -1613,23 +1746,40 @@ export default function CRMPage() {
                       <tbody>
                         {(() => {
                           const q = emailSearch.toLowerCase()
-                          return [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")]
+                          const allMsgs = [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")]
                             .filter((m: any) => !activeCh.id || m.provider === activeCh.id)
                             .filter((m: any) => !q || (m.subject || "").toLowerCase().includes(q) || (m.from_address || "").toLowerCase().includes(q) || (m.body || "").toLowerCase().includes(q))
                             .filter((m: any) => emailFilter.direction === "all" || m.direction === emailFilter.direction)
                             .filter((m: any) => emailFilter.read === "all" || (emailFilter.read === "read" ? m.read : !m.read))
                             .filter((m: any) => !contactEmailFilter || (m.from_address || "").includes(contactEmailFilter) || (m.to_address || "").includes(contactEmailFilter))
                             .filter((m: any) => !keywordFilter || (m.subject || "").toLowerCase().includes(keywordFilter) || (m.body || "").toLowerCase().includes(keywordFilter))
-                        })().sort((a: any, b: any) => {
-                            const da = a.received_at ? new Date(a.received_at).getTime() : a.sent_at ? new Date(a.sent_at).getTime() : 0
-                            const db = b.received_at ? new Date(b.received_at).getTime() : b.sent_at ? new Date(b.sent_at).getTime() : 0
+                          // Group by thread_id
+                          const threadGroups = new Map<string, any[]>()
+                          for (const m of allMsgs) {
+                            const tid = m.thread_id || m.id
+                            if (!threadGroups.has(tid)) threadGroups.set(tid, [])
+                            threadGroups.get(tid)!.push(m)
+                          }
+                          return Array.from(threadGroups.entries()).map(([tid, msgs]) => {
+                            msgs.sort((a: any, b: any) => {
+                              const da = a.received_at ? new Date(a.received_at).getTime() : a.sent_at ? new Date(a.sent_at).getTime() : 0
+                              const db = b.received_at ? new Date(b.received_at).getTime() : b.sent_at ? new Date(b.sent_at).getTime() : 0
+                              return db - da
+                            })
+                            return { threadId: tid, msgs, latest: msgs[0] }
+                          }).sort((a, b) => {
+                            const da = a.latest.received_at ? new Date(a.latest.received_at).getTime() : a.latest.sent_at ? new Date(a.latest.sent_at).getTime() : 0
+                            const db = b.latest.received_at ? new Date(b.latest.received_at).getTime() : b.latest.sent_at ? new Date(b.latest.sent_at).getTime() : 0
                             return db - da
-                          }).map((msg: any) => {
+                          })
+                        })().map((item: any) => {
+                          const msg = item.latest
+                          const replyCount = item.msgs.length
                           const colId = emailCardCols[msg.id] || (msg.direction === "sent" ? "sent" : msg.read ? "read" : "unread")
                           const col = emailKanbanCols.find(c => c.id === colId) || emailKanbanCols[0]
                           return (
                           <tr
-                            key={msg.id}
+                            key={item.threadId}
                             onClick={async () => {
                               setOpenEmail(msg); setReplyBody(""); setSendingReply(false)
                               if (!msg.read && user) {
@@ -1648,6 +1798,9 @@ export default function CRMPage() {
                             <td className="px-4 py-2.5 font-medium truncate max-w-[180px]">{msg.direction === "sent" ? `To: ${msg.to_address}` : msg.from_address}</td>
                             <td className="px-4 py-2.5 truncate max-w-[360px]">
                               <span className={cn(!msg.read && msg.direction !== "sent" && "font-semibold")}>{msg.subject || "(No subject)"}</span>
+                              {replyCount > 1 && (
+                                <span className="ml-2 inline-flex items-center rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400">{replyCount}</span>
+                              )}
                               <span className="text-muted-foreground ml-2 font-normal">{msg.body?.slice(0, 60) || ""}</span>
                             </td>
                             <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
@@ -2334,33 +2487,142 @@ export default function CRMPage() {
       </div>
 
       {/* ── EMAIL OPEN / REPLY MODAL ── */}
-      {openEmail && (
+      {openEmail && (() => {
+        const threadMessages = emailMessages
+          .filter((m: any) => m.thread_id === openEmail.thread_id)
+          .sort((a: any, b: any) => {
+            const da = a.received_at ? new Date(a.received_at).getTime() : a.sent_at ? new Date(a.sent_at).getTime() : 0
+            const db = b.received_at ? new Date(b.received_at).getTime() : b.sent_at ? new Date(b.sent_at).getTime() : 0
+            return da - db
+          })
+        return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setOpenEmail(null)}>
           <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1e2330] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold text-white">{openEmail.subject || "(No subject)"}</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">{openEmail.from_address}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  {openEmail.received_at ? new Date(openEmail.received_at).toLocaleString() : ""}
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">{threadMessages.length} message{threadMessages.length > 1 ? "s" : ""} in this thread</p>
               </div>
               <button onClick={() => setOpenEmail(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Email body */}
-            <div className={cn("rounded-lg border border-white/5 bg-white/5 p-4 text-sm text-white/90 mb-4", openEmail.html_body ? "prose prose-invert max-w-none" : "")}>
-              {openEmail.html_body ? (
-                <div dangerouslySetInnerHTML={{ __html: openEmail.html_body }} />
-              ) : (
-                <p className="whitespace-pre-wrap">{openEmail.body || "(No content)"}</p>
+            {/* Thread messages */}
+            <div className="space-y-2 mb-4">
+              {(() => {
+                const threadId = openEmail.thread_id || openEmail.id
+                const isExpanded = expandedThreads.has(threadId)
+                const visibleMessages = isExpanded ? threadMessages : threadMessages.slice(-1)
+                const hiddenCount = threadMessages.length - visibleMessages.length
+                return (
+                <>
+              {/* Collapsed: show "Show N previous messages" button */}
+              {hiddenCount > 0 && (
+                <button
+                  onClick={() => setExpandedThreads(prev => { const next = new Set(prev); next.add(threadId); return next })}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  Show {hiddenCount} previous message{hiddenCount > 1 ? "s" : ""}
+                </button>
               )}
+
+              {/* Expanded: show "Hide" button at top */}
+              {isExpanded && threadMessages.length > 1 && (
+                <button
+                  onClick={() => setExpandedThreads(prev => { const next = new Set(prev); next.delete(threadId); return next })}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground hover:text-white/70 transition-colors"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                  Hide previous messages
+                </button>
+              )}
+
+              {visibleMessages.map((msg: any, idx: number) => {
+                const cleanBody = (() => {
+                  if (msg.html_body) {
+                    return msg.html_body
+                      .replace(/<div style="border-left:[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
+                      .replace(/<blockquote[^>]*>[\s\S]*?<\/blockquote>/gi, "")
+                      .replace(/<div class="gmail_quote[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
+                      .replace(/<div class="moz-cite-prefix[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
+                      .replace(/On .* wrote:[\s\S]*$/i, "")
+                      .replace(/Pada .* menulis:[\s\S]*$/i, "")
+                      .replace(/^---$/gm, "")
+                      .replace(/\*+/g, "")
+                      .trim()
+                  }
+                  const raw = msg.body || "(No content)"
+                  return raw
+                    .split("\n")
+                    .filter((l: string) => !l.startsWith(">") && !l.startsWith("    "))
+                    .join("\n")
+                    .replace(/^On .* wrote:\s*$/gm, "")
+                    .replace(/^Pada .* menulis:\s*$/gm, "")
+                    .replace(/\*+/g, "")
+                    .replace(/^---$/gm, "")
+                    .replace(/\n{3,}/g, "\n\n")
+                    .trim() || "(No content)"
+                })()
+                const rawFrom = msg.from_address || ""
+                const nameMatch = rawFrom.match(/^"?([^"<]+?)"?\s*<.*>$/)
+                const emailMatch = rawFrom.match(/<([^>]+)>/) || rawFrom.match(/([^\s]+@[^\s]+)/)
+                const emailOnly = emailMatch ? emailMatch[1] : rawFrom
+                const senderName = (nameMatch ? nameMatch[1].trim() : "") || emailOnly.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) || rawFrom
+                const initials = senderName.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)
+                return (
+                <div key={msg.id} className={cn(
+                  "rounded-xl border p-4 text-sm transition-colors",
+                  msg.direction === "sent"
+                    ? "border-emerald-500/20 bg-emerald-950/10"
+                    : "border-white/5 bg-white/[0.03]"
+                )}>
+                  <div className="flex items-start gap-3">
+                    {msg.direction === "sent" && avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }} />
+                    ) : (
+                      <div className={cn(
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                        msg.direction === "sent" ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400"
+                      )}>
+                        {initials}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-white/90">{senderName}</span>
+                          <span className={cn(
+                            "inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold",
+                            msg.direction === "sent" ? "bg-emerald-500/15 text-emerald-400" : "bg-blue-500/15 text-blue-400"
+                          )}>
+                            {msg.direction === "sent" ? "SENT" : "RECEIVED"}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          {msg.received_at ? new Date(msg.received_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : msg.sent_at ? new Date(msg.sent_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                        </span>
+                      </div>
+                      <div className={cn(msg.html_body ? "prose prose-invert prose-sm max-w-none" : "")}>
+                        {msg.html_body ? (
+                          <div dangerouslySetInnerHTML={{ __html: cleanBody }} />
+                        ) : (
+                          <p className="whitespace-pre-wrap text-white/80 text-[13px] leading-relaxed">{cleanBody}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                )
+              })}
+                </>
+                )
+              })()}
             </div>
 
             {/* Reply section */}
-            <div className="space-y-3">
+            <div className="space-y-3 border-t border-white/5 pt-4">
               <div className="flex items-center gap-2">
                 <Reply className="h-3.5 w-3.5 text-emerald-400" />
                 <span className="text-xs font-medium text-emerald-400">Reply</span>
@@ -2381,6 +2643,21 @@ export default function CRMPage() {
                     if (!conn) return
                     setSendingReply(true)
                     try {
+                      // Build quoted reply — nested conversation history, clean and readable
+                      let plainQuote = ""
+                      let htmlQuote = ""
+                      for (let i = 0; i < threadMessages.length; i++) {
+                        const m = threadMessages[i]
+                        const mDate = m.received_at || m.sent_at
+                        const mFrom = m.from_address || ""
+                        const mText = (m.body || "").replace(/^>+ /gm, "").replace(/\*+/g, "").replace(/^---$/gm, "").trim()
+                        const header = `On ${mDate ? new Date(mDate).toLocaleString() : ""}, ${mFrom} wrote:`
+                        const indentedText = mText.split("\n").map((l: string) => `    ${l}`).join("\n")
+                        plainQuote = `${header}\n\n${indentedText}${plainQuote ? "\n\n" + plainQuote.split("\n").map((l: string) => `    ${l}`).join("\n") : ""}`
+                        htmlQuote = `<div style="border-left:3px solid #e0e0e0;padding-left:14px;margin:10px 0;color:#555;"><div style="font-size:12px;color:#999;margin-bottom:6px;">On ${mDate ? new Date(mDate).toLocaleString() : ""}, ${mFrom} wrote:</div><div style="font-size:14px;line-height:1.5;">${(mText || "").replace(/\n/g, "<br>")}</div>${htmlQuote ? `<div style="margin-top:10px;">${htmlQuote}</div>` : ""}</div>`
+                      }
+                      const quotedReply = `${replyBody}\n\n${plainQuote}`
+                      const quotedHtml = `<div style="font-size:14px;line-height:1.5;">${replyBody.replace(/\n/g, "<br>")}</div><br>${htmlQuote}`
                       const res = await fetch("/api/email/send", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -2388,8 +2665,9 @@ export default function CRMPage() {
                           userId: user.id,
                           providerId,
                           to: openEmail.from_address,
-                          subject: `Re: ${openEmail.subject || ""}`,
-                          body: replyBody,
+                          subject: openEmail.subject?.startsWith("Re:") ? openEmail.subject : `Re: ${openEmail.subject || ""}`,
+                          body: quotedReply,
+                          html: quotedHtml,
                           threadId: openEmail.thread_id || undefined,
                           originalMessageId: openEmail.message_id_header || openEmail.message_id || undefined,
                         }),
@@ -2418,7 +2696,8 @@ export default function CRMPage() {
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* ── PRIVACY MODAL ── */}
       {privacyOpen && (
