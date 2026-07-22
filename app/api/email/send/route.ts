@@ -209,6 +209,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Store sent email in DB
+    const sentHtml = html || bodyToHtml(body)
     const { data: insertedMsg, error: insertError } = await supabase.from("email_messages").insert({
       user_id: userId,
       connection_id: conn.id,
@@ -219,6 +220,7 @@ export async function POST(req: NextRequest) {
       cc_address: cc || null,
       subject,
       body,
+      html_body: sentHtml,
       message_id: messageId,
       message_id_header: conn.oauth_provider === "google" ? null : messageId,
       thread_id: threadId,

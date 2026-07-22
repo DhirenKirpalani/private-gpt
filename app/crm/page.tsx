@@ -50,6 +50,11 @@ function getInitials(name: string): string {
   return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
 }
 
+function stripHtml(text: string): string {
+  if (!text) return ""
+  return text.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim()
+}
+
 type Contact = { id: string; name: string; company: string | null; role: string | null; email: string | null; phone: string | null; location: string | null; tags: string[]; starred: boolean; lastContact: string; dealValue: number; dealStage: string | null }
 
 export default function CRMPage() {
@@ -93,6 +98,8 @@ export default function CRMPage() {
   // Email open/reply state
   const [openEmail, setOpenEmail] = useState<any>(null)
   const [replyBody, setReplyBody] = useState("")
+  const [replyTo, setReplyTo] = useState("")
+  const [replyCc, setReplyCc] = useState("")
   const [sendingReply, setSendingReply] = useState(false)
 
   // Pagination state
@@ -1546,9 +1553,10 @@ export default function CRMPage() {
                           .filter((m: any) => emailFilter.read === "all" || (emailFilter.read === "read" ? m.read : !m.read))
                           .filter((m: any) => !contactEmailFilter || (m.from_address || "").includes(contactEmailFilter) || (m.to_address || "").includes(contactEmailFilter))
                           .filter((m: any) => !keywordFilter || (m.subject || "").toLowerCase().includes(keywordFilter) || (m.body || "").toLowerCase().includes(keywordFilter))
-                        // Group by thread_id — one card per thread
+                        // Group by thread_id — one card per thread (dedupe by message_id)
+                        const dedupedMsgs = allMsgs.filter((m: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.message_id === m.message_id) === i)
                         const threadGroups = new Map<string, any[]>()
-                        for (const m of allMsgs) {
+                        for (const m of dedupedMsgs) {
                           const tid = m.thread_id || m.id
                           if (!threadGroups.has(tid)) threadGroups.set(tid, [])
                           threadGroups.get(tid)!.push(m)
@@ -1622,7 +1630,7 @@ export default function CRMPage() {
                                   className="w-full rounded-xl border bg-card p-4 text-left shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-grab active:cursor-grabbing active:opacity-60 active:scale-95"
                                 >
                                   <button className="w-full text-left" onClick={async () => {
-                                    setOpenEmail(msg); setReplyBody(""); setSendingReply(false)
+                                    setOpenEmail(msg); setReplyBody(""); setReplyTo(msg.direction === "sent" ? msg.to_address : msg.from_address); setReplyCc(msg.cc_address || ""); setSendingReply(false)
                                     if (!msg.read && user) {
                                       try {
                                         await markEmailAsRead(user.id, msg.id)
@@ -1652,7 +1660,7 @@ export default function CRMPage() {
                                       )}
                                     </div>
                                     <p className="text-xs text-muted-foreground truncate">{msg.direction === "sent" ? `To: ${msg.to_address}` : msg.from_address}</p>
-                                    <p className="text-xs text-muted-foreground truncate mt-1">{msg.body?.slice(0, 80) || ""}</p>
+                                    <p className="text-xs text-muted-foreground truncate mt-1">{stripHtml(msg.body)?.slice(0, 80) || ""}</p>
                                     <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
                                       <Mail className="h-3 w-3" />
                                       <span>{msg.received_at ? new Date(msg.received_at).toLocaleDateString() : msg.sent_at ? new Date(msg.sent_at).toLocaleDateString() : ""}</span>
@@ -1675,7 +1683,7 @@ export default function CRMPage() {
                                               {m.received_at ? new Date(m.received_at).toLocaleDateString() : m.sent_at ? new Date(m.sent_at).toLocaleDateString() : ""}
                                             </span>
                                           </div>
-                                          <p className="text-muted-foreground truncate">{m.body?.slice(0, 100) || "(No content)"}</p>
+                                          <p className="text-muted-foreground truncate">{stripHtml(m.body)?.slice(0, 100) || "(No content)"}</p>
                                         </div>
                                       ))}
                                     </div>
@@ -1774,7 +1782,7 @@ export default function CRMPage() {
                           <tr
                             key={item.threadId}
                             onClick={async () => {
-                              setOpenEmail(msg); setReplyBody(""); setSendingReply(false)
+                              setOpenEmail(msg); setReplyBody(""); setReplyTo(msg.direction === "sent" ? msg.to_address : msg.from_address); setReplyCc(msg.cc_address || ""); setSendingReply(false)
                               if (!msg.read && user) {
                                 try {
                                   await markEmailAsRead(user.id, msg.id)
@@ -1794,7 +1802,7 @@ export default function CRMPage() {
                               {replyCount > 1 && (
                                 <span className="ml-2 inline-flex items-center rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400">{replyCount}</span>
                               )}
-                              <span className="text-muted-foreground ml-2 font-normal">{msg.body?.slice(0, 60) || ""}</span>
+                              <span className="text-muted-foreground ml-2 font-normal">{stripHtml(msg.body)?.slice(0, 60) || ""}</span>
                             </td>
                             <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                               <div className="relative">
@@ -1863,7 +1871,7 @@ export default function CRMPage() {
                       <button
                         key={msg.id}
                         onClick={async () => {
-                          setOpenEmail(msg); setReplyBody(""); setSendingReply(false)
+                          setOpenEmail(msg); setReplyBody(""); setReplyTo(msg.direction === "sent" ? msg.to_address : msg.from_address); setReplyCc(msg.cc_address || ""); setSendingReply(false)
                           if (!msg.read && user) {
                             try {
                               await markEmailAsRead(user.id, msg.id)
@@ -1881,7 +1889,7 @@ export default function CRMPage() {
                           </span>
                         </div>
                         <p className="text-sm font-medium truncate">{msg.subject || "(No subject)"}</p>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">{msg.body?.slice(0, 120) || ""}...</p>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{stripHtml(msg.body)?.slice(0, 120) || ""}...</p>
                       </button>
                     ))}
                     {nextPageToken && (
@@ -2483,20 +2491,21 @@ export default function CRMPage() {
       {openEmail && (() => {
         const threadMessages = emailMessages
           .filter((m: any) => m.thread_id === openEmail.thread_id)
+          .filter((m: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.message_id === m.message_id) === i)
           .sort((a: any, b: any) => {
             const da = a.received_at ? new Date(a.received_at).getTime() : a.sent_at ? new Date(a.sent_at).getTime() : 0
             const db = b.received_at ? new Date(b.received_at).getTime() : b.sent_at ? new Date(b.sent_at).getTime() : 0
             return da - db
           })
         return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setOpenEmail(null)}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => { setOpenEmail(null); setReplyTo(""); setReplyCc("") }}>
           <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1e2330] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold text-white">{openEmail.subject || "(No subject)"}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">{threadMessages.length} message{threadMessages.length > 1 ? "s" : ""} in this thread</p>
               </div>
-              <button onClick={() => setOpenEmail(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors">
+              <button onClick={() => { setOpenEmail(null); setReplyTo(""); setReplyCc("") }} className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -2534,6 +2543,7 @@ export default function CRMPage() {
 
               {visibleMessages.map((msg: any, idx: number) => {
                 const cleanBody = (() => {
+                  const hasHtml = (text: string) => /<[a-z][\s\S]*>/i.test(text || "")
                   if (msg.html_body) {
                     return msg.html_body
                       .replace(/<div style="border-left:[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
@@ -2544,6 +2554,16 @@ export default function CRMPage() {
                       .replace(/Pada .* menulis:[\s\S]*$/i, "")
                       .replace(/^---$/gm, "")
                       .replace(/\*+/g, "")
+                      .trim()
+                  }
+                  // If body contains HTML tags, treat as HTML
+                  if (hasHtml(msg.body)) {
+                    return (msg.body || "")
+                      .replace(/<div style="border-left:[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
+                      .replace(/<blockquote[^>]*>[\s\S]*?<\/blockquote>/gi, "")
+                      .replace(/<div class="gmail_quote[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
+                      .replace(/On .* wrote:[\s\S]*$/i, "")
+                      .replace(/Pada .* menulis:[\s\S]*$/i, "")
                       .trim()
                   }
                   const raw = msg.body || "(No content)"
@@ -2597,8 +2617,14 @@ export default function CRMPage() {
                           {msg.received_at ? new Date(msg.received_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : msg.sent_at ? new Date(msg.sent_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
                         </span>
                       </div>
-                      <div className={cn(msg.html_body ? "prose prose-invert prose-sm max-w-none" : "")}>
-                        {msg.html_body ? (
+                      {(msg.to_address || msg.cc_address) && (
+                        <div className="text-[10px] text-muted-foreground mb-1.5 space-y-0.5">
+                          {msg.to_address && <p><span className="text-muted-foreground/60">To:</span> {msg.to_address}</p>}
+                          {msg.cc_address && <p><span className="text-muted-foreground/60">Cc:</span> {msg.cc_address}</p>}
+                        </div>
+                      )}
+                      <div className={cn((msg.html_body || /<[a-z][\s\S]*>/i.test(msg.body || "")) ? "prose prose-invert prose-sm max-w-none" : "")}>
+                        {(msg.html_body || /<[a-z][\s\S]*>/i.test(msg.body || "")) ? (
                           <div dangerouslySetInnerHTML={{ __html: cleanBody }} />
                         ) : (
                           <p className="whitespace-pre-wrap text-white/80 text-[13px] leading-relaxed">{cleanBody}</p>
@@ -2619,6 +2645,22 @@ export default function CRMPage() {
               <div className="flex items-center gap-2">
                 <Reply className="h-3.5 w-3.5 text-emerald-400" />
                 <span className="text-xs font-medium text-emerald-400">Reply</span>
+              </div>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={replyTo}
+                  onChange={e => setReplyTo(e.target.value)}
+                  placeholder="To:"
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                />
+                <input
+                  type="text"
+                  value={replyCc}
+                  onChange={e => setReplyCc(e.target.value)}
+                  placeholder="Cc:"
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                />
               </div>
               <textarea
                 value={replyBody}
@@ -2657,7 +2699,8 @@ export default function CRMPage() {
                         body: JSON.stringify({
                           userId: user.id,
                           providerId,
-                          to: openEmail.from_address,
+                          to: replyTo || openEmail.from_address,
+                          cc: replyCc || undefined,
                           subject: openEmail.subject?.startsWith("Re:") ? openEmail.subject : `Re: ${openEmail.subject || ""}`,
                           body: quotedReply,
                           html: quotedHtml,
@@ -2672,6 +2715,8 @@ export default function CRMPage() {
                       setEmailMessages(msgs)
                       setOpenEmail(null)
                       setReplyBody("")
+                      setReplyTo("")
+                      setReplyCc("")
                     } catch (e: any) {
                       console.error("[REPLY]", e)
                       toast({ title: "Error", description: e?.message || "Failed to send reply", variant: "error" })
@@ -2936,7 +2981,7 @@ export default function CRMPage() {
                               {m.received_at ? new Date(m.received_at).toLocaleDateString() : m.sent_at ? new Date(m.sent_at).toLocaleDateString() : ""}
                             </span>
                           </div>
-                          <p className="truncate text-[11px] text-muted-foreground mt-0.5">{m.body?.slice(0, 100) || ""}</p>
+                          <p className="truncate text-[11px] text-muted-foreground mt-0.5">{stripHtml(m.body)?.slice(0, 100) || ""}</p>
                         </div>
                       </div>
                     ))}

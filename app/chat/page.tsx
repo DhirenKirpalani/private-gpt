@@ -178,6 +178,8 @@ export default function ChatPage() {
   const [openCategoryIndex, setOpenCategoryIndex] = useState<number | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [executingActions, setExecutingActions] = useState<Set<string>>(new Set())
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const [failedMessageId, setFailedMessageId] = useState<string | null>(null)
 
   const DEFAULT_CATEGORIES = ["SOPs", "FAQs", "Training Material", "Policies", "Reports"]
 
@@ -348,11 +350,24 @@ export default function ChatPage() {
     return conv.id
   }
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return
+  const sendMessage = async (retryContent?: string, retryConvId?: string) => {
+    const content = retryContent || input
+    if (!content.trim() || loading) return
+    if (content.length > 5000) {
+      setChatError("Message too long. Please limit to 5000 characters.")
+      return
+    }
     setChatError("")
+    setFailedMessageId(null)
 
-    let convId = currentConversationId
+    // Abort any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
+    let convId = retryConvId || currentConversationId
     try {
       convId = await ensureConversation()
     } catch (err: any) {
@@ -360,17 +375,19 @@ export default function ChatPage() {
       return
     }
 
-    const userMsg: Message = { id: Date.now().toString(), role: "user", content: input, timestamp: new Date() }
+    const userMsg: Message = { id: Date.now().toString(), role: "user", content, timestamp: new Date() }
     const nextMessages = [...messages, userMsg]
     setMessages(nextMessages)
-    setInput("")
-    localStorage.removeItem("exploro_chat_draft")
-    if (textareaRef.current) { textareaRef.current.style.height = "auto" }
+    if (!retryContent) {
+      setInput("")
+      localStorage.removeItem("exploro_chat_draft")
+      if (textareaRef.current) { textareaRef.current.style.height = "auto" }
+    }
     setShowKbPanel(false)
     setLoading(true)
 
     // Save user message to DB
-    saveMessage(convId, "user", userMsg.content).catch(() => {})
+    saveMessage(convId, "user", userMsg.content).catch((e) => console.error("[CHAT] Failed to save user message:", e))
 
     // Detect if user is asking about internal documents — skip web search if so
     function isInternalQuery(query: string): boolean {
@@ -388,7 +405,7 @@ export default function ChatPage() {
       ]
       return internalSignals.some(s => lower.includes(s))
     }
-    const userAsksAboutInternal = isInternalQuery(input)
+    const userAsksAboutInternal = isInternalQuery(content)
 
     // Detect if user is asking about emails or calendar
     function isEmailOrCalendarQuery(query: string): boolean {
@@ -402,7 +419,7 @@ export default function ChatPage() {
       ]
       return signals.some(s => lower.includes(s))
     }
-    const userAsksAboutEmailOrCalendar = isEmailOrCalendarQuery(input)
+    const userAsksAboutEmailOrCalendar = isEmailOrCalendarQuery(content)
 
     // Build context-aware loading texts based on active toggles
     const hasKb = kbEnabled && kbDocs.length > 0
@@ -512,6 +529,9 @@ export default function ChatPage() {
         `- Draft and send WhatsApp replies (ask for recipient phone number and message)`,
         `- Suggest follow-up actions for unread WhatsApp messages`,
         ``,
+        `# Web Search Capability`,
+        `When Web Search is enabled, you receive live web search results in your prompt. You CAN and SHOULD use these results to answer questions about websites, products, companies, or any topic the user asks about. Never say "I cannot browse the internet" or "I do not have the ability to access websites" when web search results are provided to you — use them directly.`,
+        ``,
         `# CRITICAL: EMAIL SENDING PROTOCOL`,
         `You CANNOT send emails yourself. You do NOT have the ability to send emails. NEVER tell the user "I have sent the email" or "The email has been sent" — that would be a lie.`,
         `When the user asks you to send an email, you MUST do the following:`,
@@ -612,6 +632,7 @@ export default function ChatPage() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ query: searchQuery }),
+              signal: controller.signal,
             })
             if (wsRes.ok) {
               wsData = await wsRes.json()
@@ -674,6 +695,7 @@ export default function ChatPage() {
           systemPrompt: finalSystemPrompt,
           responseLength: aiProfile?.response_length || "Standard",
         }),
+        signal: controller.signal,
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || "Request failed")
@@ -702,11 +724,17 @@ export default function ChatPage() {
         generateTitle(convId, userMsg.content, assistantMsg.content).catch(() => {})
       }
     } catch (err: any) {
+      if (err?.name === "AbortError") return // Aborted by new request, don't show error
+      console.error("[CHAT] sendMessage error:", err)
       setChatError(err?.message || "Something went wrong. Please try again.")
+      setFailedMessageId(userMsg.id)
     } finally {
       clearInterval(iv)
       setLoading(false)
       setLoadingText("")
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null
+      }
     }
   }
 
@@ -832,7 +860,7 @@ export default function ChatPage() {
     try {
       const convs = await getConversations(user.id, currentWorkspace?.id)
       setConversations(convs)
-    } catch { /* silent */ } finally {
+    } catch (e) { console.error("[CHAT] Failed to load conversations:", e) } finally {
       setConversationsLoading(false)
     }
   }
@@ -859,7 +887,7 @@ export default function ChatPage() {
         await updateConversationTitle(convId, title)
         setConversations(prev => prev.map(c => c.id === convId ? { ...c, title } : c))
       }
-    } catch { /* silent */ }
+    } catch (e) { console.error("[CHAT] Failed to generate title:", e) }
   }
 
   // Detect AI action blocks (<!--ACTION:{...}-->) and return stripped content + action data
@@ -1070,15 +1098,28 @@ export default function ChatPage() {
   }
 
   async function handleNewConversation() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setLoading(false)
     setMessages([])
     setCurrentConversationId(null)
     localStorage.removeItem("exploro_current_conv")
     setChatError("")
+    setFailedMessageId(null)
   }
 
   async function handleSelectConversation(convId: string) {
     if (convId === currentConversationId) return
+    // Abort any in-flight chat request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setLoading(false)
     setChatError("")
+    setFailedMessageId(null)
     setCurrentConversationId(convId)
     localStorage.setItem("exploro_current_conv", convId)
     try {
@@ -1094,7 +1135,7 @@ export default function ChatPage() {
           timestamp: new Date(m.created_at),
         }
       }))
-    } catch { /* silent */ }
+    } catch (e) { console.error("[CHAT] Failed to load conversation messages:", e) }
   }
 
   async function handleDeleteConversation(e: React.MouseEvent, convId: string) {
@@ -1146,7 +1187,7 @@ export default function ChatPage() {
         for (const c of contents) map[c.id] = c.parsed_text
         setKbDocContents(map)
       } catch { /* silent */ }
-    } catch { /* silent */ } finally {
+    } catch (e) { console.error("[CHAT] Failed to load KB docs:", e) } finally {
       setKbLoading(false)
     }
   }
@@ -1458,6 +1499,7 @@ export default function ChatPage() {
                     <textarea
                       ref={textareaRef}
                       value={input}
+                      maxLength={5000}
                       onChange={e => {
                         const val = e.target.value
                         setInput(val)
@@ -1471,6 +1513,11 @@ export default function ChatPage() {
                       className="w-full min-h-[48px] max-h-[160px] resize-none overflow-y-auto bg-transparent px-4 pt-4 pb-2 text-sm placeholder:text-slate-400 focus:outline-none"
                       style={{ color: inputDark ? brandInput.text : "#1e293b" }}
                     />
+                    {input.length > 4500 && (
+                      <p className={cn("absolute bottom-1 right-3 text-[10px]", input.length >= 5000 ? "text-red-400" : "text-muted-foreground")}>
+                        {input.length}/5000
+                      </p>
+                    )}
                   </div>
                   <div className="flex w-full items-center justify-between px-3 pb-3 pt-1">
                     <div className="relative flex items-center gap-0.5" ref={kbPanelRef}>
@@ -1610,7 +1657,7 @@ export default function ChatPage() {
                       </button>
                     </div>
                     <button
-                      onClick={sendMessage}
+                      onClick={() => sendMessage()}
                       disabled={!input.trim() || loading}
                       className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white transition-all hover:bg-emerald-700 disabled:opacity-40"
                     >
@@ -1834,6 +1881,7 @@ export default function ChatPage() {
                   <textarea
                     ref={textareaRef}
                     value={input}
+                    maxLength={5000}
                     onChange={e => {
                       const val = e.target.value
                       setInput(val)
@@ -1847,6 +1895,11 @@ export default function ChatPage() {
                     className="w-full min-h-[48px] max-h-[160px] resize-none overflow-y-auto bg-transparent px-4 pt-4 pb-2 text-sm placeholder:text-slate-400 focus:outline-none"
                     style={{ color: inputDark ? brandInput.text : "#1e293b" }}
                   />
+                  {input.length > 4500 && (
+                    <p className={cn("absolute bottom-1 right-3 text-[10px]", input.length >= 5000 ? "text-red-400" : "text-muted-foreground")}>
+                      {input.length}/5000
+                    </p>
+                  )}
                 </div>
                 <div className="flex w-full items-center justify-between px-3 pb-3 pt-1">
                   <div className="relative flex items-center gap-0.5" ref={kbPanelRef}>
@@ -1986,7 +2039,7 @@ export default function ChatPage() {
                     </button>
                   </div>
                   <button
-                    onClick={sendMessage}
+                    onClick={() => sendMessage()}
                     disabled={!input.trim() || loading}
                     className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white transition-all hover:bg-emerald-700 disabled:opacity-40"
                   >
@@ -1995,7 +2048,25 @@ export default function ChatPage() {
                 </div>
               </div>
               {chatError && (
-                <p className="mt-2 text-center text-xs text-red-400">{chatError}</p>
+                <div className="mt-2 flex items-center justify-center gap-3">
+                  <p className="text-xs text-red-400">{chatError}</p>
+                  {failedMessageId && (
+                    <button
+                      onClick={() => {
+                        const failedMsg = messages.find(m => m.id === failedMessageId)
+                        if (failedMsg) {
+                          setMessages(prev => prev.filter(m => m.id !== failedMessageId))
+                          sendMessage(failedMsg.content, currentConversationId || undefined)
+                        }
+                      }}
+                      disabled={loading}
+                      className="inline-flex items-center gap-1 rounded-lg border border-red-400/30 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Retry
+                    </button>
+                  )}
+                </div>
               )}
               {!chatError && (
                 <p className="mt-2 text-center text-xs text-muted-foreground">
