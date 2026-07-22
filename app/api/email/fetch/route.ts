@@ -48,15 +48,28 @@ async function refreshIfNeeded(conn: any): Promise<string> {
 }
 
 const BUSINESS_KEYWORDS = [
-  "proposal", "invoice", "contract", "quote", "purchase order", "po",
+  "proposal", "invoice", "contract", "quote", "purchase order",
   "payment", "receipt", "agreement", "deal", "billing", "estimate",
-  "refund", "opportunity", "milestone", "deliverable", "deadline",
-  "legal", "sow", "rfp", "nda", "msa", "scope of work",
+  "refund", "opportunity", "sow", "rfp", "nda", "msa", "scope of work",
 ]
+
+const EXCLUDED_SENDERS = [
+  "linkedin.com", "noreply", "notifications", "jobs-noreply",
+  "google.com", "facebook.com", "twitter.com", "instagram.com",
+  "youtube.com", "github.com", "medium.com", "substack.com",
+]
+
+function isExcludedSender(fromAddress: string): boolean {
+  const lower = (fromAddress || "").toLowerCase()
+  return EXCLUDED_SENDERS.some(s => lower.includes(s))
+}
 
 function matchesBusinessKeywords(text: string): boolean {
   const lower = text.toLowerCase()
-  return BUSINESS_KEYWORDS.some(k => lower.includes(k.toLowerCase()))
+  return BUSINESS_KEYWORDS.some(k => {
+    if (k.includes(" ")) return lower.includes(k)
+    return new RegExp(`\\b${k}\\b`).test(lower)
+  })
 }
 
 // Remove invalid Unicode surrogate pairs and control chars that break JSON/Postgres
@@ -106,7 +119,7 @@ export async function POST(req: NextRequest) {
       if (conn.oauth_provider === "google") {
         // Fetch via Gmail API with pagination + 15-day window (keyword filter applied client-side below)
         const pageTokenParam = pageToken ? `&pageToken=${pageToken}` : ""
-        const qParam = encodeURIComponent(`after:${afterTimestamp}`)
+        const qParam = encodeURIComponent(`after:${afterTimestamp} -in:trash -in:spam -in:junk`)
         const listRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${qParam}${pageTokenParam}`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -197,10 +210,8 @@ export async function POST(req: NextRequest) {
           }
 
           const subject = getHeader("Subject")
-          const threadId = d.threadId || d.id
-          const isInKeywordThread = keywordThreadIds.has(threadId)
-          const isInSentThread = sentThreadIds.has(threadId)
-          if (!matchesBusinessKeywords(subject.toLowerCase()) && !isInKeywordThread && !isInSentThread) {
+          const fromAddress = getHeader("From")
+          if (isExcludedSender(fromAddress) || !matchesBusinessKeywords(subject.toLowerCase())) {
             continue
           }
 
@@ -228,6 +239,102 @@ export async function POST(req: NextRequest) {
             .insert(payloads)
             .select()
           if (inserted) results.push(...inserted)
+        }
+
+        // ── Fetch sent emails from Gmail Sent folder ──
+        // Only fetch sent emails that share a thread_id with existing emails in the DB
+        if (existingThreadEmails && existingThreadEmails.length > 0) {
+          const trackedThreadIds = new Set(existingThreadEmails.map((te: any) => te.thread_id).filter(Boolean))
+          const sentQParam = encodeURIComponent(`after:${afterTimestamp} in:sent`)
+          const sentListRes = await fetch(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${sentQParam}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          )
+          const sentListData = await sentListRes.json()
+          if (sentListRes.ok && sentListData.messages) {
+            const sentMessageIds = sentListData.messages.map((m: any) => m.id)
+            // Filter out already-stored sent emails
+            const { data: existingSentRows } = await supabase
+              .from("email_messages")
+              .select("message_id")
+              .eq("user_id", userId)
+              .eq("connection_id", conn.id)
+              .in("message_id", sentMessageIds)
+            const existingSentIds = new Set((existingSentRows || []).map((r: any) => r.message_id))
+            const newSentIds = sentMessageIds.filter((id: string) => !existingSentIds.has(id))
+
+            if (newSentIds.length > 0) {
+              // Fetch sent email details in batches
+              const sentDetails: (any | null)[] = []
+              for (let i = 0; i < newSentIds.length; i += 8) {
+                const batch = newSentIds.slice(i, i + 8)
+                const batchResults = await Promise.allSettled(
+                  batch.map((id: string) =>
+                    fetch(
+                      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+                      { headers: { Authorization: `Bearer ${accessToken}` } }
+                    ).then(r => r.ok ? r.json() : null)
+                  )
+                )
+                for (const r of batchResults) {
+                  sentDetails.push(r.status === "fulfilled" ? r.value : null)
+                }
+              }
+
+              const sentPayloads: any[] = []
+              for (const d of sentDetails) {
+                if (!d) continue
+                const threadId = d.threadId || d.id
+                // Only import sent emails that belong to a tracked thread
+                if (!trackedThreadIds.has(threadId)) continue
+
+                const headers = d.payload?.headers || []
+                const getHeader = (name: string) => headers.find((h: any) => h.name === name)?.value || ""
+
+                let sentBody = ""
+                let sentHtml = ""
+                const traverseSent = (parts: any[]) => {
+                  for (const part of parts || []) {
+                    if (part.mimeType === "text/plain" && part.body?.data) {
+                      sentBody = Buffer.from(part.body.data, "base64url").toString("utf-8")
+                    } else if (part.mimeType === "text/html" && part.body?.data) {
+                      sentHtml = Buffer.from(part.body.data, "base64url").toString("utf-8")
+                    } else if (part.parts) { traverseSent(part.parts) }
+                  }
+                }
+                if (d.payload?.parts) traverseSent(d.payload.parts)
+                else if (d.payload?.body?.data) {
+                  sentBody = Buffer.from(d.payload.body.data, "base64url").toString("utf-8")
+                }
+
+                sentPayloads.push({
+                  user_id: userId,
+                  connection_id: conn.id,
+                  provider: providerId,
+                  direction: "sent",
+                  from_address: getHeader("From"),
+                  to_address: getHeader("To"),
+                  subject: getHeader("Subject"),
+                  body: sentBody || sentHtml,
+                  html_body: sentHtml || null,
+                  message_id: d.id,
+                  message_id_header: getHeader("Message-ID") || null,
+                  thread_id: threadId,
+                  read: true,
+                  sent_at: new Date(parseInt(d.internalDate)).toISOString(),
+                })
+              }
+
+              if (sentPayloads.length > 0) {
+                const { data: sentInserted } = await supabase
+                  .from("email_messages")
+                  .insert(sentPayloads)
+                  .select()
+                if (sentInserted) results.push(...sentInserted)
+                console.log(`[EMAIL FETCH] Imported ${sentPayloads.length} sent emails from Gmail Sent folder`)
+              }
+            }
+          }
         }
 
       } else if (conn.oauth_provider === "microsoft") {
@@ -289,10 +396,8 @@ export async function POST(req: NextRequest) {
 
         const payloads: any[] = []
         for (const msg of newMsgs) {
-          const threadId = msg.conversationId || msg.id
-          const isInKeywordThread = keywordThreadIds.has(threadId)
-          const isInSentThread = sentThreadIds.has(threadId)
-          if (!matchesBusinessKeywords((msg.subject || "").toLowerCase()) && !isInKeywordThread && !isInSentThread) {
+          const fromAddr = msg.from?.emailAddress?.address || ""
+          if (isExcludedSender(fromAddr) || !matchesBusinessKeywords((msg.subject || "").toLowerCase())) {
             continue
           }
           payloads.push({
@@ -393,9 +498,8 @@ export async function POST(req: NextRequest) {
         }
         console.log(`[IMAP FETCH] Found ${keywordThreadIds.size} keyword threads, ${keywordMessageIds.size} keyword msg IDs, ${sentMessageIds.size} sent msg IDs`)
 
-        // 3. Search for replies to keyword threads + sent emails (by In-Reply-To / References headers)
-        const allReplyMessageIds = new Set(Array.from(keywordMessageIds).concat(Array.from(sentMessageIds)))
-        for (const msgId of Array.from(allReplyMessageIds)) {
+        // 3. Search for replies to keyword threads only (by In-Reply-To / References headers)
+        for (const msgId of Array.from(keywordMessageIds)) {
           const cleanId = msgId.replace(/[<>]/g, "")
           try {
             const results = await connection.search([["SINCE", imapDate], ["HEADER", "In-Reply-To", cleanId]], { bodies: "", struct: true })

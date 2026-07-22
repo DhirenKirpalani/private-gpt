@@ -1,11 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { X } from "lucide-react"
+import { X, CheckCircle, AlertCircle, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 3000
+const TOAST_REMOVE_DELAY = 4000
 
 type ToastType = "default" | "error" | "success"
 
@@ -70,17 +70,26 @@ export function Toaster() {
         <div
           key={t.id}
           className={cn(
-            "relative flex w-[320px] items-start gap-3 rounded-xl border p-4 shadow-lg backdrop-blur-md transition-all animate-in slide-in-from-bottom-4",
+            "relative flex w-[340px] items-start gap-3 rounded-xl border p-4 shadow-xl backdrop-blur-md transition-all animate-in slide-in-from-bottom-4",
             t.variant === "error"
-              ? "border-red-500/20 bg-red-500/10 text-red-200"
+              ? "border-red-500/30 bg-red-950/80 text-red-100"
               : t.variant === "success"
-              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
-              : "border-white/10 bg-[#2a3444]/95 text-white"
+              ? "border-emerald-500/30 bg-emerald-950/80 text-emerald-100"
+              : "border-white/10 bg-[#0f1520]/95 text-white"
           )}
         >
+          <div className="shrink-0 mt-0.5">
+            {t.variant === "error" ? (
+              <AlertCircle className="h-4 w-4 text-red-400" />
+            ) : t.variant === "success" ? (
+              <CheckCircle className="h-4 w-4 text-emerald-400" />
+            ) : (
+              <Info className="h-4 w-4 text-emerald-400/70" />
+            )}
+          </div>
           <div className="flex-1 space-y-1">
             {t.title && <p className="text-sm font-semibold">{t.title}</p>}
-            {t.description && <p className="text-xs opacity-90">{t.description}</p>}
+            {t.description && <p className="text-xs opacity-80">{t.description}</p>}
           </div>
           <button
             onClick={() => dispatch({ type: "REMOVE", id: t.id })}
