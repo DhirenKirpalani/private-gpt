@@ -100,42 +100,100 @@ export async function POST(req: NextRequest) {
       if (BIRTHDAY_PATTERNS.some(p => p.test(summary))) return false
       return true
     })
-    const results: any[] = []
 
+    // Batch check: get all existing event IDs + their data in one query
+    const allEventIds = events.map((ev: any) => ev.id).filter(Boolean)
+    const { data: existingRows } = await supabase
+      .from("calendar_events")
+      .select("event_id, start_time, end_time, summary")
+      .eq("user_id", userId)
+      .eq("connection_id", conn.id)
+      .in("event_id", allEventIds)
+    const existingMap = new Map<string, any>()
+    for (const r of existingRows || []) {
+      existingMap.set(r.event_id, r)
+    }
+
+    // Build payloads for new events + updates for changed events
+    const payloads: any[] = []
+    const updates: any[] = []
     for (const ev of events) {
-      const eventId = ev.id
-      const { data: existing } = await supabase
+      const start = ev.start?.dateTime || ev.start?.date
+      const end = ev.end?.dateTime || ev.end?.date
+      const attendees = (ev.attendees || []).map((a: any) => ({
+        email: a.email,
+        displayName: a.displayName,
+        responseStatus: a.responseStatus,
+      }))
+      const startIso = start ? new Date(start).toISOString() : null
+      const endIso = end ? new Date(end).toISOString() : null
+      const summary = ev.summary || "(No title)"
+
+      const existing = existingMap.get(ev.id)
+      if (existing) {
+        // Check if anything changed — if so, update
+        const existingStart = existing.start_time ? new Date(existing.start_time).toISOString() : null
+        const existingEnd = existing.end_time ? new Date(existing.end_time).toISOString() : null
+        if (existingStart !== startIso || existingEnd !== endIso || existing.summary !== summary) {
+          updates.push({
+            event_id: ev.id,
+            data: {
+              summary,
+              description: ev.description || null,
+              start_time: startIso,
+              end_time: endIso,
+              attendees,
+              location: ev.location || null,
+              event_link: ev.htmlLink || null,
+              is_online: ev.conferenceData?.conferenceSolution?.name?.toLowerCase().includes("meet") || false,
+            }
+          })
+        }
+        continue
+      }
+
+      payloads.push({
+        user_id: userId,
+        connection_id: conn.id,
+        event_id: ev.id,
+        summary: ev.summary || "(No title)",
+        description: ev.description || null,
+        start_time: start ? new Date(start).toISOString() : null,
+        end_time: end ? new Date(end).toISOString() : null,
+        attendees: attendees,
+        location: ev.location || null,
+        event_link: ev.htmlLink || null,
+        is_online: ev.conferenceData?.conferenceSolution?.name?.toLowerCase().includes("meet") || false,
+      })
+    }
+
+    // Batch insert all new events in one query
+    let results: any[] = []
+    if (payloads.length > 0) {
+      const { data: inserted, error: insertErr } = await supabase
         .from("calendar_events")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("connection_id", conn.id)
-        .eq("event_id", eventId)
-        .maybeSingle()
+        .insert(payloads)
+        .select()
+      if (insertErr) {
+        console.error("[CALENDAR FETCH] Batch insert failed:", insertErr.message)
+      } else if (inserted) {
+        results = inserted
+      }
+    }
 
-      if (!existing) {
-        const start = ev.start?.dateTime || ev.start?.date
-        const end = ev.end?.dateTime || ev.end?.date
-        const attendees = (ev.attendees || []).map((a: any) => ({
-          email: a.email,
-          displayName: a.displayName,
-          responseStatus: a.responseStatus,
-        }))
-
-        const { data: inserted } = await supabase.from("calendar_events").insert({
-          user_id: userId,
-          connection_id: conn.id,
-          event_id: eventId,
-          summary: ev.summary || "(No title)",
-          description: ev.description || null,
-          start_time: start ? new Date(start).toISOString() : null,
-          end_time: end ? new Date(end).toISOString() : null,
-          attendees: attendees,
-          location: ev.location || null,
-          event_link: ev.htmlLink || null,
-          is_online: ev.conferenceData?.conferenceSolution?.name?.toLowerCase().includes("meet") || false,
-        }).select().single()
-
-        if (inserted) results.push(inserted)
+    // Update changed events
+    if (updates.length > 0) {
+      console.log(`[CALENDAR FETCH] Updating ${updates.length} changed events`)
+      for (const u of updates) {
+        const { error: updateErr } = await supabase
+          .from("calendar_events")
+          .update(u.data)
+          .eq("user_id", userId)
+          .eq("connection_id", conn.id)
+          .eq("event_id", u.event_id)
+        if (updateErr) {
+          console.error(`[CALENDAR FETCH] Update failed for event ${u.event_id}:`, updateErr.message)
+        }
       }
     }
 

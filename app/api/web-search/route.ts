@@ -204,6 +204,55 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 })
     }
 
+    // Check if the query contains a URL — if so, fetch the page content directly
+    const urlMatch = query.match(/(https?:\/\/[^\s]+)/i)
+    if (urlMatch) {
+      const targetUrl = urlMatch[1]
+      try {
+        const pageRes = await fetch(targetUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; ExploroBot/1.0)" },
+          signal: AbortSignal.timeout(10000),
+        })
+        if (pageRes.ok) {
+          const html = await pageRes.text()
+          // Extract text content from HTML (strip tags, scripts, styles)
+          const text = html
+            .replace(/<script[\s\S]*?<\/script>/gi, "")
+            .replace(/<style[\s\S]*?<\/style>/gi, "")
+            .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+            .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+            .replace(/<header[\s\S]*?<\/header>/gi, "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/&nbsp;/g, " ")
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 8000) // Limit to 8000 chars
+
+          // Extract title
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+          const title = titleMatch ? titleMatch[1].trim() : targetUrl
+
+          const hostname = new URL(targetUrl).hostname.replace(/^www\./, "")
+
+          return NextResponse.json({
+            formatted: `[1] ${title}\n    Source: ${targetUrl}\n    Content: ${text}`,
+            sources: [{ title, url: targetUrl, snippet: text.slice(0, 200), hostname, pathname: new URL(targetUrl).pathname }],
+            query,
+            queries: [targetUrl],
+            empty: false,
+          })
+        }
+      } catch (err: any) {
+        console.error("[WEB SEARCH] URL fetch failed:", err?.message)
+        // Fall through to normal search
+      }
+    }
+
     // Step 1: Rewrite query into 2-3 search queries
     const queries = await rewriteQuery(query)
 

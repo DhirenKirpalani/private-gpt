@@ -580,13 +580,6 @@ export default function CRMPage() {
               body: JSON.stringify({ userId: user.id, providerId: conn.provider }),
             })
             await loadFromDB()
-            // Fetch again to get thread replies that were just matched
-            await fetch("/api/email/fetch", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId: user.id, providerId: conn.provider }),
-            })
-            await loadFromDB()
           } catch (e) {
             console.error("[EMAIL TAB] Auto-fetch failed:", e)
           } finally {
