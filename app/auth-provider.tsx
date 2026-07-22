@@ -39,6 +39,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [avatarUrl, setAvatarUrl] = useState("")
   const [profile, setProfile] = useState<Profile | null>(null)
   const [role, setRole] = useState<Profile["role"]>(null)
+
+  // Restore cached role/profile instantly to avoid blocking UI
+  useEffect(() => {
+    const cachedRole = localStorage.getItem("exploro_role") as Profile["role"] | null
+    if (cachedRole) setRole(cachedRole)
+  }, [])
   const [subscription, setSubscription] = useState<Subscription | null>(null)
 
   const loadProfile = useCallback(async (userId: string) => {
@@ -46,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const p = await getProfile(userId)
       setProfile(p)
       setRole(p?.role || null)
+      if (p?.role) localStorage.setItem("exploro_role", p.role)
       const url = p?.avatar_url || ""
       setAvatarUrl(url)
       if (url) localStorage.setItem("exploro_avatar_url", url)
@@ -81,11 +88,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadSubscription(user.id)
   }, [user, loadSubscription])
 
-  // Pre-populate avatarUrl from cache so children don't flash before async load
-  useEffect(() => {
-    const cached = localStorage.getItem("exploro_avatar_url")
-    if (cached) setAvatarUrl(cached)
-  }, [])
 
   useEffect(() => {
     async function initAuth() {
@@ -95,16 +97,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (currentSession) {
           const currentUser = await getUser()
           setUser(currentUser)
+          // Set loading=false immediately — profile/subscription load in background
+          setLoading(false)
           if (currentUser) {
-            await Promise.all([
-              loadProfile(currentUser.id),
-              loadSubscription(currentUser.id),
-            ])
+            loadProfile(currentUser.id)
+            loadSubscription(currentUser.id)
           }
+        } else {
+          setLoading(false)
         }
       } catch {
         // No session = not logged in
-      } finally {
         setLoading(false)
       }
     }
@@ -115,17 +118,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession)
       const newUser = newSession?.user ?? null
       setUser(newUser)
+      setLoading(false)
       if (newUser) {
-        await Promise.all([
-          loadProfile(newUser.id),
-          loadSubscription(newUser.id),
-        ])
+        loadProfile(newUser.id)
+        loadSubscription(newUser.id)
       } else {
         setProfile(null)
+        setRole(null)
         setAvatarUrl("")
         setSubscription(null)
+        localStorage.removeItem("exploro_role")
+        localStorage.removeItem("exploro_avatar_url")
       }
-      setLoading(false)
     })
 
     return () => {
@@ -141,6 +145,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRole(null)
     setAvatarUrl("")
     setSubscription(null)
+    localStorage.removeItem("exploro_role")
+    localStorage.removeItem("exploro_avatar_url")
   }
 
   return (

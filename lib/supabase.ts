@@ -588,6 +588,14 @@ export async function saveMessage(
   return data as ChatMessage
 }
 
+export async function updateMessageContent(messageId: string, content: string): Promise<void> {
+  const { error } = await supabase
+    .from("chat_messages")
+    .update({ content })
+    .eq("id", messageId)
+  if (error) throw error
+}
+
 // Email messages
 export type EmailMessage = {
   id: string
@@ -691,6 +699,19 @@ export async function deleteContact(userId: string, contactId: string) {
 // Import contacts from email messages (extract unique senders + parse body for contact info)
 export async function importContactsFromEmails(userId: string): Promise<number> {
   console.log("[IMPORT DEBUG] Starting import for user:", userId)
+
+  // Get user's own email addresses to exclude from import
+  const { data: userConns } = await supabase
+    .from("email_connections")
+    .select("email_address, smtp_user, email_account")
+    .eq("user_id", userId)
+  const ownEmails = new Set<string>()
+  for (const c of userConns || []) {
+    if (c.email_address) ownEmails.add(c.email_address.toLowerCase())
+    if (c.smtp_user) ownEmails.add(c.smtp_user.toLowerCase())
+    if (c.email_account) ownEmails.add(c.email_account.toLowerCase())
+  }
+
   // Get all received email messages for this user — include body for signature parsing
   const { data: messages, error } = await supabase
     .from("email_messages")
@@ -711,7 +732,22 @@ export async function importContactsFromEmails(userId: string): Promise<number> 
     if (!body) return info
 
     // Strip HTML tags for cleaner parsing
-    const text = body.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+    let text = body.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+
+    // Strip quoted reply content — only parse the sender's actual message, not the quoted original
+    // Gmail style: "On Mon, Jan 1, 2024 at 10:00 AM, John <john@email.com> wrote:"
+    text = text.replace(/\bOn\s+[\s\S]+?\bwrote:[\s\S]*$/i, "")
+    // Outlook style: "From: John Doe [mailto:john@email.com]"
+    text = text.replace(/\bFrom:\s+[\s\S]+?\bSent:\s+[\s\S]*$/i, "")
+    text = text.replace(/\bFrom:\s+[\s\S]*$/i, "")
+    // Generic: "--- Original Message ---"
+    text = text.replace(/-{2,}\s*Original\s+Message\s*-{2,}[\s\S]*$/i, "")
+    // Generic: "--- Forwarded Message ---"
+    text = text.replace(/-{2,}\s*Forwarded\s+Message\s*-{2,}[\s\S]*$/i, "")
+    // Gmail quote blocks in HTML (already stripped tags, but check for > prefixes)
+    text = text.replace(/^>.*$/gm, "")
+    // Trailing whitespace
+    text = text.trim()
 
     // Name: look for sign-off patterns like "Best regards, John Smith" or "Sincerely, Jane Doe"
     const signoffs = [
@@ -749,16 +785,37 @@ export async function importContactsFromEmails(userId: string): Promise<number> 
     }
 
     // Company: look for patterns like "Company Name" after "at" or in signature
-    // Try "at Company Name" pattern
-    const atCompanyMatch = text.match(/\bat\s+([A-Z][a-zA-Z0-9&\s]{2,30})/);
+    // Try "at Company Name" pattern — must be a proper company name, not sentence text
+    const atCompanyMatch = text.match(/\bat\s+([A-Z][a-zA-Z0-9&]+(?:\s+[A-Z][a-zA-Z0-9&]+){0,3})(?:\s*[,.\n]|$)/);
     if (atCompanyMatch) {
-      info.company = atCompanyMatch[1].trim()
+      const candidate = atCompanyMatch[1].trim()
+      // Filter out common false positives
+      const falseCompanies = ["The", "This", "Your", "Our", "A", "An", "My", "Their", "Its", "Least", "Most", "Best", "All"]
+      if (!falseCompanies.includes(candidate) && candidate.length >= 3) {
+        info.company = candidate
+      }
     }
 
-    // Location: look for "City, State" or "City, Country" pattern near end of email
-    const locationMatch = text.match(/([A-Z][a-z]+(?:\s[A-Z][a-z]+)?,\s*(?:[A-Z]{2}|[A-Z][a-z]+))/)
-    if (locationMatch) {
-      info.location = locationMatch[1].trim()
+    // Location: look for "City, State" or "City, Country" pattern
+    // Only match near the end of the email (signature area) and require valid state/country format
+    const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean)
+    const lastLines = lines.slice(-8) // Check last 8 lines for signature location
+    const US_STATES = new Set(["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"])
+    const COUNTRIES = new Set(["USA","UK","Canada","Mexico","Brazil","Argentina","Spain","France","Germany","Italy","Portugal","Netherlands","Belgium","Switzerland","Austria","Sweden","Norway","Denmark","Finland","Poland","India","China","Japan","Korea","Singapore","Australia","NewZealand","SouthAfrica","UAE","SaudiArabia","Israel","Turkey","Russia"])
+    
+    for (const line of lastLines) {
+      // Match "City, ST" (US state code)
+      const usStateMatch = line.match(/^([A-Z][a-z]+(?:\s[A-Z][a-z]+)?),\s*([A-Z]{2})$/)
+      if (usStateMatch && US_STATES.has(usStateMatch[2])) {
+        info.location = `${usStateMatch[1]}, ${usStateMatch[2]}`
+        break
+      }
+      // Match "City, Country" where country is a known country name
+      const countryMatch = line.match(/^([A-Z][a-z]+(?:\s[A-Z][a-z]+)?),\s*([A-Z][a-z]+)$/)
+      if (countryMatch && COUNTRIES.has(countryMatch[2])) {
+        info.location = `${countryMatch[1]}, ${countryMatch[2]}`
+        break
+      }
     }
 
     return info
@@ -779,6 +836,13 @@ export async function importContactsFromEmails(userId: string): Promise<number> 
       name = match[1].trim().replace(/"/g, "")
       email = match[2].trim()
     }
+
+    // Skip the user's own email addresses — don't import self as contact
+    if (ownEmails.has(email.toLowerCase())) continue
+
+    // Skip generic/no-reply senders
+    const lowerEmail = email.toLowerCase()
+    if (lowerEmail.includes("noreply") || lowerEmail.includes("no-reply") || lowerEmail.includes("notifications") || lowerEmail.includes("donotreply")) continue
 
     // Skip if already have this email with a more recent message
     const existing = uniqueSenders.get(email)
@@ -981,6 +1045,14 @@ export async function deleteCalendarConnection(userId: string, connectionId: str
     .eq("connection_id", connectionId)
   if (eventError) console.error("[deleteCalendarConnection] Failed to delete events:", eventError.message)
 
+  // Delete contacts imported from calendar
+  const { error: calContactError } = await supabase
+    .from("contacts")
+    .delete()
+    .eq("user_id", userId)
+    .eq("source", "calendar_import")
+  if (calContactError) console.error("[deleteCalendarConnection] Failed to delete contacts:", calContactError.message)
+
   const { error } = await supabase
     .from("calendar_connections")
     .delete()
@@ -1052,6 +1124,14 @@ export async function deleteWhatsAppConnection(userId: string, connectionId: str
     .eq("user_id", userId)
     .eq("connection_id", connectionId)
   if (msgError) console.error("[deleteWhatsAppConnection] Failed to delete messages:", msgError.message)
+
+  // Delete contacts imported from WhatsApp
+  const { error: waContactError } = await supabase
+    .from("contacts")
+    .delete()
+    .eq("user_id", userId)
+    .eq("source", "whatsapp_import")
+  if (waContactError) console.error("[deleteWhatsAppConnection] Failed to delete contacts:", waContactError.message)
 
   const { error } = await supabase
     .from("whatsapp_connections")

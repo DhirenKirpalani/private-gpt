@@ -22,7 +22,7 @@ import { WorkspaceSelector } from "@/components/workspace-selector"
 import {
   getProfile, fetchUserDocuments, type Profile,
   getConversations, createConversation, updateConversationTitle,
-  deleteConversation, getMessages, saveMessage, type ChatConversation,
+  deleteConversation, getMessages, saveMessage, updateMessageContent, type ChatConversation,
   fetchDocumentContents, uploadDocument, updateDocumentText,
   getEmailConnections, getCalendarConnections, getWhatsAppConnections,
 } from "@/lib/supabase"
@@ -240,6 +240,16 @@ export default function ChatPage() {
   useEffect(() => {
     async function load() {
       if (!user) return
+      // One-time cleanup: strip action blocks from existing chat messages
+      if (!localStorage.getItem("exploro_action_cleanup_done")) {
+        fetch("/api/chat/cleanup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id }),
+        }).then(() => {
+          localStorage.setItem("exploro_action_cleanup_done", "1")
+        }).catch(() => {})
+      }
       try {
         const profile = await getProfile(user.id)
         console.log("[CHAT DEBUG] Raw profile:", profile)
@@ -679,8 +689,14 @@ export default function ChatPage() {
         sources: wsData?.sources?.map((s: any) => s.url).filter(Boolean) || undefined,
       }
       setMessages(prev => [...prev, assistantMsg])
-      // Save assistant message to DB
-      saveMessage(convId, "assistant", assistantMsg.content, assistantMsg.sources).catch(() => {})
+      // Save assistant message to DB and update local ID with DB row ID
+      saveMessage(convId, "assistant", assistantMsg.content, assistantMsg.sources)
+        .then((saved) => {
+          if (saved?.id) {
+            setMessages(prev => prev.map(m => m.id === assistantMsg.id ? { ...m, id: saved.id } : m))
+          }
+        })
+        .catch(() => {})
       // Generate title from AI after first exchange
       if (messages.length === 0) {
         generateTitle(convId, userMsg.content, assistantMsg.content).catch(() => {})
@@ -872,22 +888,26 @@ export default function ChatPage() {
       if (subjectMatch && toEmail) {
         const to = toEmail
         const subject = subjectMatch[1].trim()
-        // Extract body — everything after "Body:" or after the subject line
-        const bodyMatch = content.match(/Body:\s*([\s\S]*?)(?:Please review|Best regards|$)/i)
+        // Extract body — everything after "Body:" line until trailing instructions
         let body = ""
-        if (bodyMatch) {
-          body = bodyMatch[1].trim()
-        } else {
-          // Try to extract from after Subject line to end
-          const afterSubject = content.split(subjectMatch[0])[1]
-          if (afterSubject) {
-            body = afterSubject.replace(/^[\s\n]*Body:?\s*/i, "").trim()
-          }
+        const bodyIdx = content.search(/Body:\s*/i)
+        if (bodyIdx >= 0) {
+          body = content.slice(bodyIdx)
+            .replace(/^Body:\s*/i, "")
+            .replace(/Please (?:review|click)[\s\S]*$/i, "")
+            .replace(/Here is the (?:email )?draft[\s\S]*$/i, "")
+            .replace(/I (?:am unable|cannot|can't|don't have)[\s\S]*$/i, "")
+            .replace(/Click the Send Email button[\s\S]*$/i, "")
+            .trim()
         }
         if (to && subject && body) {
           console.log(`[AI ACTION] Fallback: auto-generating send_email action to=${to} subject=${subject}`)
           return {
-            content: content.replace(/Please review the draft above[\s\S]*$/, "").trim(),
+            content: content
+              .replace(/Please (?:review|click)[\s\S]*$/i, "")
+              .replace(/Here is the (?:email )?draft[\s\S]*$/i, "")
+              .replace(/I (?:am unable|cannot|can't)[\s\S]*$/i, "")
+              .trim(),
             action: { type: "send_email", to, subject, body }
           }
         }
@@ -1018,13 +1038,27 @@ export default function ChatPage() {
       const resultText = await executeAiAction(action)
       setMessages(prev => prev.map(m => {
         if (m.id !== msgId) return m
-        return { ...m, content: m.content + "\n\n" + resultText, action: undefined }
+        const updatedContent = m.content + "\n\n" + resultText
+        // Update message in DB so sent status survives reload (may fail if ID is still temp)
+        updateMessageContent(m.id, updatedContent).catch(() => {
+          // Fallback: if update fails (temp ID), try saving as new message
+          if (currentConversationId) {
+            saveMessage(currentConversationId, "assistant", updatedContent, m.sources).catch(() => {})
+          }
+        })
+        return { ...m, content: updatedContent, action: undefined }
       }))
     } catch (err: any) {
       console.error("[AI ACTION] handleExecuteAction error:", err?.message, err)
       setMessages(prev => prev.map(m => {
         if (m.id !== msgId) return m
-        return { ...m, content: m.content + `\n\n*(Action failed: ${err?.message || "Unknown error"})*`, action: undefined }
+        const updatedContent = m.content + `\n\n*(Action failed: ${err?.message || "Unknown error"})*`
+        updateMessageContent(m.id, updatedContent).catch(() => {
+          if (currentConversationId) {
+            saveMessage(currentConversationId, "assistant", updatedContent, m.sources).catch(() => {})
+          }
+        })
+        return { ...m, content: updatedContent, action: undefined }
       }))
     } finally {
       setExecutingActions(prev => {
@@ -1049,13 +1083,17 @@ export default function ChatPage() {
     localStorage.setItem("exploro_current_conv", convId)
     try {
       const dbMessages = await getMessages(convId)
-      setMessages(dbMessages.map(m => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        sources: m.sources || undefined,
-        timestamp: new Date(m.created_at),
-      })))
+      setMessages(dbMessages.map(m => {
+        // Strip any action block comments from loaded messages — actions are only for new responses
+        const cleanContent = m.content?.replace(/<!--ACTION:{[\s\S]+?}-->/g, "").trim() || m.content
+        return {
+          id: m.id,
+          role: m.role,
+          content: cleanContent,
+          sources: m.sources || undefined,
+          timestamp: new Date(m.created_at),
+        }
+      }))
     } catch { /* silent */ }
   }
 

@@ -51,12 +51,39 @@ const BUSINESS_KEYWORDS = [
   "proposal", "invoice", "contract", "quote", "purchase order",
   "payment", "receipt", "agreement", "deal", "billing", "estimate",
   "refund", "opportunity", "sow", "rfp", "nda", "msa", "scope of work",
+  "inquiry", "campaign", "marketing", "strategy", "meeting", "schedule",
+  "consultation", "services", "partnership", "collaboration", "project",
+  "pricing", "demo", "introduction", "follow up", "follow-up", "request",
+  "question", "update", "report", "plan", "budget",
 ]
 
 const EXCLUDED_SENDERS = [
-  "linkedin.com", "noreply", "notifications", "jobs-noreply",
+  "linkedin.com", "noreply", "no-reply", "donotreply", "do-not-reply", "notifications", "jobs-noreply",
   "google.com", "facebook.com", "twitter.com", "instagram.com",
   "youtube.com", "github.com", "medium.com", "substack.com",
+  "mailchimp.com", "sendgrid.net", "amazonses.com", "mailerlite.com",
+  "convertkit.com", "aweber.com", "getresponse.com", "campaign-monitor.com",
+  "stripe.com", "paypal.com", "shopify.com", "notion.so", "figma.com",
+  "vercel.com", "netlify.com", "heroku.com", "github.io",
+  "eventbrite.com", "meetup.com", "zoom.us", "calendly.com",
+  "slack.com", "discord.com", "teams.microsoft.com",
+  "newsletter", "digest", "weekly@", "daily@", "alerts@",
+  "teamtailor-mail.com", "upwork.com", "talent.acquisition", "greenhouse.io",
+  "lever.co", "workday.com", "smartrecruiters.com", "jobvite.com",
+  "indeed.com", "glassdoor.com", "naukri.com", "glassdoor.com",
+  "panin.co.id", "ePromo@", "promo@", "marketing@", "noreply.",
+  "bcg.com", "bain.com", "mckinsey.com",
+]
+
+const NEWSLETTER_INDICATORS = [
+  "unsubscribe", "manage preferences", "manage subscriptions",
+  "view in browser", "view this email in your browser",
+  "you're receiving this", "you are receiving this",
+  "this email was sent to", "update your email preferences",
+  "job alert", "new job alert", "application confirmation",
+  "we have received your application", "thank you for your application",
+  "thank you for your interest", "welcome to",
+  "diskon", "promo", "kepada yth",
 ]
 
 function isExcludedSender(fromAddress: string): boolean {
@@ -64,9 +91,25 @@ function isExcludedSender(fromAddress: string): boolean {
   return EXCLUDED_SENDERS.some(s => lower.includes(s))
 }
 
+function isNewsletter(body: string, headers: any[]): boolean {
+  const listUnsub = headers.find((h: any) => h.name?.toLowerCase() === "list-unsubscribe")
+  if (listUnsub) return true
+  const lower = (body || "").toLowerCase()
+  return NEWSLETTER_INDICATORS.some(ind => lower.includes(ind))
+}
+
 function matchesBusinessKeywords(text: string): boolean {
   const lower = text.toLowerCase()
-  return BUSINESS_KEYWORDS.some(k => {
+  const matched = BUSINESS_KEYWORDS.filter(k => {
+    if (k.includes(" ")) return lower.includes(k)
+    return new RegExp(`\\b${k}\\b`).test(lower)
+  })
+  return matched.length > 0
+}
+
+function getMatchedKeywords(text: string): string[] {
+  const lower = text.toLowerCase()
+  return BUSINESS_KEYWORDS.filter(k => {
     if (k.includes(" ")) return lower.includes(k)
     return new RegExp(`\\b${k}\\b`).test(lower)
   })
@@ -211,9 +254,22 @@ export async function POST(req: NextRequest) {
 
           const subject = getHeader("Subject")
           const fromAddress = getHeader("From")
-          if (isExcludedSender(fromAddress) || !matchesBusinessKeywords(subject.toLowerCase())) {
+          if (isExcludedSender(fromAddress)) {
+            console.log(`[EMAIL FILTER] DROPPED (excluded sender): from="${fromAddress}" subject="${subject}"`)
             continue
           }
+          // Skip newsletters and automated emails
+          if (isNewsletter(body || html, headers)) {
+            console.log(`[EMAIL FILTER] DROPPED (newsletter): from="${fromAddress}" subject="${subject}"`)
+            continue
+          }
+          // Only keep emails whose subject contains a business keyword
+          const matchedKeywords = getMatchedKeywords(subject)
+          if (matchedKeywords.length === 0) {
+            console.log(`[EMAIL FILTER] DROPPED (no keyword match): subject="${subject}"`)
+            continue
+          }
+          console.log(`[EMAIL FILTER] KEPT: subject="${subject}" matchedKeywords=[${matchedKeywords.join(", ")}]`)
 
           payloads.push({
             user_id: userId,
@@ -222,6 +278,7 @@ export async function POST(req: NextRequest) {
             direction: "received",
             from_address: getHeader("From"),
             to_address: getHeader("To"),
+            cc_address: getHeader("Cc") || null,
             subject: subject,
             body: body || html,
             html_body: html || null,
@@ -397,9 +454,24 @@ export async function POST(req: NextRequest) {
         const payloads: any[] = []
         for (const msg of newMsgs) {
           const fromAddr = msg.from?.emailAddress?.address || ""
-          if (isExcludedSender(fromAddr) || !matchesBusinessKeywords((msg.subject || "").toLowerCase())) {
+          const msgSubject = msg.subject || ""
+          if (isExcludedSender(fromAddr)) {
+            console.log(`[EMAIL FILTER] DROPPED (excluded sender): from="${fromAddr}" subject="${msgSubject}"`)
             continue
           }
+          // Skip newsletters
+          const msgBody = msg.bodyPreview || msg.body?.content || ""
+          if (isNewsletter(msgBody, [])) {
+            console.log(`[EMAIL FILTER] DROPPED (newsletter): from="${fromAddr}" subject="${msgSubject}"`)
+            continue
+          }
+          // Only keep emails whose subject contains a business keyword
+          const matchedKeywords = getMatchedKeywords(msgSubject)
+          if (matchedKeywords.length === 0) {
+            console.log(`[EMAIL FILTER] DROPPED (no keyword match): subject="${msgSubject}"`)
+            continue
+          }
+          console.log(`[EMAIL FILTER] KEPT: subject="${msgSubject}" matchedKeywords=[${matchedKeywords.join(", ")}]`)
           payloads.push({
             user_id: userId,
             connection_id: conn.id,
@@ -407,8 +479,9 @@ export async function POST(req: NextRequest) {
             direction: "received",
             from_address: msg.from?.emailAddress?.address || "",
             to_address: msg.toRecipients?.map((r: any) => r.emailAddress?.address).join(", ") || "",
+            cc_address: msg.ccRecipients?.map((r: any) => r.emailAddress?.address).join(", ") || null,
             subject: msg.subject || "",
-            body: msg.bodyPreview || msg.body?.content || "",
+            body: msgBody,
             html_body: msg.body?.contentType === "html" ? msg.body?.content : null,
             message_id: msg.id,
             message_id_header: msg.internetMessageId || null,
