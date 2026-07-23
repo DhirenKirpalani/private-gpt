@@ -32,7 +32,7 @@ export default function HomePage() {
 
         <h2>What is Exploro OS?</h2>
         <p>
-          Exploro OS is a private AI workspace built for small and medium businesses. Think of it as ChatGPT for
+          Exploro OS is a private AI workspace built for small and medium businesses. Think of it as Public AI for
           your company — but instead of answering from the public internet, it answers from your own documents,
           emails, calendar, and business tools. You upload your knowledge base, connect your Gmail or Outlook,
           sync your calendar, and link WhatsApp or Telegram. Then you ask questions in plain English and get
@@ -64,7 +64,7 @@ export default function HomePage() {
             WhatsApp, and files in Dropbox. No single AI can access all of them at once.
           </li>
           <li>
-            <strong>Generic AI lacks context</strong> — ChatGPT and similar tools don&apos;t know your business,
+            <strong>Generic AI lacks context</strong> — Public AI and similar tools don&apos;t know your business,
             your clients, your contracts, or your processes. They hallucinate when asked specific questions.
           </li>
           <li>
@@ -125,18 +125,18 @@ export default function HomePage() {
           <li><strong>OAuth authentication</strong> — Tool integrations use secure OAuth — we never store your passwords</li>
         </ul>
 
-        <h2>Exploro OS vs. ChatGPT: What&apos;s the difference?</h2>
+        <h2>Exploro OS vs. Public AI: What&apos;s the difference?</h2>
         <p>
-          ChatGPT is a general-purpose AI chatbot that answers from the public internet. It doesn&apos;t know your
+          Public AI is a general-purpose AI chatbot that answers from the public internet. It doesn&apos;t know your
           business, your documents, or your clients. Exploro OS is a private AI workspace that answers from your
           own data — your documents, emails, calendar, and messages. The key differences:
         </p>
         <ul>
-          <li><strong>Data source:</strong> ChatGPT uses public internet data. Exploro OS uses your private business data.</li>
-          <li><strong>Accuracy:</strong> ChatGPT can hallucinate. Exploro OS cites sources and declines to answer when it doesn&apos;t know.</li>
-          <li><strong>Integrations:</strong> ChatGPT has no business tool integrations. Exploro OS connects to Gmail, Google Drive, Calendar, WhatsApp, and more.</li>
-          <li><strong>Privacy:</strong> ChatGPT may use conversations for training. Exploro OS never trains on your data and deletes session memory.</li>
-          <li><strong>Team collaboration:</strong> ChatGPT is individual-only. Exploro OS supports team workspaces with shared knowledge bases.</li>
+          <li><strong>Data source:</strong> Public AI uses public internet data. Exploro OS uses your private business data.</li>
+          <li><strong>Accuracy:</strong> Public AI can hallucinate. Exploro OS cites sources and declines to answer when it doesn&apos;t know.</li>
+          <li><strong>Integrations:</strong> Public AI has no business tool integrations. Exploro OS connects to Gmail, Google Drive, Calendar, WhatsApp, and more.</li>
+          <li><strong>Privacy:</strong> Public AI may use conversations for training. Exploro OS never trains on your data and deletes session memory.</li>
+          <li><strong>Team collaboration:</strong> Public AI is individual-only. Exploro OS supports team workspaces with shared knowledge bases.</li>
         </ul>
 
         <h2>Integrations</h2>
@@ -173,9 +173,9 @@ export default function HomePage() {
         </p>
 
         <h2>Frequently Asked Questions</h2>
-        <h3>Is Exploro OS like ChatGPT?</h3>
+        <h3>Is Exploro OS like Public AI?</h3>
         <p>
-          No. ChatGPT answers from the public internet. Exploro OS answers from your own business documents,
+          No. Public AI answers from the public internet. Exploro OS answers from your own business documents,
           emails, and data — with source citations and no hallucinations.
         </p>
         <h3>Do I need technical skills to set up Exploro OS?</h3>

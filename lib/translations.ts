@@ -82,7 +82,7 @@ export const translations = {
     comparisonTitle: "Why Teams Choose Exploro",
     comparisonSubtitle: "General AI wasn't built for your business. Exploro was.",
     comparisonCapability: "Capability",
-    comparisonChatGPT: "Public AI",
+    comparisonPublicAI: "Public AI",
     comparisonItem1: "Knows your business",
     comparisonItem2: "Remembers company context",
     comparisonItem3: "Source-cited answers",
@@ -287,7 +287,7 @@ export const translations = {
     faqTitle: "FAQ - Exploro OS Private",
     faqs: [
       {
-        q: "What makes Exploro OS Private different from ChatGPT or other AI assistants?",
+        q: "What makes Exploro OS Private different from Public AI or other AI assistants?",
         a: "Unlike generic or public GPTs, Exploro OS runs on an isolated, encrypted knowledge base that connects directly to channels like WhatsApp. Your data stays completely separate, temporary memory prevents leaks, and every answer is securely cited to eliminate or create minimum hallucinations."
       },
       {
@@ -1044,7 +1044,7 @@ export const translations = {
     comparisonTitle: "Por Qué los Equipos Eligen Exploro",
     comparisonSubtitle: "La IA general no fue construida para tu negocio. Exploro sí.",
     comparisonCapability: "Capacidad",
-    comparisonChatGPT: "IA Pública/CRMs",
+    comparisonPublicAI: "IA Pública",
     comparisonItem1: "Conoce tu negocio",
     comparisonItem2: "Recuerda el contexto de la empresa",
     comparisonItem3: "Respuestas con fuentes citadas",
@@ -1249,7 +1249,7 @@ export const translations = {
     faqTitle: "FAQ - Exploro OS Private",
     faqs: [
       {
-        q: "¿Qué hace diferente a Exploro OS Privado de ChatGPT u otros asistentes de IA?",
+        q: "¿Qué hace diferente a Exploro OS Privado de la IA Pública u otros asistentes de IA?",
         a: "A diferencia de los modelos de IA de propósito público/general, Exploro OS Privado utiliza una base de conocimiento privada, encriptada y con memoria temporal. Tus datos no se mezclan con otros usuarios. Cada respuesta cita su fuente. Casi sin alucinaciones."
       },
       {

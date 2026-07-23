@@ -7,7 +7,7 @@ import {
   Bot, Copy, RefreshCw, Share2, Sparkles,
   PanelLeftClose, X, User, Paperclip, File, CheckCircle2, ChevronDown,
   Mail, Phone, CalendarDays, Check, Loader2, Menu,
-  HardDrive, Video,
+  HardDrive, Video, Eye,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { NotificationBell } from "@/components/notification-bell"
@@ -180,6 +180,7 @@ export default function ChatPage() {
   const [executingActions, setExecutingActions] = useState<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
   const [failedMessageId, setFailedMessageId] = useState<string | null>(null)
+  const [previewDoc, setPreviewDoc] = useState<{ name: string; content: string; category: string } | null>(null)
 
   const DEFAULT_CATEGORIES = ["SOPs", "FAQs", "Training Material", "Policies", "Reports"]
 
@@ -390,18 +391,17 @@ export default function ChatPage() {
     saveMessage(convId, "user", userMsg.content).catch((e) => console.error("[CHAT] Failed to save user message:", e))
 
     // Detect if user is asking about internal documents — skip web search if so
+    // Only applies when KB is actually enabled and has documents
     function isInternalQuery(query: string): boolean {
+      if (!kbEnabled || kbDocs.length === 0) return false
       const lower = query.toLowerCase()
       const internalSignals = [
         "my document", "my file", "my sop", "my kb", "my knowledge",
         "the document", "the file", "the sop", "the uploaded",
         "our document", "our file", "our sop", "our internal",
-        "from my", "from the document", "from the file",
         "knowledge base", "uploaded file", "uploaded document",
-        "any data from", "data from the", "taken from",
         "internal document", "internal file", "internal sop",
         "reference document", "reference file",
-        "#1", "#2", "#3", "#4", "#5",
       ]
       return internalSignals.some(s => lower.includes(s))
     }
@@ -622,28 +622,41 @@ export default function ChatPage() {
       let webSearchContext = ""
       let wsData: any = null
       if (actuallySearchingWeb) {
-        // Build search query from recent user messages for context-aware results
+        // Use the latest user message as the search query for best relevance
         const userMsgs = nextMessages.filter(m => m.role === "user")
-        const recentUserMsgs = userMsgs.slice(-3)
-        const searchQuery = recentUserMsgs.map(m => m.content).join(" ").slice(0, 500)
+        const searchQuery = userMsgs.length > 0 ? userMsgs[userMsgs.length - 1].content.slice(0, 500) : ""
         if (searchQuery) {
           try {
+            // Use a dedicated timeout so web search doesn't get killed by the main chat abort
+            const wsController = new AbortController()
+            const wsTimeout = setTimeout(() => wsController.abort(), 15000)
             const wsRes = await fetch("/api/web-search", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ query: searchQuery }),
-              signal: controller.signal,
+              signal: wsController.signal,
             })
+            clearTimeout(wsTimeout)
             if (wsRes.ok) {
               wsData = await wsRes.json()
               if (wsData.formatted) {
                 webSearchContext = `\n# Live Web Search Results (queried: "${wsData.query}")\n${wsData.formatted}\n\nINSTRUCTION: Use the above sources as the basis for your answer. Cite facts with [1], [2], etc. matching the source numbers. Recent sources (past 1–2 years) are considered current even if the user mentions a specific year like 2026. Only say information is missing if the sources are completely unrelated to the topic — do not refuse to answer just because the sources lack a specific date.`
+              } else if (wsData.empty) {
+                console.warn("[WEB SEARCH] Returned empty results for query:", searchQuery)
               }
+            } else {
+              console.warn("[WEB SEARCH] Non-OK response:", wsRes.status)
             }
-          } catch (err) {
-            console.error("[WEB SEARCH] Failed:", err)
+          } catch (err: any) {
+            if (err?.name === "AbortError") {
+              console.warn("[WEB SEARCH] Timed out after 15s for query:", searchQuery)
+            } else {
+              console.error("[WEB SEARCH] Failed:", err?.message || err)
+            }
           }
         }
+      } else {
+        console.log("[WEB SEARCH] Skipped — enabled:", webSearchEnabled, "internal:", userAsksAboutInternal)
       }
 
       // Fetch email/calendar context if Channels toggle is enabled
@@ -1537,17 +1550,28 @@ export default function ChatPage() {
                               <p className="px-3 py-4 text-xs text-muted-foreground text-center">{t("chatKbEmpty")}</p>
                             )}
                             {!kbLoading && kbDocs.map(doc => (
-                              <button
+                              <div
                                 key={doc.id}
-                                onClick={() => insertDocRef(doc.index)}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
+                                className="group flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
                               >
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-[10px] font-bold text-emerald-400">
-                                  {doc.index}
-                                </span>
-                                <span className="flex-1 truncate text-white">{doc.name}</span>
-                                <span className="shrink-0 text-[10px] text-muted-foreground">{doc.category}</span>
-                              </button>
+                                <button
+                                  onClick={() => insertDocRef(doc.index)}
+                                  className="flex flex-1 items-center gap-2 min-w-0"
+                                >
+                                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-[10px] font-bold text-emerald-400">
+                                    {doc.index}
+                                  </span>
+                                  <span className="flex-1 truncate text-white">{doc.name}</span>
+                                  <span className="shrink-0 text-[10px] text-muted-foreground">{doc.category}</span>
+                                </button>
+                                <button
+                                  onClick={() => setPreviewDoc({ name: doc.name, content: kbDocContents[doc.id] || "[Content not yet extracted]", category: doc.category })}
+                                  title="Preview document"
+                                  className="shrink-0 rounded p-1 text-muted-foreground hover:text-emerald-400 transition-colors"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -1919,17 +1943,28 @@ export default function ChatPage() {
                             <p className="px-3 py-4 text-xs text-muted-foreground text-center">{t("chatKbEmpty")}</p>
                           )}
                           {!kbLoading && kbDocs.map(doc => (
-                            <button
+                            <div
                               key={doc.id}
-                              onClick={() => insertDocRef(doc.index)}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
+                              className="group flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-emerald-600/10 transition-colors"
                             >
-                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-[10px] font-bold text-emerald-400">
-                                {doc.index}
-                              </span>
-                              <span className="flex-1 truncate text-white">{doc.name}</span>
-                              <span className="shrink-0 text-[10px] text-muted-foreground">{doc.category}</span>
-                            </button>
+                              <button
+                                onClick={() => insertDocRef(doc.index)}
+                                className="flex flex-1 items-center gap-2 min-w-0"
+                              >
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-600/20 text-[10px] font-bold text-emerald-400">
+                                  {doc.index}
+                                </span>
+                                <span className="flex-1 truncate text-white">{doc.name}</span>
+                                <span className="shrink-0 text-[10px] text-muted-foreground">{doc.category}</span>
+                              </button>
+                              <button
+                                onClick={() => setPreviewDoc({ name: doc.name, content: kbDocContents[doc.id] || "[Content not yet extracted]", category: doc.category })}
+                                title="Preview document"
+                                className="shrink-0 rounded p-1 text-muted-foreground hover:text-emerald-400 transition-colors"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -2192,6 +2227,43 @@ export default function ChatPage() {
                   `Upload ${uploadPreview.length}`
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* KB Document Preview Modal */}
+      {previewDoc && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setPreviewDoc(null)}
+        >
+          <div
+            className="relative w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl border border-white/10 bg-[#1e2330] p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-semibold text-white">{previewDoc.name}</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">{previewDoc.category}</p>
+              </div>
+              <button
+                onClick={() => setPreviewDoc(null)}
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto rounded-lg border border-white/5 bg-black/20 p-4">
+              {previewDoc.content === "[Content not yet extracted]" ? (
+                <p className="text-sm text-muted-foreground italic">{previewDoc.content}</p>
+              ) : (
+                <div className="prose prose-invert prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {previewDoc.content}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
           </div>
         </div>

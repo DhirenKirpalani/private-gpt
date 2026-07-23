@@ -116,7 +116,7 @@ export default function HomeClient() {
                 <thead>
                   <tr className="border-b border-emerald-500/10 bg-emerald-950/20 backdrop-blur-sm">
                     <th className="px-6 py-4 text-left font-semibold text-muted-foreground">{t("comparisonCapability")}</th>
-                    <th className="px-6 py-4 text-center font-semibold text-muted-foreground">{t("comparisonChatGPT")}</th>
+                    <th className="px-6 py-4 text-center font-semibold text-muted-foreground">{t("comparisonPublicAI")}</th>
                     <th className="px-6 py-4 text-center font-semibold text-emerald-400">Exploro</th>
                   </tr>
                 </thead>
@@ -129,11 +129,11 @@ export default function HomeClient() {
                     [t("comparisonItem5"), false, true],
                     [t("comparisonItem6"), false, true],
                     [t("comparisonItem7"), false, true],
-                  ].map(([label, chatgpt, exploro], i) => (
+                  ].map(([label, publicAI, exploro], i) => (
                     <tr key={label as string} className={cn("row-3d", i % 2 === 0 ? "bg-white/[0.02]" : "")}>
                       <td className="px-6 py-4 font-medium">{label as string}</td>
                       <td className="px-6 py-4 text-center">
-                        {chatgpt ? <Check className="mx-auto h-4 w-4 text-emerald-400" /> : <X className="mx-auto h-4 w-4 text-red-400" />}
+                        {publicAI ? <Check className="mx-auto h-4 w-4 text-emerald-400" /> : <X className="mx-auto h-4 w-4 text-red-400" />}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex justify-center">
@@ -162,7 +162,7 @@ export default function HomeClient() {
                 <span className="text-sm font-medium">{label}</span>
                 <div className="flex shrink-0 items-center gap-4">
                   <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("comparisonChatGPT")}</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("comparisonPublicAI")}</span>
                     <X className="h-4 w-4 text-red-400" />
                   </div>
                   <div className="flex flex-col items-center gap-0.5">

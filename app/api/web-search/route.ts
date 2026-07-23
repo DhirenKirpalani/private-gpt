@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 const SERPER_URL = process.env.SERPER_URL || "https://google.serper.dev/search"
 const DEEPSEEK_URL = process.env.DEEPSEEK_URL || "https://api.deepseek.com/v1/chat/completions"
@@ -131,24 +132,36 @@ async function rewriteQuery(original: string): Promise<string[]> {
 
 /* ─── Step 2: Search a single query ─── */
 async function searchSerper(query: string, apiKey: string): Promise<any[]> {
-  const res = await fetch(SERPER_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-KEY": apiKey,
-    },
-    body: JSON.stringify({ q: query, num: 8 }),
-  })
+  const doSearch = async (): Promise<any[]> => {
+    const res = await fetch(SERPER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-KEY": apiKey,
+      },
+      body: JSON.stringify({ q: query, num: 8 }),
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data.organic || []).map((r: any) => ({
+      title: r.title || "",
+      snippet: r.snippet || "",
+      url: r.link || "",
+      hostname: r.link ? new URL(r.link).hostname.replace(/^www\./, "") : "",
+      pathname: r.link ? new URL(r.link).pathname : "",
+    }))
+  }
 
-  if (!res.ok) return []
-  const data = await res.json()
-  return (data.organic || []).map((r: any) => ({
-    title: r.title || "",
-    snippet: r.snippet || "",
-    url: r.link || "",
-    hostname: r.link ? new URL(r.link).hostname.replace(/^www\./, "") : "",
-    pathname: r.link ? new URL(r.link).pathname : "",
-  }))
+  try {
+    let results = await doSearch()
+    if (results.length === 0) {
+      await new Promise(r => setTimeout(r, 500))
+      results = await doSearch()
+    }
+    return results
+  } catch {
+    return []
+  }
 }
 
 /* ─── Step 3: Rerank + Deduplicate ─── */
@@ -189,7 +202,7 @@ function compressContext(results: any[]): { formatted: string; sources: any[] } 
 }
 
 /* ─── Main handler ─── */
-export async function POST(req: NextRequest) {
+async function POST_handler(req: NextRequest) {
   try {
     const serperKey = process.env.SERPER_API_KEY
     if (!serperKey) {
@@ -300,3 +313,5 @@ export async function POST(req: NextRequest) {
     }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(POST_handler, "/api/web-search")

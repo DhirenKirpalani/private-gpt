@@ -149,7 +149,7 @@ export default function RootLayout({
     mainEntity: [
       {
         "@type": "Question",
-        name: "What makes Exploro OS Private different from ChatGPT or other AI assistants?",
+        name: "What makes Exploro OS Private different from Public AI or other AI assistants?",
         acceptedAnswer: {
           "@type": "Answer",
           text: "Unlike generic or public GPTs, Exploro OS runs on an isolated, encrypted knowledge base that connects directly to channels like WhatsApp. Your data stays completely separate, temporary memory prevents leaks, and every answer is securely cited to eliminate or create minimum hallucinations.",
