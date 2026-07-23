@@ -5,6 +5,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const requestingUserId = searchParams.get("userId")
   const range = searchParams.get("range") || "24h" // 24h, 7d, 30d
+  const filterUserId = searchParams.get("filterUserId") // optional: filter by specific user
 
   if (!requestingUserId) {
     return NextResponse.json({ error: "Missing userId" }, { status: 400 })
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
     .from("profiles")
     .select("role")
     .eq("user_id", requestingUserId)
-    .single()
+    .single() 
 
   if (!profile || profile.role !== "super_admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
@@ -31,11 +32,17 @@ export async function GET(req: NextRequest) {
   await supabase.from("api_logs").delete().lt("created_at", cutoff)
   await supabase.from("api_stats_hourly").delete().lt("hour_bucket", cutoff)
 
-  // Fetch aggregated stats in range
-  const { data: stats, error: statsError } = await supabase
+  // Fetch aggregated stats in range (optionally filtered by user)
+  let statsQuery = supabase
     .from("api_stats_hourly")
     .select("*")
     .gte("hour_bucket", since)
+  if (filterUserId === "anonymous") {
+    statsQuery = statsQuery.is("user_id", null)
+  } else if (filterUserId) {
+    statsQuery = statsQuery.eq("user_id", filterUserId)
+  }
+  const { data: stats, error: statsError } = await statsQuery
     .order("hour_bucket", { ascending: false })
 
   if (statsError) {
@@ -43,10 +50,16 @@ export async function GET(req: NextRequest) {
   }
 
   // Fetch recent error logs (only errors are stored individually)
-  const { data: errorLogs } = await supabase
+  let logsQuery = supabase
     .from("api_logs")
     .select("*")
     .gte("created_at", since)
+  if (filterUserId === "anonymous") {
+    logsQuery = logsQuery.is("user_id", null)
+  } else if (filterUserId) {
+    logsQuery = logsQuery.eq("user_id", filterUserId)
+  }
+  const { data: errorLogs } = await logsQuery
     .order("created_at", { ascending: false })
     .limit(50)
 
@@ -58,10 +71,24 @@ export async function GET(req: NextRequest) {
   if (userIds.size > 0) {
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("user_id, full_name, email")
+      .select("user_id, full_name, contact_email")
       .in("user_id", Array.from(userIds))
     if (profiles) {
-      userMap = Object.fromEntries(profiles.map(p => [p.user_id, { full_name: p.full_name || "Unknown", email: p.email || "" }]))
+      userMap = Object.fromEntries(profiles.map(p => [p.user_id, { full_name: p.full_name || "Unknown", email: p.contact_email || "" }]))
+    }
+    // Fallback: for user_ids not found in profiles, try auth.users via admin API
+    const missingIds = Array.from(userIds).filter(id => !userMap[id])
+    if (missingIds.length > 0) {
+      const { data: authUsers } = await supabase.auth.admin.listUsers()
+      if (authUsers) {
+        for (const u of authUsers.users) {
+          if (missingIds.includes(u.id)) {
+            const email = u.email || ""
+            const namePart = email.split("@")[0] || "Unknown"
+            userMap[u.id] = { full_name: namePart, email }
+          }
+        }
+      }
     }
   }
 
@@ -96,22 +123,60 @@ export async function GET(req: NextRequest) {
   const totalDuration = stats?.reduce((sum, s) => sum + s.total_duration_ms, 0) || 0
   const avgDuration = total > 0 ? Math.round(totalDuration / total) : 0
 
+  // Compute global percentiles from all durations
+  const allDurations: number[] = []
+  for (const s of stats || []) {
+    if (s.durations && Array.isArray(s.durations)) {
+      allDurations.push(...s.durations)
+    }
+  }
+  allDurations.sort((a, b) => a - b)
+  function percentile(arr: number[], p: number): number {
+    if (arr.length === 0) return 0
+    const idx = Math.min(Math.floor((p / 100) * arr.length), arr.length - 1)
+    return arr[idx]
+  }
+  const p50 = percentile(allDurations, 50)
+  const p95 = percentile(allDurations, 95)
+  const p99 = percentile(allDurations, 99)
+
+  // Method distribution
+  const methodMap: Record<string, { total: number; success: number; errors: number }> = {}
+  for (const s of stats || []) {
+    const m = s.method || "UNKNOWN"
+    if (!methodMap[m]) methodMap[m] = { total: 0, success: 0, errors: 0 }
+    methodMap[m].total += s.total_requests
+    methodMap[m].success += s.success_count
+    methodMap[m].errors += s.error_count
+  }
+  const methods = Object.entries(methodMap).map(([method, s]) => ({
+    method,
+    total: s.total,
+    success: s.success,
+    errors: s.errors,
+    errorRate: s.total > 0 ? Math.round((s.errors / s.total) * 100) : 0,
+  })).sort((a, b) => b.total - a.total)
+
   // Per-endpoint stats with hourly trend data
   const endpointMap: Record<string, {
     total: number; success: number; errors: number; totalDuration: number
+    durations: number[]; methods: Record<string, number>
     lastCalled: string; hourlyTrend: { hour: string; total: number; errors: number; avgDuration: number }[]
     peakHour: { hour: string; total: number } | null
   }> = {}
   for (const s of stats || []) {
     const key = s.endpoint
     if (!endpointMap[key]) {
-      endpointMap[key] = { total: 0, success: 0, errors: 0, totalDuration: 0, lastCalled: s.hour_bucket, hourlyTrend: [], peakHour: null }
+      endpointMap[key] = { total: 0, success: 0, errors: 0, totalDuration: 0, durations: [], methods: {}, lastCalled: s.hour_bucket, hourlyTrend: [], peakHour: null }
     }
     const ep = endpointMap[key]
     ep.total += s.total_requests
     ep.success += s.success_count
     ep.errors += s.error_count
     ep.totalDuration += s.total_duration_ms
+    if (s.durations && Array.isArray(s.durations)) ep.durations.push(...s.durations)
+    const m = s.method || "UNKNOWN"
+    ep.methods[m] = (ep.methods[m] || 0) + s.total_requests
     if (s.hour_bucket > ep.lastCalled) ep.lastCalled = s.hour_bucket
     ep.hourlyTrend.push({
       hour: s.hour_bucket,
@@ -123,17 +188,24 @@ export async function GET(req: NextRequest) {
       ep.peakHour = { hour: s.hour_bucket, total: s.total_requests }
     }
   }
-  const endpoints = Object.entries(endpointMap).map(([endpoint, s]) => ({
-    endpoint,
-    total: s.total,
-    success: s.success,
-    errors: s.errors,
-    errorRate: s.total > 0 ? Math.round((s.errors / s.total) * 100) : 0,
-    avgDuration: s.total > 0 ? Math.round(s.totalDuration / s.total) : 0,
-    lastCalled: s.lastCalled,
-    peakHour: s.peakHour,
-    hourlyTrend: s.hourlyTrend.sort((a, b) => a.hour.localeCompare(b.hour)),
-  })).sort((a, b) => b.total - a.total)
+  const endpoints = Object.entries(endpointMap).map(([endpoint, s]) => {
+    const epDurations = s.durations.sort((a, b) => a - b)
+    return {
+      endpoint,
+      total: s.total,
+      success: s.success,
+      errors: s.errors,
+      errorRate: s.total > 0 ? Math.round((s.errors / s.total) * 100) : 0,
+      avgDuration: s.total > 0 ? Math.round(s.totalDuration / s.total) : 0,
+      p50: percentile(epDurations, 50),
+      p95: percentile(epDurations, 95),
+      p99: percentile(epDurations, 99),
+      methods: Object.entries(s.methods).map(([m, count]) => ({ method: m, count })).sort((a, b) => b.count - a.count),
+      lastCalled: s.lastCalled,
+      peakHour: s.peakHour,
+      hourlyTrend: s.hourlyTrend.sort((a, b) => a.hour.localeCompare(b.hour)),
+    }
+  }).sort((a, b) => b.total - a.total)
 
   // Hourly distribution from aggregated stats (all endpoints combined)
   const hourlyMap: Record<string, { total: number; errors: number; success: number; totalDuration: number }> = {}
@@ -205,6 +277,8 @@ export async function GET(req: NextRequest) {
     successRate: total > 0 ? Math.round((successCount / total) * 100) : 0,
     errorRate: total > 0 ? Math.round((errorCount / total) * 100) : 0,
     avgDuration,
+    p50, p95, p99,
+    methods,
     reqPerHour,
     peakHour: peakHour ? { hour: peakHour.hour, total: peakHour.total } : null,
     endpoints,
