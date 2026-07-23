@@ -82,13 +82,14 @@ export default function AdminPage() {
   const [savingRole, setSavingRole] = useState(false)
 
   // API Monitoring
-  type ApiLog = { id: string; method: string; endpoint: string; status_code: number; duration_ms: number | null; error: string | null; created_at: string; user_id: string | null }
+  type ApiLog = { id: string; method: string; endpoint: string; status_code: number; duration_ms: number | null; error: string | null; created_at: string; user_id: string | null; user_name: string; user_email: string }
   type ApiEndpointStat = { endpoint: string; total: number; success: number; errors: number; errorRate: number; avgDuration: number; lastCalled: string; peakHour: { hour: string; total: number } | null; hourlyTrend: { hour: string; total: number; errors: number; avgDuration: number }[] }
   type ApiHourly = { hour: string; total: number; errors: number; success: number; avgDuration: number; errorRate: number }
+  type ApiUserStat = { userId: string; name: string; email: string; total: number; success: number; errors: number; errorRate: number; avgDuration: number }
   type ApiMonitorData = {
     total: number; successCount: number; errorCount: number; successRate: number; errorRate: number; avgDuration: number
     reqPerHour: number; peakHour: { hour: string; total: number } | null
-    endpoints: ApiEndpointStat[]; recentLogs: ApiLog[]; hourly: ApiHourly[]
+    endpoints: ApiEndpointStat[]; topUsers: ApiUserStat[]; recentLogs: ApiLog[]; hourly: ApiHourly[]
     statusCodes: { code: number; count: number }[]
     topErrors: { endpoint: string; count: number }[]
     durationTrend: { hour: string; avgDuration: number }[]
@@ -435,191 +436,294 @@ export default function AdminPage() {
             <p className="text-sm text-muted-foreground">No API requests logged yet. Stats and error logs will appear here as API routes are called.</p>
           ) : (
             <div className="space-y-6">
-              {/* ── Metric Cards ── */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                  <Zap className="mb-1.5 h-4 w-4 text-blue-400" />
-                  <p className="text-xl font-bold">{apiMonitor.total}</p>
-                  <p className="text-[10px] text-muted-foreground">Total Requests</p>
+              {/* ── Top Row: Donut + Metrics ── */}
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                {/* Donut */}
+                <div className="rounded-xl border border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent p-4 flex flex-col items-center justify-center">
+                  <p className="mb-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Health Score</p>
+                  {(() => {
+                    const total = apiMonitor.total || 1
+                    const sPct = (apiMonitor.successCount / total) * 100
+                    const ePct = (apiMonitor.errorCount / total) * 100
+                    const r = 52, c = 2 * Math.PI * r
+                    return (
+                      <div className="relative w-36 h-36">
+                        <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                          <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="10" />
+                          <circle cx="60" cy="60" r={r} fill="none" stroke="rgb(52 211 153)" strokeWidth="10"
+                            strokeDasharray={`${(sPct/100)*c} ${c-(sPct/100)*c}`} strokeLinecap="round" />
+                          {apiMonitor.errorCount > 0 && (
+                            <circle cx="60" cy="60" r={r} fill="none" stroke="rgb(239 68 68)" strokeWidth="10"
+                              strokeDasharray={`${(ePct/100)*c} ${c-(ePct/100)*c}`} strokeDashoffset={-(sPct/100)*c} strokeLinecap="round" />
+                          )}
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className={cn("text-3xl font-bold", apiMonitor.successRate >= 95 ? "text-emerald-400" : apiMonitor.successRate >= 80 ? "text-yellow-400" : "text-red-400")}>{apiMonitor.successRate}%</span>
+                          <span className="text-[10px] text-muted-foreground mt-0.5">success</span>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                  <div className="flex items-center gap-4 mt-3 text-[10px]">
+                    <span className="flex items-center gap-1.5 text-emerald-400"><span className="h-2 w-2 rounded-full bg-emerald-400" />{apiMonitor.successCount} ok</span>
+                    <span className="flex items-center gap-1.5 text-red-400"><span className="h-2 w-2 rounded-full bg-red-400" />{apiMonitor.errorCount} err</span>
+                  </div>
                 </div>
-                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                  <CheckCircle2 className="mb-1.5 h-4 w-4 text-emerald-400" />
-                  <p className="text-xl font-bold text-emerald-400">{apiMonitor.successRate}%</p>
-                  <p className="text-[10px] text-muted-foreground">Success Rate</p>
-                </div>
-                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                  <XCircle className="mb-1.5 h-4 w-4 text-red-400" />
-                  <p className="text-xl font-bold text-red-400">{apiMonitor.errorCount}</p>
-                  <p className="text-[10px] text-muted-foreground">Errors ({apiMonitor.errorRate}%)</p>
-                </div>
-                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                  <Clock className="mb-1.5 h-4 w-4 text-[#FFBF00]" />
-                  <p className="text-xl font-bold text-[#FFBF00]">{apiMonitor.avgDuration}ms</p>
-                  <p className="text-[10px] text-muted-foreground">Avg Latency</p>
-                </div>
-                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                  <TrendingUp className="mb-1.5 h-4 w-4 text-purple-400" />
-                  <p className="text-xl font-bold text-purple-400">{apiMonitor.reqPerHour}</p>
-                  <p className="text-[10px] text-muted-foreground">Req / Hour</p>
-                </div>
-                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                  <BarChart2 className="mb-1.5 h-4 w-4 text-blue-400" />
-                  <p className="text-xl font-bold text-blue-400">{apiMonitor.peakHour?.total ?? 0}</p>
-                  <p className="text-[10px] text-muted-foreground">Peak Hour</p>
+                {/* Metric Cards */}
+                <div className="lg:col-span-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border-l-2 border-blue-500/50 bg-white/[0.02] p-3.5">
+                    <div className="flex items-center gap-2 mb-1"><Zap className="h-3.5 w-3.5 text-blue-400" /><span className="text-[10px] text-muted-foreground uppercase">Total</span></div>
+                    <p className="text-2xl font-bold">{apiMonitor.total}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">requests</p>
+                  </div>
+                  <div className="rounded-xl border-l-2 border-[#FFBF00]/50 bg-white/[0.02] p-3.5">
+                    <div className="flex items-center gap-2 mb-1"><Clock className="h-3.5 w-3.5 text-[#FFBF00]" /><span className="text-[10px] text-muted-foreground uppercase">Latency</span></div>
+                    <p className="text-2xl font-bold text-[#FFBF00]">{apiMonitor.avgDuration}<span className="text-sm">ms</span></p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">avg response</p>
+                  </div>
+                  <div className="rounded-xl border-l-2 border-purple-500/50 bg-white/[0.02] p-3.5">
+                    <div className="flex items-center gap-2 mb-1"><TrendingUp className="h-3.5 w-3.5 text-purple-400" /><span className="text-[10px] text-muted-foreground uppercase">Throughput</span></div>
+                    <p className="text-2xl font-bold text-purple-400">{apiMonitor.reqPerHour}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">req / hour</p>
+                  </div>
+                  <div className="rounded-xl border-l-2 border-emerald-500/50 bg-white/[0.02] p-3.5">
+                    <div className="flex items-center gap-2 mb-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /><span className="text-[10px] text-muted-foreground uppercase">Success</span></div>
+                    <p className="text-2xl font-bold text-emerald-400">{apiMonitor.successCount}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{apiMonitor.successRate}% of total</p>
+                  </div>
+                  <div className="rounded-xl border-l-2 border-red-500/50 bg-white/[0.02] p-3.5">
+                    <div className="flex items-center gap-2 mb-1"><XCircle className="h-3.5 w-3.5 text-red-400" /><span className="text-[10px] text-muted-foreground uppercase">Errors</span></div>
+                    <p className="text-2xl font-bold text-red-400">{apiMonitor.errorCount}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{apiMonitor.errorRate}% of total</p>
+                  </div>
+                  <div className="rounded-xl border-l-2 border-cyan-500/50 bg-white/[0.02] p-3.5">
+                    <div className="flex items-center gap-2 mb-1"><BarChart2 className="h-3.5 w-3.5 text-cyan-400" /><span className="text-[10px] text-muted-foreground uppercase">Peak</span></div>
+                    <p className="text-2xl font-bold text-cyan-400">{apiMonitor.peakHour?.total ?? 0}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{apiMonitor.peakHour ? new Date(apiMonitor.peakHour.hour).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</p>
+                  </div>
                 </div>
               </div>
 
-              {/* ── Request Volume + Error Overlay (Bar Chart) ── */}
+              {/* ── Request Volume Bar Chart ── */}
               {apiMonitor.hourly.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Request Volume & Error Rate</p>
-                  <div className="flex items-end gap-1 h-32 rounded-lg border border-white/5 bg-black/20 p-2">
-                    {(() => {
-                      const maxTotal = Math.max(...apiMonitor.hourly.map(x => x.total), 1)
-                      const barWidth = apiMonitor.hourly.length === 1 ? "100%" : undefined
-                      return apiMonitor.hourly.map((h, i) => {
-                        const heightPct = Math.max((h.total / maxTotal) * 100, 2)
-                        const errorPct = h.total > 0 ? (h.errors / h.total) * 100 : 0
-                        return (
-                          <div key={i} className="flex flex-col items-center justify-end group relative" style={{ flex: 1, maxWidth: barWidth, minWidth: 8 }}>
-                            <div className="w-full rounded-t bg-emerald-500/50 relative overflow-hidden transition-all" style={{ height: `${heightPct}%` }}>
-                              {errorPct > 0 && (
-                                <div className="absolute bottom-0 w-full bg-red-500/70" style={{ height: `${errorPct}%` }} />
-                              )}
-                            </div>
-                            <div className="absolute -top-12 hidden group-hover:block whitespace-nowrap rounded-lg bg-black/90 px-2.5 py-1.5 text-[10px] text-white z-20 border border-white/10">
-                              <div className="font-medium">{h.hour.slice(11, 16)}</div>
-                              <div className="text-emerald-400">{h.total} requests</div>
-                              <div className="text-red-400">{h.errors} errors ({h.errorRate}%)</div>
-                              <div className="text-yellow-400">{h.avgDuration}ms avg</div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    })()}
+                <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-medium text-white/80">Request Volume</p>
+                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded bg-emerald-500/60" /> Success</span>
+                      <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded bg-red-500/70" /> Errors</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between mt-1.5 text-[9px] text-muted-foreground">
-                    <span>{apiMonitor.hourly[0]?.hour.slice(5, 16)}</span>
-                    {apiMonitor.hourly.length > 1 && <span>{apiMonitor.hourly[apiMonitor.hourly.length - 1]?.hour.slice(5, 16)}</span>}
-                  </div>
-                  <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground">
-                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-emerald-500/50" /> Success</span>
-                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-red-500/70" /> Errors</span>
-                  </div>
-                </div>
-              )}
+                  {(() => {
+                    const maxTotal = Math.max(...apiMonitor.hourly.map(x => x.total), 1)
+                    const isSingle = apiMonitor.hourly.length === 1
 
-              {/* ── Success Rate Trend (Line Chart) ── */}
-              {apiMonitor.successRateTrend.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Success Rate Trend</p>
-                  <div className="relative h-20 rounded-lg border border-white/5 bg-black/20 p-2">
-                    {(() => {
-                      const pts = apiMonitor.successRateTrend
-                      if (pts.length === 1) {
-                        return (
-                          <div className="flex items-center justify-center h-full">
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="h-2 w-2 rounded-full bg-emerald-400" />
-                              <span className="text-[10px] text-emerald-400 font-medium">{pts[0].successRate}%</span>
-                            </div>
-                          </div>
-                        )
-                      }
-                      const w = pts.length - 1
+                    if (isSingle) {
+                      const h = apiMonitor.hourly[0]
+                      const errorPct = h.total > 0 ? (h.errors / h.total) * 100 : 0
                       return (
-                        <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${w} 100`}>
-                          <polyline
-                            points={pts.map((p, i) => `${i},${100 - p.successRate}`).join(" ")}
-                            fill="none"
-                            stroke="rgb(52 211 153)"
-                            strokeWidth="2"
-                            vectorEffect="non-scaling-stroke"
-                          />
-                          <polygon
-                            points={`0,100 ${pts.map((p, i) => `${i},${100 - p.successRate}`).join(" ")} ${w},100`}
-                            fill="rgba(52, 211, 153, 0.1)"
-                          />
-                        </svg>
-                      )
-                    })()}
-                    <div className="absolute top-1 left-2 text-[9px] text-emerald-400/60">100%</div>
-                    <div className="absolute bottom-1 left-2 text-[9px] text-muted-foreground">0%</div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Response Time Trend (Line Chart) ── */}
-              {apiMonitor.durationTrend.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Response Time Trend (ms)</p>
-                  <div className="relative h-20 rounded-lg border border-white/5 bg-black/20 p-2">
-                    {(() => {
-                      const pts = apiMonitor.durationTrend
-                      if (pts.length === 1) {
-                        return (
-                          <div className="flex items-center justify-center h-full">
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="h-2 w-2 rounded-full bg-yellow-400" />
-                              <span className="text-[10px] text-yellow-400 font-medium">{pts[0].avgDuration}ms</span>
+                        <div>
+                          {/* Y-axis labels + bar area */}
+                          <div className="flex gap-2 h-40">
+                            {/* Y-axis */}
+                            <div className="flex flex-col justify-between text-[9px] text-muted-foreground/50 py-0.5">
+                              <span>{maxTotal}</span>
+                              <span>{Math.round(maxTotal * 0.75)}</span>
+                              <span>{Math.round(maxTotal * 0.5)}</span>
+                              <span>{Math.round(maxTotal * 0.25)}</span>
+                              <span>0</span>
+                            </div>
+                            {/* Bar area with gridlines */}
+                            <div className="flex-1 relative">
+                              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                                {[0, 1, 2, 3].map(i => <div key={i} className="border-t border-white/[0.04]" />)}
+                              </div>
+                              <div className="absolute inset-0 flex items-end justify-center">
+                                <div className="group relative" style={{ width: "45%", height: "100%" }}>
+                                  <div className="w-full h-full rounded-t-lg rounded-b-md relative overflow-hidden transition-all group-hover:brightness-125" style={{ background: "linear-gradient(180deg, rgba(52,211,153,0.7) 0%, rgba(52,211,153,0.25) 100%)" }}>
+                                    {errorPct > 0 && <div className="absolute bottom-0 w-full" style={{ height: `${errorPct}%`, background: "linear-gradient(180deg, rgba(239,68,68,0.8) 0%, rgba(239,68,68,0.5) 100%)" }} />}
+                                    {/* Value inside bar */}
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                      <span className="text-2xl font-bold text-white/90">{h.total}</span>
+                                      <span className="text-[9px] text-white/50 mt-0.5">requests</span>
+                                    </div>
+                                  </div>
+                                  {/* Tooltip */}
+                                  <div className="absolute -top-14 left-1/2 -translate-x-1/2 hidden group-hover:block whitespace-nowrap rounded-lg bg-black/95 px-3 py-2 text-[10px] text-white z-30 border border-white/10 shadow-xl">
+                                    <div className="font-medium text-white/90 mb-1">{h.hour.slice(5, 16).replace("T", " ")}</div>
+                                    <div className="flex items-center gap-1.5 text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{h.success} success</div>
+                                    <div className="flex items-center gap-1.5 text-red-400"><span className="h-1.5 w-1.5 rounded-full bg-red-400" />{h.errors} errors</div>
+                                    <div className="flex items-center gap-1.5 text-yellow-400 mt-0.5"><span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />{h.avgDuration}ms avg</div>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        )
-                      }
-                      const maxDur = Math.max(...pts.map(d => d.avgDuration), 1)
-                      const w = pts.length - 1
-                      return (
-                        <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${w} 100`}>
-                          <polyline
-                            points={pts.map((p, i) => `${i},${100 - (p.avgDuration / maxDur) * 100}`).join(" ")}
-                            fill="none"
-                            stroke="rgb(250 204 21)"
-                            strokeWidth="2"
-                            vectorEffect="non-scaling-stroke"
-                          />
-                          <polygon
-                            points={`0,100 ${pts.map((p, i) => `${i},${100 - (p.avgDuration / maxDur) * 100}`).join(" ")} ${w},100`}
-                            fill="rgba(250, 204, 21, 0.08)"
-                          />
-                        </svg>
+                          {/* X-axis */}
+                          <div className="flex gap-2 mt-1.5">
+                            <div className="w-6" />
+                            <div className="flex-1 text-center text-[9px] text-muted-foreground border-t border-white/[0.04] pt-1.5">
+                              {h.hour.slice(5, 16).replace("T", " ")}
+                            </div>
+                          </div>
+                          <p className="text-[9px] text-muted-foreground text-center mt-2">Collecting data — more bars appear as requests come in across different hours</p>
+                        </div>
                       )
-                    })()}
-                    <div className="absolute top-1 left-2 text-[9px] text-yellow-400/60">peak</div>
-                    <div className="absolute bottom-1 left-2 text-[9px] text-muted-foreground">0ms</div>
-                  </div>
-                </div>
-              )}
+                    }
 
-              {/* ── Endpoint Health Table ── */}
-              <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Endpoint Health</p>
-                <div className="space-y-1.5">
-                  {apiMonitor.endpoints.map(ep => (
-                    <div key={ep.endpoint} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="flex-1 truncate text-xs font-medium text-white">{ep.endpoint}</span>
-                        <span className="shrink-0 text-xs text-muted-foreground">{ep.total} req</span>
-                        <span className={cn("shrink-0 text-xs font-medium", ep.errorRate > 10 ? "text-red-400" : ep.errorRate > 0 ? "text-yellow-400" : "text-emerald-400")}>
-                          {ep.errorRate}% err
-                        </span>
-                        <span className="shrink-0 text-xs text-muted-foreground">{ep.avgDuration}ms</span>
+                    return (
+                      <div>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                            {[0, 1, 2, 3].map(i => <div key={i} className="border-t border-white/[0.03]" />)}
+                          </div>
+                          <div className="flex items-end gap-1.5 h-36 relative">
+                            {apiMonitor.hourly.map((h, i) => {
+                              const heightPct = Math.max((h.total / maxTotal) * 100, 3)
+                              const errorPct = h.total > 0 ? (h.errors / h.total) * 100 : 0
+                              return (
+                                <div key={i} className="flex flex-col items-center justify-end group relative" style={{ flex: 1, minWidth: 12 }}>
+                                  <span className="text-[9px] font-medium text-white/40 mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity">{h.total}</span>
+                                  <div className="w-full rounded-t-md relative overflow-hidden transition-all group-hover:brightness-125" style={{ height: `${heightPct}%`, background: "linear-gradient(180deg, rgba(52,211,153,0.6) 0%, rgba(52,211,153,0.3) 100%)" }}>
+                                    {errorPct > 0 && <div className="absolute bottom-0 w-full" style={{ height: `${errorPct}%`, background: "linear-gradient(180deg, rgba(239,68,68,0.8) 0%, rgba(239,68,68,0.5) 100%)" }} />}
+                                  </div>
+                                  <div className="absolute -top-16 left-1/2 -translate-x-1/2 hidden group-hover:block whitespace-nowrap rounded-lg bg-black/95 px-3 py-2 text-[10px] text-white z-30 border border-white/10 shadow-xl">
+                                    <div className="font-medium text-white/90 mb-1">{h.hour.slice(5, 16).replace("T", " ")}</div>
+                                    <div className="flex items-center gap-1.5 text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{h.success} success</div>
+                                    <div className="flex items-center gap-1.5 text-red-400"><span className="h-1.5 w-1.5 rounded-full bg-red-400" />{h.errors} errors</div>
+                                    <div className="flex items-center gap-1.5 text-yellow-400 mt-0.5"><span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />{h.avgDuration}ms avg</div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex justify-between mt-2 text-[9px] text-muted-foreground border-t border-white/[0.03] pt-2">
+                          <span>{apiMonitor.hourly[0]?.hour.slice(5, 16).replace("T", " ")}</span>
+                          <span>{apiMonitor.hourly[apiMonitor.hourly.length - 1]?.hour.slice(5, 16).replace("T", " ")}</span>
+                        </div>
                       </div>
-                      {/* Mini sparkline */}
+                    )
+                  })()}
+                </div>
+              )}
+
+              {/* ── Two-column: Success Rate + Response Time ── */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {apiMonitor.successRateTrend.length > 0 && (
+                  <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
+                    <p className="text-xs font-medium text-white/80 mb-3">Success Rate Trend</p>
+                    <div className="relative h-28">
+                      {(() => {
+                        const pts = apiMonitor.successRateTrend
+                        if (pts.length === 1) {
+                          const pct = pts[0].successRate
+                          return (
+                            <div className="flex flex-col justify-center h-full gap-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-muted-foreground">Current</span>
+                                <span className={cn("text-lg font-bold", pct >= 95 ? "text-emerald-400" : pct >= 80 ? "text-yellow-400" : "text-red-400")}>{pct}%</span>
+                              </div>
+                              <div className="h-3 rounded-full bg-white/5 overflow-hidden">
+                                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: "linear-gradient(90deg, rgba(52,211,153,0.8) 0%, rgba(52,211,153,0.4) 100%)" }} />
+                              </div>
+                              <div className="flex items-center justify-between text-[9px] text-muted-foreground">
+                                <span>0%</span><span>50%</span><span>100%</span>
+                              </div>
+                              <p className="text-[9px] text-muted-foreground text-center mt-1">Collecting data — trend chart appears with more data points</p>
+                            </div>
+                          )
+                        }
+                        const w = pts.length - 1
+                        const points = pts.map((p, i) => `${i},${100 - p.successRate}`).join(" ")
+                        return (
+                          <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${w} 100`}>
+                            <defs><linearGradient id="sGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(52,211,153,0.3)" /><stop offset="100%" stopColor="rgba(52,211,153,0)" /></linearGradient></defs>
+                            {[25, 50, 75].map(y => <line key={y} x1="0" y1={y} x2={w} y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />)}
+                            <polygon points={`0,100 ${points} ${w},100`} fill="url(#sGrad)" />
+                            <polyline points={points} fill="none" stroke="rgb(52 211 153)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                            {pts.map((p, i) => <circle key={i} cx={i} cy={100 - p.successRate} r="1.5" fill="rgb(52 211 153)" vectorEffect="non-scaling-stroke" />)}
+                          </svg>
+                        )
+                      })()}
+                      <div className="absolute top-0 left-0 text-[9px] text-emerald-400/50">100%</div>
+                      <div className="absolute bottom-0 left-0 text-[9px] text-muted-foreground/50">0%</div>
+                    </div>
+                  </div>
+                )}
+                {apiMonitor.durationTrend.length > 0 && (
+                  <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
+                    <p className="text-xs font-medium text-white/80 mb-3">Response Time Trend</p>
+                    <div className="relative h-28">
+                      {(() => {
+                        const pts = apiMonitor.durationTrend
+                        if (pts.length === 1) {
+                          const ms = pts[0].avgDuration
+                          const maxBar = Math.max(ms, 10000)
+                          const pct = Math.min((ms / maxBar) * 100, 100)
+                          const label = ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+                          return (
+                            <div className="flex flex-col justify-center h-full gap-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-muted-foreground">Current</span>
+                                <span className={cn("text-lg font-bold", ms < 1000 ? "text-emerald-400" : ms < 5000 ? "text-yellow-400" : "text-red-400")}>{label}</span>
+                              </div>
+                              <div className="h-3 rounded-full bg-white/5 overflow-hidden">
+                                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: "linear-gradient(90deg, rgba(250,204,21,0.8) 0%, rgba(250,204,21,0.4) 100%)" }} />
+                              </div>
+                              <div className="flex items-center justify-between text-[9px] text-muted-foreground">
+                                <span>0ms</span><span>5s</span><span>10s+</span>
+                              </div>
+                              <p className="text-[9px] text-muted-foreground text-center mt-1">Collecting data — trend chart appears with more data points</p>
+                            </div>
+                          )
+                        }
+                        const maxDur = Math.max(...pts.map(d => d.avgDuration), 1)
+                        const w = pts.length - 1
+                        const points = pts.map((p, i) => `${i},${100 - (p.avgDuration / maxDur) * 100}`).join(" ")
+                        return (
+                          <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${w} 100`}>
+                            <defs><linearGradient id="dGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(250,204,21,0.25)" /><stop offset="100%" stopColor="rgba(250,204,21,0)" /></linearGradient></defs>
+                            {[25, 50, 75].map(y => <line key={y} x1="0" y1={y} x2={w} y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />)}
+                            <polygon points={`0,100 ${points} ${w},100`} fill="url(#dGrad)" />
+                            <polyline points={points} fill="none" stroke="rgb(250 204 21)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                            {pts.map((p, i) => <circle key={i} cx={i} cy={100 - (p.avgDuration / maxDur) * 100} r="1.5" fill="rgb(250 204 21)" vectorEffect="non-scaling-stroke" />)}
+                          </svg>
+                        )
+                      })()}
+                      <div className="absolute top-0 left-0 text-[9px] text-yellow-400/50">peak</div>
+                      <div className="absolute bottom-0 left-0 text-[9px] text-muted-foreground/50">0ms</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Endpoint Health Cards ── */}
+              <div>
+                <p className="mb-3 text-xs font-medium text-white/80">Endpoint Health</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {apiMonitor.endpoints.map(ep => (
+                    <div key={ep.endpoint} className="rounded-xl border border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-medium text-white truncate">{ep.endpoint}</span>
+                        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold", ep.errorRate === 0 ? "bg-emerald-500/10 text-emerald-400" : ep.errorRate <= 10 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400")}>
+                          {ep.errorRate === 0 ? "HEALTHY" : `${ep.errorRate}% ERR`}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div><p className="text-lg font-bold">{ep.total}</p><p className="text-[9px] text-muted-foreground">requests</p></div>
+                        <div><p className="text-lg font-bold text-[#FFBF00]">{ep.avgDuration}ms</p><p className="text-[9px] text-muted-foreground">avg latency</p></div>
+                        <div><p className="text-lg font-bold text-emerald-400">{ep.success}</p><p className="text-[9px] text-muted-foreground">successes</p></div>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                        <div className="h-full rounded-full bg-emerald-500/60" style={{ width: `${ep.errorRate === 0 ? 100 : 100 - ep.errorRate}%` }} />
+                      </div>
                       {ep.hourlyTrend.length > 1 && (
-                        <div className="flex items-end gap-px h-6">
+                        <div className="flex items-end gap-px h-5 mt-2">
                           {(() => {
                             const maxT = Math.max(...ep.hourlyTrend.map(t => t.total), 1)
                             return ep.hourlyTrend.map((t, i) => (
-                              <div
-                                key={i}
-                                className="flex-1 rounded-sm transition-colors"
-                                style={{
-                                  height: `${(t.total / maxT) * 100}%`,
-                                  backgroundColor: t.errors > 0 ? "rgba(239,68,68,0.4)" : "rgba(52,211,153,0.3)",
-                                  minWidth: 2,
-                                }}
-                                title={`${t.hour.slice(11, 16)}: ${t.total} req, ${t.errors} err, ${t.avgDuration}ms`}
-                              />
+                              <div key={i} className="flex-1 rounded-sm" style={{ height: `${Math.max((t.total / maxT) * 100, 5)}%`, backgroundColor: t.errors > 0 ? "rgba(239,68,68,0.5)" : "rgba(52,211,153,0.4)", minWidth: 2 }} title={`${t.hour.slice(11, 16)}: ${t.total} req, ${t.errors} err, ${t.avgDuration}ms`} />
                             ))
                           })()}
                         </div>
@@ -629,73 +733,116 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* ── Two-column: Status Codes + Top Errors ── */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* Status Code Distribution */}
-                {apiMonitor.statusCodes.length > 0 && (
-                  <div>
-                    <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Status Code Distribution</p>
-                    <div className="space-y-1.5">
-                      {apiMonitor.statusCodes.map(sc => {
-                        const maxCount = Math.max(...apiMonitor.statusCodes.map(s => s.count), 1)
+              {/* ── Top Users by Request Volume ── */}
+              {apiMonitor.topUsers && apiMonitor.topUsers.length > 0 && (
+                <div>
+                  <p className="mb-3 text-xs font-medium text-white/80">Top Users by Request Volume</p>
+                  <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
+                    <div className="space-y-2">
+                      {apiMonitor.topUsers.map((u, i) => {
+                        const maxTotal = Math.max(...apiMonitor.topUsers.map(t => t.total), 1)
                         return (
-                          <div key={sc.code} className="flex items-center gap-2">
-                            <span className={cn(
-                              "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold w-12 text-center",
-                              sc.code < 300 ? "bg-emerald-500/10 text-emerald-400" :
-                              sc.code < 400 ? "bg-blue-500/10 text-blue-400" :
-                              sc.code < 500 ? "bg-yellow-500/10 text-yellow-400" :
-                              "bg-red-500/10 text-red-400"
-                            )}>
-                              {sc.code}
-                            </span>
-                            <div className="flex-1 h-4 rounded-sm bg-white/5 overflow-hidden">
-                              <div
-                                className={cn(
-                                  "h-full rounded-sm",
-                                  sc.code < 300 ? "bg-emerald-500/40" :
-                                  sc.code < 400 ? "bg-blue-500/40" :
-                                  sc.code < 500 ? "bg-yellow-500/40" :
-                                  "bg-red-500/40"
-                                )}
-                                style={{ width: `${(sc.count / maxCount) * 100}%` }}
-                              />
+                          <div key={u.userId} className="flex items-center gap-3">
+                            <span className="shrink-0 w-5 text-[10px] font-bold text-muted-foreground text-right">{i + 1}</span>
+                            <div className="shrink-0 h-7 w-7 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center text-[10px] font-bold text-white/70">
+                              {u.name.charAt(0).toUpperCase()}
                             </div>
-                            <span className="shrink-0 text-[10px] text-muted-foreground w-8 text-right">{sc.count}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-medium text-white truncate">{u.name}</span>
+                                {u.email && <span className="text-[10px] text-muted-foreground truncate hidden sm:inline">{u.email}</span>}
+                                <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-bold", u.errorRate === 0 ? "bg-emerald-500/10 text-emerald-400" : u.errorRate <= 10 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400")}>
+                                  {u.errorRate === 0 ? "HEALTHY" : `${u.errorRate}% ERR`}
+                                </span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                <div className="h-full rounded-full bg-gradient-to-r from-blue-500/50 to-purple-500/50" style={{ width: `${(u.total / maxTotal) * 100}%` }} />
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-xs font-bold">{u.total}</p>
+                              <p className="text-[9px] text-muted-foreground">{u.avgDuration}ms</p>
+                            </div>
                           </div>
                         )
                       })}
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Top Error Endpoints */}
-                {apiMonitor.topErrors.length > 0 && (
-                  <div>
-                    <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Top Error Endpoints</p>
-                    <div className="space-y-1.5">
+              {/* ── Two-column: Status Codes + Top Errors ── */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {apiMonitor.statusCodes.length > 0 ? (
+                  <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
+                    <p className="mb-3 text-xs font-medium text-white/80">Status Code Distribution</p>
+                    <div className="space-y-2">
+                      {apiMonitor.statusCodes.map(sc => {
+                        const maxCount = Math.max(...apiMonitor.statusCodes.map(s => s.count), 1)
+                        return (
+                          <div key={sc.code} className="flex items-center gap-2">
+                            <span className={cn("shrink-0 rounded-md px-2 py-1 text-[10px] font-bold w-14 text-center", sc.code < 300 ? "bg-emerald-500/15 text-emerald-400" : sc.code < 400 ? "bg-blue-500/15 text-blue-400" : sc.code < 500 ? "bg-yellow-500/15 text-yellow-400" : "bg-red-500/15 text-red-400")}>{sc.code}</span>
+                            <div className="flex-1 h-5 rounded-md bg-white/5 overflow-hidden">
+                              <div className={cn("h-full rounded-md", sc.code < 300 ? "bg-emerald-500/50" : sc.code < 400 ? "bg-blue-500/50" : sc.code < 500 ? "bg-yellow-500/50" : "bg-red-500/50")} style={{ width: `${(sc.count / maxCount) * 100}%` }} />
+                            </div>
+                            <span className="shrink-0 text-[10px] font-medium text-muted-foreground w-8 text-right">{sc.count}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
+                    <p className="mb-3 text-xs font-medium text-white/80">Status Code Distribution</p>
+                    <div className="flex items-center justify-center py-6">
+                      <div className="text-center">
+                        <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-400/40 mb-2" />
+                        <p className="text-[10px] text-emerald-400/60">All 2xx — no error status codes</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {apiMonitor.topErrors.length > 0 ? (
+                  <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
+                    <p className="mb-3 text-xs font-medium text-white/80">Top Error Endpoints</p>
+                    <div className="space-y-2">
                       {apiMonitor.topErrors.map((te, i) => {
                         const maxErr = Math.max(...apiMonitor.topErrors.map(t => t.count), 1)
                         return (
                           <div key={i} className="flex items-center gap-2">
                             <span className="flex-1 truncate text-[10px] text-white/70">{te.endpoint}</span>
-                            <div className="w-20 h-4 rounded-sm bg-white/5 overflow-hidden">
-                              <div className="h-full bg-red-500/40 rounded-sm" style={{ width: `${(te.count / maxErr) * 100}%` }} />
+                            <div className="w-24 h-5 rounded-md bg-white/5 overflow-hidden">
+                              <div className="h-full bg-red-500/50 rounded-md" style={{ width: `${(te.count / maxErr) * 100}%` }} />
                             </div>
-                            <span className="shrink-0 text-[10px] text-red-400 font-medium w-6 text-right">{te.count}</span>
+                            <span className="shrink-0 text-[10px] text-red-400 font-bold w-6 text-right">{te.count}</span>
                           </div>
                         )
                       })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
+                    <p className="mb-3 text-xs font-medium text-white/80">Top Error Endpoints</p>
+                    <div className="flex items-center justify-center py-6">
+                      <div className="text-center">
+                        <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-400/40 mb-2" />
+                        <p className="text-[10px] text-emerald-400/60">No error endpoints — all healthy</p>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* ── Recent Error Logs ── */}
-              <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Recent Error Logs</p>
+              <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
+                <p className="mb-3 text-xs font-medium text-white/80">Recent Error Logs</p>
                 {apiMonitor.recentLogs.length === 0 ? (
-                  <p className="text-xs text-emerald-400/60 py-3 text-center">No errors recorded — all requests successful.</p>
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400/30 mb-2" />
+                      <p className="text-xs text-emerald-400/60">No errors recorded — all requests successful</p>
+                    </div>
+                  </div>
                 ) : (
                   <>
                     <div className="space-y-1 max-h-64 overflow-y-auto rounded-lg border border-white/5">
@@ -711,6 +858,9 @@ export default function AdminPage() {
                           </span>
                           <span className="shrink-0 text-[10px] font-medium text-muted-foreground w-10">{log.method}</span>
                           <span className="flex-1 truncate text-xs text-white/80">{log.endpoint}</span>
+                          {log.user_name && log.user_name !== "Anonymous" && (
+                            <span className="hidden md:block shrink-0 text-[10px] text-blue-400/60 truncate max-w-[120px]">{log.user_name}</span>
+                          )}
                           {log.error && <span className="hidden sm:block shrink-0 max-w-[200px] truncate text-[10px] text-red-400/60">{log.error}</span>}
                           <span className="shrink-0 text-[10px] text-muted-foreground">{log.duration_ms ? `${log.duration_ms}ms` : "-"}</span>
                           <span className="shrink-0 text-[10px] text-muted-foreground">{new Date(log.created_at).toLocaleTimeString()}</span>

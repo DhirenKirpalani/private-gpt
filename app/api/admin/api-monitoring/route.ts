@@ -50,6 +50,45 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
     .limit(50)
 
+  // Fetch user profiles for user_id mapping
+  const userIds = new Set<string>()
+  for (const s of stats || []) { if (s.user_id) userIds.add(s.user_id) }
+  for (const log of errorLogs || []) { if (log.user_id) userIds.add(log.user_id) }
+  let userMap: Record<string, { full_name: string; email: string }> = {}
+  if (userIds.size > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, full_name, email")
+      .in("user_id", Array.from(userIds))
+    if (profiles) {
+      userMap = Object.fromEntries(profiles.map(p => [p.user_id, { full_name: p.full_name || "Unknown", email: p.email || "" }]))
+    }
+  }
+
+  // Per-user stats
+  const userStatsMap: Record<string, { total: number; success: number; errors: number; totalDuration: number }> = {}
+  for (const s of stats || []) {
+    const uid = s.user_id || "anonymous"
+    if (!userStatsMap[uid]) userStatsMap[uid] = { total: 0, success: 0, errors: 0, totalDuration: 0 }
+    userStatsMap[uid].total += s.total_requests
+    userStatsMap[uid].success += s.success_count
+    userStatsMap[uid].errors += s.error_count
+    userStatsMap[uid].totalDuration += s.total_duration_ms
+  }
+  const topUsers = Object.entries(userStatsMap)
+    .map(([uid, s]) => ({
+      userId: uid,
+      name: uid === "anonymous" ? "Anonymous" : (userMap[uid]?.full_name || "Unknown user"),
+      email: uid === "anonymous" ? "" : (userMap[uid]?.email || ""),
+      total: s.total,
+      success: s.success,
+      errors: s.errors,
+      errorRate: s.total > 0 ? Math.round((s.errors / s.total) * 100) : 0,
+      avgDuration: s.total > 0 ? Math.round(s.totalDuration / s.total) : 0,
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10)
+
   // Compute totals from aggregated stats
   const total = stats?.reduce((sum, s) => sum + s.total_requests, 0) || 0
   const successCount = stats?.reduce((sum, s) => sum + s.success_count, 0) || 0
@@ -152,6 +191,13 @@ export async function GET(req: NextRequest) {
     successRate: h.total > 0 ? Math.round((h.success / h.total) * 100) : 100,
   }))
 
+  // Enrich error logs with user info
+  const enrichedLogs = (errorLogs || []).map(log => ({
+    ...log,
+    user_name: log.user_id ? (userMap[log.user_id]?.full_name || "Unknown") : "Anonymous",
+    user_email: log.user_id ? (userMap[log.user_id]?.email || "") : "",
+  }))
+
   return NextResponse.json({
     total,
     successCount,
@@ -162,7 +208,8 @@ export async function GET(req: NextRequest) {
     reqPerHour,
     peakHour: peakHour ? { hour: peakHour.hour, total: peakHour.total } : null,
     endpoints,
-    recentLogs: errorLogs || [],
+    topUsers,
+    recentLogs: enrichedLogs,
     hourly,
     statusCodes,
     topErrors,
