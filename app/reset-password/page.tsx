@@ -22,36 +22,41 @@ function ResetPasswordContent() {
   const [success, setSuccess] = useState("")
   const [recoveryReady, setRecoveryReady] = useState(false)
 
-  // Listen for PASSWORD_RECOVERY event from Supabase when user clicks the email link
-  // detectSessionInUrl: true auto-creates a session, but we need to intercept it
-  // so the user sees the password form instead of being logged in directly
+  // detectSessionInUrl: true processes the recovery hash on module load,
+  // BEFORE this useEffect runs. So the PASSWORD_RECOVERY event fires and
+  // the hash gets cleared before we can listen. Fix: check for an existing
+  // session on mount as a fallback.
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "PASSWORD_RECOVERY") {
-        // Session exists from the recovery token — show the form
+    let mounted = true
+
+    // 1. Check if a session already exists (recovery token was already processed)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (mounted && session) {
         setRecoveryReady(true)
-      } else if (event === "SIGNED_IN" && session && !recoveryReady) {
-        // If auto-signin happened before recovery event, check if this is a recovery flow
-        // by looking for recovery params in the URL
-        const hash = window.location.hash
-        if (hash && hash.includes("type=recovery")) {
-          setRecoveryReady(true)
-        }
       }
     })
 
-    // Also check URL hash on mount (in case the event already fired)
+    // 2. Also listen for late-firing auth events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (mounted && (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session))) {
+        setRecoveryReady(true)
+      }
+    })
+
+    // 3. Fallback: check URL hash/search for recovery params
     if (typeof window !== "undefined") {
       const hash = window.location.hash
-      if (hash && hash.includes("type=recovery")) {
+      const search = window.location.search
+      if (hash?.includes("type=recovery") || search?.includes("type=recovery")) {
         setRecoveryReady(true)
       }
     }
 
     return () => {
+      mounted = false
       subscription.unsubscribe()
     }
-  }, [recoveryReady])
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
