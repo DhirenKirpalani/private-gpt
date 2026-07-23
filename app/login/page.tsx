@@ -4,12 +4,12 @@ import Link from "next/link"
 import Image from "next/image"
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Eye, EyeOff, CheckCircle2, Loader2 } from "lucide-react"
+import { Eye, EyeOff, CheckCircle2, Loader2, X, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useI18n } from "@/lib/i18n"
-import { signIn } from "@/lib/supabase"
+import { signIn, resetPassword } from "@/lib/supabase"
 
 const featureKeys = [
   "loginFeature1",
@@ -27,6 +27,12 @@ function LoginContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [confirmedEmail, setConfirmedEmail] = useState(false)
+  const [showForgotForm, setShowForgotForm] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState("")
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotSuccess, setForgotSuccess] = useState(false)
+  const [rateLimited, setRateLimited] = useState(false)
+  const [attemptCount, setAttemptCount] = useState(0)
 
   useEffect(() => {
     // Show welcome banner if user arrives from email confirmation
@@ -38,15 +44,46 @@ function LoginContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (rateLimited) return
     setError("")
     setLoading(true)
     try {
       await signIn(email, password)
       router.push(inviteToken ? `/invite?token=${inviteToken}` : "/profile")
     } catch (err: any) {
-      setError(err.message || "Invalid email or password.")
+      const msg = (err.message || "").toLowerCase()
+      const newCount = attemptCount + 1
+      setAttemptCount(newCount)
+
+      if (newCount >= 5) {
+        setRateLimited(true)
+        setError("Too many failed attempts. Please wait 30 seconds before trying again.")
+        setTimeout(() => {
+          setRateLimited(false)
+          setAttemptCount(0)
+        }, 30000)
+      } else if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
+        setError("Please confirm your email before signing in. Check your inbox for the confirmation link.")
+      } else if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
+        setError(`Invalid email or password. ${5 - newCount} attempt${5 - newCount === 1 ? "" : "s"} remaining.`)
+      } else {
+        setError(err.message || "Invalid email or password.")
+      }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setForgotLoading(true)
+    try {
+      await resetPassword(forgotEmail || email)
+      setForgotSuccess(true)
+    } catch (err: any) {
+      setError(err.message || "Failed to send reset link. Please try again.")
+    } finally {
+      setForgotLoading(false)
     }
   }
 
@@ -113,7 +150,7 @@ function LoginContent() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">{t("password")}</Label>
-                <Link href="#" className="text-xs text-emerald-400 hover:underline">{t("forgotPassword")}</Link>
+                <button type="button" onClick={() => setShowForgotForm(v => !v)} className="text-xs text-emerald-400 hover:underline">{t("forgotPassword")}</button>
               </div>
               <div className="relative">
                 <Input
@@ -162,6 +199,81 @@ function LoginContent() {
           </p>
         </div>
       </div>
+
+      {/* ── Forgot Password Modal ── */}
+      {showForgotForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+          onClick={() => {
+            setShowForgotForm(false)
+            setForgotSuccess(false)
+            setForgotEmail("")
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#2a3444] p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10">
+                  <Mail className="h-4 w-4 text-emerald-400" />
+                </div>
+                <h2 className="text-lg font-semibold">Reset Password</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotForm(false)
+                  setForgotSuccess(false)
+                  setForgotEmail("")
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {forgotSuccess ? (
+              <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                </div>
+                <p className="text-sm leading-relaxed text-emerald-300">
+                  Reset link sent! Check your email and follow the instructions to reset your password.
+                </p>
+              </div>
+            ) : (
+              <>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Enter your email and we&apos;ll send you a link to reset your password.
+                </p>
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="forgot-email">Email</Label>
+                    <Input
+                      id="forgot-email"
+                      type="email"
+                      placeholder="name@company.com"
+                      value={forgotEmail || email}
+                      onChange={e => setForgotEmail(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 py-4 text-sm font-semibold disabled:opacity-50"
+                  >
+                    {forgotLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send Reset Link"}
+                  </Button>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
