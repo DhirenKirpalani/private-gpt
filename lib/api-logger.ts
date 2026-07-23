@@ -33,7 +33,7 @@ export async function logApiRequest(entry: ApiLogEntry): Promise<void> {
     // 1. Upsert aggregated stats (1 row per endpoint per hour per user)
     const { data: existing } = await supabaseAdmin
       .from("api_stats_hourly")
-      .select("id, total_requests, success_count, error_count, total_duration_ms")
+      .select("id, total_requests, success_count, error_count, total_duration_ms, durations")
       .eq("endpoint", endpoint)
       .eq("method", method)
       .eq("hour_bucket", hourBucket)
@@ -48,6 +48,7 @@ export async function logApiRequest(entry: ApiLogEntry): Promise<void> {
           success_count: existing.success_count + (isError ? 0 : 1),
           error_count: existing.error_count + (isError ? 1 : 0),
           total_duration_ms: existing.total_duration_ms + (durationMs || 0),
+          durations: [...(existing.durations || []), durationMs || 0].slice(-1000),
         })
         .eq("id", existing.id)
     } else {
@@ -62,6 +63,7 @@ export async function logApiRequest(entry: ApiLogEntry): Promise<void> {
           success_count: isError ? 0 : 1,
           error_count: isError ? 1 : 0,
           total_duration_ms: durationMs || 0,
+          durations: [durationMs || 0],
         })
     }
   } catch (err) {

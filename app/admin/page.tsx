@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Save, ArrowLeft, Users, Clock, TrendingUp, CreditCard, Megaphone, BarChart2, UserCog, ShieldCheck, Building2, ChevronDown, ChevronRight, Crown, Shield, User, AlertTriangle, Bell, Activity, Zap, CheckCircle2, XCircle, ChevronLeft } from "lucide-react"
+import { Loader2, Save, ArrowLeft, Users, Clock, TrendingUp, CreditCard, Megaphone, BarChart2, UserCog, ShieldCheck, Building2, ChevronDown, ChevronRight, Crown, Shield, User, AlertTriangle, Bell, Activity, Zap, CheckCircle2, XCircle, ChevronLeft, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/app/auth-provider"
 import { getAppSettings } from "@/lib/app-settings"
@@ -83,11 +83,13 @@ export default function AdminPage() {
 
   // API Monitoring
   type ApiLog = { id: string; method: string; endpoint: string; status_code: number; duration_ms: number | null; error: string | null; created_at: string; user_id: string | null; user_name: string; user_email: string }
-  type ApiEndpointStat = { endpoint: string; total: number; success: number; errors: number; errorRate: number; avgDuration: number; lastCalled: string; peakHour: { hour: string; total: number } | null; hourlyTrend: { hour: string; total: number; errors: number; avgDuration: number }[] }
+  type ApiEndpointStat = { endpoint: string; total: number; success: number; errors: number; errorRate: number; avgDuration: number; p50: number; p95: number; p99: number; methods: { method: string; count: number }[]; lastCalled: string; peakHour: { hour: string; total: number } | null; hourlyTrend: { hour: string; total: number; errors: number; avgDuration: number }[] }
   type ApiHourly = { hour: string; total: number; errors: number; success: number; avgDuration: number; errorRate: number }
   type ApiUserStat = { userId: string; name: string; email: string; total: number; success: number; errors: number; errorRate: number; avgDuration: number }
+  type ApiMethodStat = { method: string; total: number; success: number; errors: number; errorRate: number }
   type ApiMonitorData = {
     total: number; successCount: number; errorCount: number; successRate: number; errorRate: number; avgDuration: number
+    p50: number; p95: number; p99: number; methods: ApiMethodStat[]
     reqPerHour: number; peakHour: { hour: string; total: number } | null
     endpoints: ApiEndpointStat[]; topUsers: ApiUserStat[]; recentLogs: ApiLog[]; hourly: ApiHourly[]
     statusCodes: { code: number; count: number }[]
@@ -99,6 +101,8 @@ export default function AdminPage() {
   const [apiMonitorLoading, setApiMonitorLoading] = useState(true)
   const [apiMonitorRange, setApiMonitorRange] = useState<"24h" | "7d" | "30d">("24h")
   const [apiLogsPage, setApiLogsPage] = useState(0)
+  const [activeTab, setActiveTab] = useState<"dashboard" | "api" | "workspace" | "settings">("dashboard")
+  const [filterUserId, setFilterUserId] = useState<string | null>(null)
 
   // Companies & workspaces
   type CompanyMember = { userId: string; email: string; role: string }
@@ -146,10 +150,12 @@ export default function AdminPage() {
     loadApiMonitor()
   }, [user, role, loading, router])
 
-  async function loadApiMonitor(range?: string) {
+  async function loadApiMonitor(range?: string, uid?: string | null) {
     try {
       const r = range || apiMonitorRange
-      const res = await fetch(`/api/admin/api-monitoring?userId=${user!.id}&range=${r}`)
+      const f = uid !== undefined ? uid : filterUserId
+      const url = `/api/admin/api-monitoring?userId=${user!.id}&range=${r}${f ? `&filterUserId=${f}` : ""}`
+      const res = await fetch(url)
       const data = await res.json()
       if (res.ok) setApiMonitor(data)
     } catch {
@@ -161,7 +167,16 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (user && role === "super_admin") loadApiMonitor(apiMonitorRange)
-  }, [apiMonitorRange])
+  }, [apiMonitorRange, filterUserId])
+
+  // Auto-refresh API monitoring every 30 seconds
+  useEffect(() => {
+    if (!user || role !== "super_admin") return
+    const interval = setInterval(() => {
+      loadApiMonitor(apiMonitorRange)
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [user, role, apiMonitorRange])
 
   async function loadCompanies() {
     try {
@@ -266,6 +281,33 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-1 rounded-xl border border-white/5 bg-[#1a1f2b] p-1.5">
+          {([
+            { id: "dashboard", label: "Dashboard", icon: BarChart2 },
+            { id: "api", label: "API Monitoring", icon: Activity },
+            { id: "workspace", label: "Workspaces", icon: Building2 },
+            { id: "settings", label: "Settings", icon: UserCog },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium transition-all flex-1 justify-center",
+                activeTab === tab.id
+                  ? "bg-emerald-500/15 text-emerald-400"
+                  : "text-muted-foreground hover:bg-white/5 hover:text-white"
+              )}
+            >
+              <tab.icon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* ───── Dashboard Tab ───── */}
+        {activeTab === "dashboard" && (
+          <>
         {/* Platform Stats */}
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
@@ -404,27 +446,59 @@ export default function AdminPage() {
             </div>
           )}
         </div>
+          </>
+        )}
 
+        {/* ───── API Monitoring Tab ───── */}
+        {activeTab === "api" && (
+          <>
         {/* API Monitoring */}
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Activity className="h-3.5 w-3.5 text-emerald-400/60" />
-              <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">API Monitoring</h2>
+          <div className="mb-5 flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <Activity className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-white">API Monitoring</h2>
+                <p className="text-[10px] text-muted-foreground">Real-time API performance & health</p>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              {(["24h", "7d", "30d"] as const).map(r => (
-                <button
-                  key={r}
-                  onClick={() => setApiMonitorRange(r)}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors",
-                    apiMonitorRange === r ? "bg-emerald-500/15 text-emerald-400" : "text-muted-foreground hover:bg-white/5"
-                  )}
-                >
-                  {r}
-                </button>
-              ))}
+            <div className="flex items-center gap-3">
+              {/* LIVE badge */}
+              <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                <span className="text-[10px] font-bold text-emerald-400 tracking-wide">LIVE</span>
+              </div>
+              {/* Time range pill selector */}
+              <div className="flex items-center rounded-lg border border-white/5 bg-white/[0.02] p-0.5">
+                {(["24h", "7d", "30d"] as const).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setApiMonitorRange(r)}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-[11px] font-semibold transition-all",
+                      apiMonitorRange === r
+                        ? "bg-emerald-500/20 text-emerald-400 shadow-sm"
+                        : "text-muted-foreground hover:text-white hover:bg-white/5"
+                    )}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              {/* Refresh button */}
+              <button
+                onClick={() => loadApiMonitor(apiMonitorRange)}
+                className="group flex items-center gap-1.5 rounded-lg border border-white/5 bg-white/[0.02] px-2.5 py-1.5 text-muted-foreground hover:text-emerald-400 hover:border-emerald-500/20 transition-all"
+                title="Refresh now"
+              >
+                <RefreshCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-500" />
+                <span className="text-[10px] font-medium hidden sm:inline">Refresh</span>
+              </button>
             </div>
           </div>
 
@@ -479,7 +553,11 @@ export default function AdminPage() {
                   <div className="rounded-xl border-l-2 border-[#FFBF00]/50 bg-white/[0.02] p-3.5">
                     <div className="flex items-center gap-2 mb-1"><Clock className="h-3.5 w-3.5 text-[#FFBF00]" /><span className="text-[10px] text-muted-foreground uppercase">Latency</span></div>
                     <p className="text-2xl font-bold text-[#FFBF00]">{apiMonitor.avgDuration}<span className="text-sm">ms</span></p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">avg response</p>
+                    <div className="flex items-center gap-2 mt-1 text-[9px]">
+                      <span className="text-emerald-400/70" title="p50 (median)">p50: {apiMonitor.p50}ms</span>
+                      <span className="text-yellow-400/70" title="p95">p95: {apiMonitor.p95}ms</span>
+                      <span className="text-red-400/70" title="p99">p99: {apiMonitor.p99}ms</span>
+                    </div>
                   </div>
                   <div className="rounded-xl border-l-2 border-purple-500/50 bg-white/[0.02] p-3.5">
                     <div className="flex items-center gap-2 mb-1"><TrendingUp className="h-3.5 w-3.5 text-purple-400" /><span className="text-[10px] text-muted-foreground uppercase">Throughput</span></div>
@@ -503,6 +581,47 @@ export default function AdminPage() {
                   </div>
                 </div>
               </div>
+
+              {/* ── User Filter Banner ── */}
+              {filterUserId && (
+                <div className="flex items-center justify-between rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-2.5">
+                  <div className="flex items-center gap-2 text-xs">
+                    <User className="h-3.5 w-3.5 text-blue-400" />
+                    <span className="text-muted-foreground">Filtered by:</span>
+                    <span className="font-medium text-white">
+                      {filterUserId === "anonymous" ? "Anonymous" : (apiMonitor.topUsers.find(u => u.userId === filterUserId)?.name || "Unknown")}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setFilterUserId(null)}
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-white/5 hover:text-white transition-colors"
+                  >
+                    <XCircle className="h-3 w-3" />
+                    Clear filter
+                  </button>
+                </div>
+              )}
+
+              {/* ── Method Distribution ── */}
+              {apiMonitor.methods && apiMonitor.methods.length > 0 && (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Methods</span>
+                  {apiMonitor.methods.map(m => (
+                    <div key={m.method} className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-1.5">
+                      <span className={cn(
+                        "rounded px-1.5 py-0.5 text-[9px] font-bold",
+                        m.method === "GET" ? "bg-blue-500/15 text-blue-400" :
+                        m.method === "POST" ? "bg-emerald-500/15 text-emerald-400" :
+                        m.method === "DELETE" ? "bg-red-500/15 text-red-400" :
+                        m.method === "PUT" ? "bg-yellow-500/15 text-yellow-400" :
+                        "bg-white/10 text-muted-foreground"
+                      )}>{m.method}</span>
+                      <span className="text-xs font-bold">{m.total}</span>
+                      {m.errors > 0 && <span className="text-[9px] text-red-400">{m.errors} err</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* ── Request Volume Bar Chart ── */}
               {apiMonitor.hourly.length > 0 && (
@@ -612,88 +731,131 @@ export default function AdminPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {apiMonitor.successRateTrend.length > 0 && (
                   <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
-                    <p className="text-xs font-medium text-white/80 mb-3">Success Rate Trend</p>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-xs font-medium text-white/80">Success Rate Trend</p>
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/50" />
+                    </div>
                     <div className="relative h-28">
                       {(() => {
                         const pts = apiMonitor.successRateTrend
                         if (pts.length === 1) {
                           const pct = pts[0].successRate
+                          const color = pct >= 95 ? "emerald" : pct >= 80 ? "yellow" : "red"
+                          const hex = pct >= 95 ? "52,211,153" : pct >= 80 ? "250,204,21" : "239,68,68"
                           return (
-                            <div className="flex flex-col justify-center h-full gap-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] text-muted-foreground">Current</span>
-                                <span className={cn("text-lg font-bold", pct >= 95 ? "text-emerald-400" : pct >= 80 ? "text-yellow-400" : "text-red-400")}>{pct}%</span>
+                            <div className="flex flex-col justify-center h-full gap-3">
+                              <div className="flex items-baseline gap-2">
+                                <span className={cn("text-3xl font-bold", color === "emerald" ? "text-emerald-400" : color === "yellow" ? "text-yellow-400" : "text-red-400")}>{pct}%</span>
+                                <span className="text-[10px] text-muted-foreground">success rate</span>
                               </div>
-                              <div className="h-3 rounded-full bg-white/5 overflow-hidden">
-                                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: "linear-gradient(90deg, rgba(52,211,153,0.8) 0%, rgba(52,211,153,0.4) 100%)" }} />
+                              <div className="relative h-2.5 rounded-full bg-white/5 overflow-hidden">
+                                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: `linear-gradient(90deg, rgba(${hex},0.9) 0%, rgba(${hex},0.4) 100%)` }} />
                               </div>
-                              <div className="flex items-center justify-between text-[9px] text-muted-foreground">
-                                <span>0%</span><span>50%</span><span>100%</span>
+                              <div className="flex justify-between text-[9px] text-muted-foreground/60">
+                                <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
                               </div>
-                              <p className="text-[9px] text-muted-foreground text-center mt-1">Collecting data — trend chart appears with more data points</p>
                             </div>
                           )
                         }
                         const w = pts.length - 1
                         const points = pts.map((p, i) => `${i},${100 - p.successRate}`).join(" ")
                         return (
-                          <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${w} 100`}>
-                            <defs><linearGradient id="sGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(52,211,153,0.3)" /><stop offset="100%" stopColor="rgba(52,211,153,0)" /></linearGradient></defs>
-                            {[25, 50, 75].map(y => <line key={y} x1="0" y1={y} x2={w} y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />)}
-                            <polygon points={`0,100 ${points} ${w},100`} fill="url(#sGrad)" />
-                            <polyline points={points} fill="none" stroke="rgb(52 211 153)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-                            {pts.map((p, i) => <circle key={i} cx={i} cy={100 - p.successRate} r="1.5" fill="rgb(52 211 153)" vectorEffect="non-scaling-stroke" />)}
-                          </svg>
+                          <div className="flex gap-2 h-full">
+                            <div className="flex flex-col justify-between text-[8px] text-muted-foreground/40 py-0.5">
+                              <span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span>
+                            </div>
+                            <div className="flex-1 relative">
+                              <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${w} 100`}>
+                                <defs><linearGradient id="sGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(52,211,153,0.3)" /><stop offset="100%" stopColor="rgba(52,211,153,0)" /></linearGradient></defs>
+                                {[25, 50, 75].map(y => <line key={y} x1="0" y1={y} x2={w} y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />)}
+                                <polygon points={`0,100 ${points} ${w},100`} fill="url(#sGrad)" />
+                                <polyline points={points} fill="none" stroke="rgb(52 211 153)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                                {pts.map((p, i) => <circle key={i} cx={i} cy={100 - p.successRate} r="1.5" fill="rgb(52 211 153)" vectorEffect="non-scaling-stroke" />)}
+                              </svg>
+                            </div>
+                          </div>
                         )
                       })()}
-                      <div className="absolute top-0 left-0 text-[9px] text-emerald-400/50">100%</div>
-                      <div className="absolute bottom-0 left-0 text-[9px] text-muted-foreground/50">0%</div>
                     </div>
+                    {apiMonitor.successRateTrend.length > 1 && (
+                      <div className="flex gap-2 mt-1.5 text-[8px] text-muted-foreground/50 border-t border-white/[0.03] pt-1.5">
+                        <div className="w-7" />
+                        <div className="flex-1 flex justify-between">
+                          <span>{apiMonitor.successRateTrend[0]?.hour.slice(11, 16)}</span>
+                          <span>{apiMonitor.successRateTrend[apiMonitor.successRateTrend.length - 1]?.hour.slice(11, 16)}</span>
+                        </div>
+                      </div>
+                    )}
+                    {apiMonitor.successRateTrend.length === 1 && (
+                      <p className="text-[9px] text-muted-foreground/50 text-center mt-2">Line chart appears as more data points are collected</p>
+                    )}
                   </div>
                 )}
                 {apiMonitor.durationTrend.length > 0 && (
                   <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
-                    <p className="text-xs font-medium text-white/80 mb-3">Response Time Trend</p>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-xs font-medium text-white/80">Response Time Trend</p>
+                      <Clock className="h-3.5 w-3.5 text-yellow-400/50" />
+                    </div>
                     <div className="relative h-28">
                       {(() => {
                         const pts = apiMonitor.durationTrend
                         if (pts.length === 1) {
                           const ms = pts[0].avgDuration
-                          const maxBar = Math.max(ms, 10000)
-                          const pct = Math.min((ms / maxBar) * 100, 100)
                           const label = ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+                          const color = ms < 1000 ? "emerald" : ms < 5000 ? "yellow" : "red"
+                          const hex = ms < 1000 ? "52,211,153" : ms < 5000 ? "250,204,21" : "239,68,68"
+                          const pct = Math.min((ms / 10000) * 100, 100)
                           return (
-                            <div className="flex flex-col justify-center h-full gap-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] text-muted-foreground">Current</span>
-                                <span className={cn("text-lg font-bold", ms < 1000 ? "text-emerald-400" : ms < 5000 ? "text-yellow-400" : "text-red-400")}>{label}</span>
+                            <div className="flex flex-col justify-center h-full gap-3">
+                              <div className="flex items-baseline gap-2">
+                                <span className={cn("text-3xl font-bold", color === "emerald" ? "text-emerald-400" : color === "yellow" ? "text-yellow-400" : "text-red-400")}>{label}</span>
+                                <span className="text-[10px] text-muted-foreground">avg response</span>
                               </div>
-                              <div className="h-3 rounded-full bg-white/5 overflow-hidden">
-                                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: "linear-gradient(90deg, rgba(250,204,21,0.8) 0%, rgba(250,204,21,0.4) 100%)" }} />
+                              <div className="relative h-2.5 rounded-full bg-white/5 overflow-hidden">
+                                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: `linear-gradient(90deg, rgba(${hex},0.9) 0%, rgba(${hex},0.4) 100%)` }} />
                               </div>
-                              <div className="flex items-center justify-between text-[9px] text-muted-foreground">
-                                <span>0ms</span><span>5s</span><span>10s+</span>
+                              <div className="flex justify-between text-[9px] text-muted-foreground/60">
+                                <span>0ms</span><span>2.5s</span><span>5s</span><span>7.5s</span><span>10s+</span>
                               </div>
-                              <p className="text-[9px] text-muted-foreground text-center mt-1">Collecting data — trend chart appears with more data points</p>
                             </div>
                           )
                         }
                         const maxDur = Math.max(...pts.map(d => d.avgDuration), 1)
                         const w = pts.length - 1
                         const points = pts.map((p, i) => `${i},${100 - (p.avgDuration / maxDur) * 100}`).join(" ")
+                        const maxLabel = maxDur < 1000 ? `${maxDur}ms` : `${(maxDur / 1000).toFixed(1)}s`
+                        const midLabel = maxDur < 1000 ? `${Math.round(maxDur / 2)}ms` : `${(maxDur / 2000).toFixed(1)}s`
                         return (
-                          <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${w} 100`}>
-                            <defs><linearGradient id="dGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(250,204,21,0.25)" /><stop offset="100%" stopColor="rgba(250,204,21,0)" /></linearGradient></defs>
-                            {[25, 50, 75].map(y => <line key={y} x1="0" y1={y} x2={w} y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />)}
-                            <polygon points={`0,100 ${points} ${w},100`} fill="url(#dGrad)" />
-                            <polyline points={points} fill="none" stroke="rgb(250 204 21)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-                            {pts.map((p, i) => <circle key={i} cx={i} cy={100 - (p.avgDuration / maxDur) * 100} r="1.5" fill="rgb(250 204 21)" vectorEffect="non-scaling-stroke" />)}
-                          </svg>
+                          <div className="flex gap-2 h-full">
+                            <div className="flex flex-col justify-between text-[8px] text-muted-foreground/40 py-0.5">
+                              <span>{maxLabel}</span><span>{midLabel}</span><span>0ms</span>
+                            </div>
+                            <div className="flex-1 relative">
+                              <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${w} 100`}>
+                                <defs><linearGradient id="dGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(250,204,21,0.25)" /><stop offset="100%" stopColor="rgba(250,204,21,0)" /></linearGradient></defs>
+                                {[25, 50, 75].map(y => <line key={y} x1="0" y1={y} x2={w} y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />)}
+                                <polygon points={`0,100 ${points} ${w},100`} fill="url(#dGrad)" />
+                                <polyline points={points} fill="none" stroke="rgb(250 204 21)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                                {pts.map((p, i) => <circle key={i} cx={i} cy={100 - (p.avgDuration / maxDur) * 100} r="1.5" fill="rgb(250 204 21)" vectorEffect="non-scaling-stroke" />)}
+                              </svg>
+                            </div>
+                          </div>
                         )
                       })()}
-                      <div className="absolute top-0 left-0 text-[9px] text-yellow-400/50">peak</div>
-                      <div className="absolute bottom-0 left-0 text-[9px] text-muted-foreground/50">0ms</div>
                     </div>
+                    {apiMonitor.durationTrend.length > 1 && (
+                      <div className="flex gap-2 mt-1.5 text-[8px] text-muted-foreground/50 border-t border-white/[0.03] pt-1.5">
+                        <div className="w-7" />
+                        <div className="flex-1 flex justify-between">
+                          <span>{apiMonitor.durationTrend[0]?.hour.slice(11, 16)}</span>
+                          <span>{apiMonitor.durationTrend[apiMonitor.durationTrend.length - 1]?.hour.slice(11, 16)}</span>
+                        </div>
+                      </div>
+                    )}
+                    {apiMonitor.durationTrend.length === 1 && (
+                      <p className="text-[9px] text-muted-foreground/50 text-center mt-2">Line chart appears as more data points are collected</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -702,47 +864,142 @@ export default function AdminPage() {
               <div>
                 <p className="mb-3 text-xs font-medium text-white/80">Endpoint Health</p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {apiMonitor.endpoints.map(ep => (
-                    <div key={ep.endpoint} className="rounded-xl border border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-medium text-white truncate">{ep.endpoint}</span>
-                        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold", ep.errorRate === 0 ? "bg-emerald-500/10 text-emerald-400" : ep.errorRate <= 10 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400")}>
-                          {ep.errorRate === 0 ? "HEALTHY" : `${ep.errorRate}% ERR`}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 mb-3">
-                        <div><p className="text-lg font-bold">{ep.total}</p><p className="text-[9px] text-muted-foreground">requests</p></div>
-                        <div><p className="text-lg font-bold text-[#FFBF00]">{ep.avgDuration}ms</p><p className="text-[9px] text-muted-foreground">avg latency</p></div>
-                        <div><p className="text-lg font-bold text-emerald-400">{ep.success}</p><p className="text-[9px] text-muted-foreground">successes</p></div>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-                        <div className="h-full rounded-full bg-emerald-500/60" style={{ width: `${ep.errorRate === 0 ? 100 : 100 - ep.errorRate}%` }} />
-                      </div>
-                      {ep.hourlyTrend.length > 1 && (
-                        <div className="flex items-end gap-px h-5 mt-2">
-                          {(() => {
-                            const maxT = Math.max(...ep.hourlyTrend.map(t => t.total), 1)
-                            return ep.hourlyTrend.map((t, i) => (
-                              <div key={i} className="flex-1 rounded-sm" style={{ height: `${Math.max((t.total / maxT) * 100, 5)}%`, backgroundColor: t.errors > 0 ? "rgba(239,68,68,0.5)" : "rgba(52,211,153,0.4)", minWidth: 2 }} title={`${t.hour.slice(11, 16)}: ${t.total} req, ${t.errors} err, ${t.avgDuration}ms`} />
-                            ))
-                          })()}
+                  {apiMonitor.endpoints.map(ep => {
+                    const latencyColor = ep.avgDuration < 1000 ? "emerald" : ep.avgDuration < 5000 ? "yellow" : "red"
+                    const latencyHex = ep.avgDuration < 1000 ? "rgb(52 211 153)" : ep.avgDuration < 5000 ? "rgb(250 204 21)" : "rgb(239 68 68)"
+                    const latencyPct = Math.min((ep.avgDuration / 10000) * 100, 100)
+                    const successPct = ep.total > 0 ? (ep.success / ep.total) * 100 : 100
+                    return (
+                      <div key={ep.endpoint} className="rounded-xl border border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent p-4">
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <div className={cn("h-2 w-2 rounded-full", ep.errorRate === 0 ? "bg-emerald-400" : ep.errorRate <= 10 ? "bg-yellow-400" : "bg-red-400")}>
+                              <div className={cn("h-2 w-2 rounded-full animate-ping opacity-75", ep.errorRate === 0 ? "bg-emerald-400" : ep.errorRate <= 10 ? "bg-yellow-400" : "bg-red-400")} />
+                            </div>
+                            <span className="text-xs font-medium text-white truncate">{ep.endpoint}</span>
+                          </div>
+                          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold", ep.errorRate === 0 ? "bg-emerald-500/10 text-emerald-400" : ep.errorRate <= 10 ? "bg-yellow-500/10 text-yellow-400" : "bg-red-500/10 text-red-400")}>
+                            {ep.errorRate === 0 ? "HEALTHY" : `${ep.errorRate}% ERR`}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        {/* Latency gauge + stats */}
+                        <div className="flex items-center gap-4 mb-4">
+                          {/* Latency ring gauge */}
+                          <div className="relative w-16 h-16 shrink-0">
+                            <svg className="w-full h-full -rotate-90" viewBox="0 0 64 64">
+                              <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="5" />
+                              <circle cx="32" cy="32" r="26" fill="none" stroke={latencyHex} strokeWidth="5"
+                                strokeDasharray={`${(latencyPct / 100) * 2 * Math.PI * 26} ${2 * Math.PI * 26 - (latencyPct / 100) * 2 * Math.PI * 26}`}
+                                strokeLinecap="round" className="transition-all duration-500" />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <span className={cn("text-sm font-bold", latencyColor === "emerald" ? "text-emerald-400" : latencyColor === "yellow" ? "text-yellow-400" : "text-red-400")}>
+                                {ep.avgDuration < 1000 ? `${ep.avgDuration}` : `${(ep.avgDuration / 1000).toFixed(1)}s`}
+                              </span>
+                              <span className="text-[7px] text-muted-foreground">latency</span>
+                            </div>
+                          </div>
+
+                          {/* Stat bars */}
+                          <div className="flex-1 space-y-2">
+                            <div>
+                              <div className="flex items-center justify-between mb-0.5">
+                                <span className="text-[9px] text-muted-foreground">Requests</span>
+                                <span className="text-xs font-bold">{ep.total}</span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                <div className="h-full rounded-full bg-blue-500/50" style={{ width: `${Math.min((ep.total / Math.max(...apiMonitor.endpoints.map(e => e.total), 1)) * 100, 100)}%` }} />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-0.5">
+                                <span className="text-[9px] text-muted-foreground">Success</span>
+                                <span className="text-xs font-bold text-emerald-400">{successPct}%</span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                <div className="h-full rounded-full bg-emerald-500/50" style={{ width: `${successPct}%` }} />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-0.5">
+                                <span className="text-[9px] text-muted-foreground">Errors</span>
+                                <span className="text-xs font-bold text-red-400">{ep.errors}</span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                <div className="h-full rounded-full bg-red-500/50" style={{ width: `${ep.total > 0 ? (ep.errors / ep.total) * 100 : 0}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mini sparkline */}
+                        {ep.hourlyTrend.length > 1 ? (
+                          <div className="border-t border-white/[0.04] pt-3">
+                            <div className="flex items-end gap-px h-8">
+                              {(() => {
+                                const maxT = Math.max(...ep.hourlyTrend.map(t => t.total), 1)
+                                return ep.hourlyTrend.map((t, i) => (
+                                  <div key={i} className="flex-1 rounded-sm transition-all hover:brightness-150" style={{ height: `${Math.max((t.total / maxT) * 100, 8)}%`, backgroundColor: t.errors > 0 ? "rgba(239,68,68,0.5)" : "rgba(52,211,153,0.4)", minWidth: 3 }} title={`${t.hour.slice(11, 16)}: ${t.total} req, ${t.errors} err, ${t.avgDuration}ms`} />
+                                ))
+                              })()}
+                            </div>
+                            <div className="flex justify-between mt-1 text-[8px] text-muted-foreground/50">
+                              <span>{ep.hourlyTrend[0]?.hour.slice(11, 16)}</span>
+                              <span>{ep.hourlyTrend[ep.hourlyTrend.length - 1]?.hour.slice(11, 16)}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="border-t border-white/[0.04] pt-3 flex items-center justify-center">
+                            <span className="text-[9px] text-muted-foreground/40">Hourly trend appears with more data</span>
+                          </div>
+                        )}
+
+                        {/* Method badges + percentiles */}
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.04]">
+                          <div className="flex items-center gap-1.5">
+                            {ep.methods.map(m => (
+                              <span key={m.method} className={cn(
+                                "rounded px-1.5 py-0.5 text-[8px] font-bold",
+                                m.method === "GET" ? "bg-blue-500/15 text-blue-400" :
+                                m.method === "POST" ? "bg-emerald-500/15 text-emerald-400" :
+                                m.method === "DELETE" ? "bg-red-500/15 text-red-400" :
+                                m.method === "PUT" ? "bg-yellow-500/15 text-yellow-400" :
+                                "bg-white/10 text-muted-foreground"
+                              )}>{m.method}</span>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2 text-[8px] text-muted-foreground/60">
+                            <span title="p50 (median)">p50 <span className="text-emerald-400/70 font-medium">{ep.p50}ms</span></span>
+                            <span title="p95">p95 <span className="text-yellow-400/70 font-medium">{ep.p95}ms</span></span>
+                            <span title="p99">p99 <span className="text-red-400/70 font-medium">{ep.p99}ms</span></span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
               {/* ── Top Users by Request Volume ── */}
               {apiMonitor.topUsers && apiMonitor.topUsers.length > 0 && (
                 <div>
-                  <p className="mb-3 text-xs font-medium text-white/80">Top Users by Request Volume</p>
+                  <p className="mb-3 text-xs font-medium text-white/80">Top Users by Request Volume <span className="text-[9px] text-muted-foreground/50 ml-1">· click to filter</span></p>
                   <div className="rounded-xl border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent p-4">
                     <div className="space-y-2">
                       {apiMonitor.topUsers.map((u, i) => {
                         const maxTotal = Math.max(...apiMonitor.topUsers.map(t => t.total), 1)
+                        const isActive = filterUserId === u.userId
                         return (
-                          <div key={u.userId} className="flex items-center gap-3">
+                          <button
+                            key={u.userId}
+                            onClick={() => setFilterUserId(isActive ? null : u.userId)}
+                            className={cn(
+                              "flex items-center gap-3 w-full rounded-lg p-1.5 -m-1.5 transition-colors text-left",
+                              isActive ? "bg-blue-500/10 ring-1 ring-blue-500/30" : "hover:bg-white/[0.03]"
+                            )}
+                          >
                             <span className="shrink-0 w-5 text-[10px] font-bold text-muted-foreground text-right">{i + 1}</span>
                             <div className="shrink-0 h-7 w-7 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center text-[10px] font-bold text-white/70">
                               {u.name.charAt(0).toUpperCase()}
@@ -763,7 +1020,7 @@ export default function AdminPage() {
                               <p className="text-xs font-bold">{u.total}</p>
                               <p className="text-[9px] text-muted-foreground">{u.avgDuration}ms</p>
                             </div>
-                          </div>
+                          </button>
                         )
                       })}
                     </div>
@@ -894,7 +1151,12 @@ export default function AdminPage() {
             </div>
           )}
         </div>
+          </>
+        )}
 
+        {/* ───── Workspace Tab ───── */}
+        {activeTab === "workspace" && (
+          <>
         {/* Workspace & Seats */}
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
@@ -1020,7 +1282,12 @@ export default function AdminPage() {
             </div>
           )}
         </div>
+          </>
+        )}
 
+        {/* ───── Settings Tab ───── */}
+        {activeTab === "settings" && (
+          <>
         {/* User Management */}
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-1 flex items-center gap-2">
@@ -1197,6 +1464,8 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
+          </>
+        )}
 
       </div>
     </div>
