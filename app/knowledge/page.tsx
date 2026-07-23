@@ -5,7 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import {
   Search, Upload, FileText, Trash2, Info, X,
-  Filter, File, CheckCircle2, Clock, AlertCircle, BookOpen, User, Plus, ChevronDown, RefreshCw, Menu, PanelLeft, HardDrive, Pin, PinOff, Archive, CalendarClock,
+  Filter, File, CheckCircle2, Clock, AlertCircle, BookOpen, User, Plus, ChevronDown, RefreshCw, Menu, PanelLeft, HardDrive, Pin, PinOff, Archive, CalendarClock, Eye,
 } from "lucide-react"
 import { useGooglePicker, type PickedFile } from "@/components/google-picker"
 import { Label } from "@/components/ui/label"
@@ -45,6 +45,7 @@ interface DocItem {
   filename: string
   mime_type: string
   expiresAt: string | null
+  extendedAt: string | null
   fileArchived: boolean
   pinned: boolean
 }
@@ -124,6 +125,7 @@ export default function KnowledgePage() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [parsingDocId, setParsingDocId] = useState<string | null>(null)
   const [catSidebarOpen, setCatSidebarOpen] = useState(false)
+  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; category: string; mimeType: string } | null>(null)
   const filterRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -171,6 +173,7 @@ export default function KnowledgePage() {
           filename: d.filename,
           mime_type: d.mime_type || "",
           expiresAt: d.expires_at,
+          extendedAt: d.extended_at || null,
           fileArchived: d.file_archived || false,
           pinned: d.pinned || false,
         }))
@@ -306,6 +309,7 @@ export default function KnowledgePage() {
         filename: d.filename,
         mime_type: d.mime_type || "",
         expiresAt: d.expires_at,
+        extendedAt: d.extended_at || null,
         fileArchived: d.file_archived || false,
         pinned: d.pinned || false,
       }))
@@ -364,6 +368,7 @@ export default function KnowledgePage() {
             filename: d.filename,
             mime_type: d.mime_type || "",
             expiresAt: d.expires_at,
+            extendedAt: d.extended_at || null,
             fileArchived: d.file_archived || false,
             pinned: d.pinned || false,
           }))
@@ -769,7 +774,7 @@ export default function KnowledgePage() {
                           onClick={() => {
                             if (!user || doc.fileArchived) return
                             const url = getDocumentPublicUrl(user.id, doc.filename)
-                            window.open(url, "_blank")
+                            setPreviewDoc({ name: doc.name, url, category: doc.category, mimeType: doc.mime_type })
                           }}
                           disabled={doc.fileArchived}
                         >
@@ -791,10 +796,40 @@ export default function KnowledgePage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {categoryDisplay(doc.category, t as unknown as (k: string) => string)} · {t("knowledgePages", { pages: doc.pages })} · {doc.size}
-                        {isArchived && " · file removed, AI still has content"}
-                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          {categoryDisplay(doc.category, t as unknown as (k: string) => string)} · {t("knowledgePages", { pages: doc.pages })} · {doc.size}
+                        </span>
+                        {isArchived ? (
+                          <span className="flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-400">
+                            <Archive className="h-2.5 w-2.5" /> file removed, AI still has content
+                          </span>
+                        ) : doc.pinned ? (
+                          <span className="flex items-center gap-1 rounded-full bg-[#FFBF00]/10 px-2 py-0.5 text-[10px] font-medium text-[#FFBF00]">
+                            <Pin className="h-2.5 w-2.5" /> permanent
+                          </span>
+                        ) : doc.expiresAt && (
+                          <>
+                            <span className={cn(
+                              "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                              daysLeft !== null && daysLeft <= 5
+                                ? "bg-red-500/10 text-red-400"
+                                : daysLeft !== null && daysLeft <= 10
+                                ? "bg-yellow-500/10 text-yellow-400"
+                                : "bg-slate-500/10 text-slate-400"
+                            )}>
+                              <CalendarClock className="h-2.5 w-2.5" />
+                              {daysLeft}d left
+                            </span>
+                            {doc.extendedAt && (
+                              <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                                <RefreshCw className="h-2.5 w-2.5" />
+                                extended {new Date(doc.extendedAt).toLocaleDateString()}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-2 sm:justify-start sm:gap-3">
@@ -805,7 +840,7 @@ export default function KnowledgePage() {
                       </span>
                     </div>
                     <p className="hidden text-xs text-muted-foreground sm:block">{doc.uploaded}</p>
-                    <div className="relative flex items-center gap-1">
+                    <div className="relative flex items-center gap-2">
                       <button
                         className={cn(
                           "rounded-md p-1.5 transition-colors hover:bg-muted",
@@ -831,7 +866,7 @@ export default function KnowledgePage() {
                           onClick={async () => {
                             try {
                               await extendDocumentExpiry(doc.id)
-                              setDocList(prev => prev.map(d => d.id === doc.id ? { ...d, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() } : d))
+                              setDocList(prev => prev.map(d => d.id === doc.id ? { ...d, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), extendedAt: new Date().toISOString() } : d))
                               toast({ title: "Extended", description: "File retention reset to 30 days", variant: "success" })
                             } catch (err: any) {
                               toast({ title: "Failed", description: err.message, variant: "error" })
@@ -1064,6 +1099,62 @@ export default function KnowledgePage() {
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-[#2a3444] px-8 py-6 shadow-2xl">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
             <p className="text-sm text-muted-foreground">Importing from Google Drive...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Document Preview Modal */}
+      {previewDoc && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setPreviewDoc(null)}
+        >
+          <div
+            className="relative w-full max-w-6xl max-h-[95vh] h-[95vh] flex flex-col rounded-2xl border border-white/10 bg-[#1e2330] p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-semibold text-white">{previewDoc.name}</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">{previewDoc.category}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewDoc.url}
+                  download={previewDoc.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20 transition-colors"
+                >
+                  Download
+                </a>
+                <button
+                  onClick={() => setPreviewDoc(null)}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden rounded-lg border border-white/5 bg-black/20">
+              {previewDoc.mimeType === "application/pdf" ? (
+                <iframe
+                  src={previewDoc.url}
+                  className="h-full w-full"
+                  title={previewDoc.name}
+                />
+              ) : previewDoc.mimeType.startsWith("image/") ? (
+                <div className="flex h-full items-center justify-center p-4">
+                  <img src={previewDoc.url} alt={previewDoc.name} className="max-h-full max-w-full object-contain" />
+                </div>
+              ) : (
+                <iframe
+                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewDoc.url)}`}
+                  className="h-full w-full"
+                  title={previewDoc.name}
+                />
+              )}
+            </div>
           </div>
         </div>
       )}

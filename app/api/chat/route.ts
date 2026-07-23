@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
@@ -9,7 +10,7 @@ const MAX_TOKENS_MAP: Record<string, number> = {
   Comprehensive: 10000,
 }
 
-export async function POST(req: NextRequest) {
+async function POST_handler(req: NextRequest) {
   try {
     const apiKey = process.env.DEEPSEEK_API_KEY
     if (!apiKey) {
@@ -66,3 +67,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(POST_handler, "/api/chat")

@@ -437,7 +437,10 @@ export async function pinDocument(documentId: string, pinned: boolean) {
 export async function extendDocumentExpiry(documentId: string) {
   const { error } = await supabase
     .from("documents")
-    .update({ expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() })
+    .update({
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      extended_at: new Date().toISOString(),
+    })
     .eq("id", documentId)
   if (error) throw error
 }

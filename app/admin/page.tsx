@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Save, ArrowLeft, Users, Clock, TrendingUp, CreditCard, Megaphone, BarChart2, UserCog, ShieldCheck, Building2, ChevronDown, ChevronRight, Crown, Shield, User, AlertTriangle, Bell } from "lucide-react"
+import { Loader2, Save, ArrowLeft, Users, Clock, TrendingUp, CreditCard, Megaphone, BarChart2, UserCog, ShieldCheck, Building2, ChevronDown, ChevronRight, Crown, Shield, User, AlertTriangle, Bell, Activity, Zap, CheckCircle2, XCircle, ChevronLeft } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/app/auth-provider"
 import { getAppSettings } from "@/lib/app-settings"
@@ -81,6 +81,24 @@ export default function AdminPage() {
   const [roleTarget, setRoleTarget] = useState("admin")
   const [savingRole, setSavingRole] = useState(false)
 
+  // API Monitoring
+  type ApiLog = { id: string; method: string; endpoint: string; status_code: number; duration_ms: number | null; error: string | null; created_at: string; user_id: string | null }
+  type ApiEndpointStat = { endpoint: string; total: number; success: number; errors: number; errorRate: number; avgDuration: number; lastCalled: string; peakHour: { hour: string; total: number } | null; hourlyTrend: { hour: string; total: number; errors: number; avgDuration: number }[] }
+  type ApiHourly = { hour: string; total: number; errors: number; success: number; avgDuration: number; errorRate: number }
+  type ApiMonitorData = {
+    total: number; successCount: number; errorCount: number; successRate: number; errorRate: number; avgDuration: number
+    reqPerHour: number; peakHour: { hour: string; total: number } | null
+    endpoints: ApiEndpointStat[]; recentLogs: ApiLog[]; hourly: ApiHourly[]
+    statusCodes: { code: number; count: number }[]
+    topErrors: { endpoint: string; count: number }[]
+    durationTrend: { hour: string; avgDuration: number }[]
+    successRateTrend: { hour: string; successRate: number }[]
+  }
+  const [apiMonitor, setApiMonitor] = useState<ApiMonitorData | null>(null)
+  const [apiMonitorLoading, setApiMonitorLoading] = useState(true)
+  const [apiMonitorRange, setApiMonitorRange] = useState<"24h" | "7d" | "30d">("24h")
+  const [apiLogsPage, setApiLogsPage] = useState(0)
+
   // Companies & workspaces
   type CompanyMember = { userId: string; email: string; role: string }
   type CompanyWorkspace = { id: string; name: string; icon: string; createdAt: string; members: CompanyMember[] }
@@ -124,7 +142,25 @@ export default function AdminPage() {
     load()
     loadStats()
     loadCompanies()
+    loadApiMonitor()
   }, [user, role, loading, router])
+
+  async function loadApiMonitor(range?: string) {
+    try {
+      const r = range || apiMonitorRange
+      const res = await fetch(`/api/admin/api-monitoring?userId=${user!.id}&range=${r}`)
+      const data = await res.json()
+      if (res.ok) setApiMonitor(data)
+    } catch {
+      console.error("[ADMIN] Failed to load API monitoring data")
+    } finally {
+      setApiMonitorLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (user && role === "super_admin") loadApiMonitor(apiMonitorRange)
+  }, [apiMonitorRange])
 
   async function loadCompanies() {
     try {
@@ -364,6 +400,347 @@ export default function AdminPage() {
                   <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* API Monitoring */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="h-3.5 w-3.5 text-emerald-400/60" />
+              <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">API Monitoring</h2>
+            </div>
+            <div className="flex items-center gap-1">
+              {(["24h", "7d", "30d"] as const).map(r => (
+                <button
+                  key={r}
+                  onClick={() => setApiMonitorRange(r)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors",
+                    apiMonitorRange === r ? "bg-emerald-500/15 text-emerald-400" : "text-muted-foreground hover:bg-white/5"
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {apiMonitorLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading API data...
+            </div>
+          ) : !apiMonitor || apiMonitor.total === 0 ? (
+            <p className="text-sm text-muted-foreground">No API requests logged yet. Stats and error logs will appear here as API routes are called.</p>
+          ) : (
+            <div className="space-y-6">
+              {/* ── Metric Cards ── */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <Zap className="mb-1.5 h-4 w-4 text-blue-400" />
+                  <p className="text-xl font-bold">{apiMonitor.total}</p>
+                  <p className="text-[10px] text-muted-foreground">Total Requests</p>
+                </div>
+                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <CheckCircle2 className="mb-1.5 h-4 w-4 text-emerald-400" />
+                  <p className="text-xl font-bold text-emerald-400">{apiMonitor.successRate}%</p>
+                  <p className="text-[10px] text-muted-foreground">Success Rate</p>
+                </div>
+                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <XCircle className="mb-1.5 h-4 w-4 text-red-400" />
+                  <p className="text-xl font-bold text-red-400">{apiMonitor.errorCount}</p>
+                  <p className="text-[10px] text-muted-foreground">Errors ({apiMonitor.errorRate}%)</p>
+                </div>
+                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <Clock className="mb-1.5 h-4 w-4 text-[#FFBF00]" />
+                  <p className="text-xl font-bold text-[#FFBF00]">{apiMonitor.avgDuration}ms</p>
+                  <p className="text-[10px] text-muted-foreground">Avg Latency</p>
+                </div>
+                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <TrendingUp className="mb-1.5 h-4 w-4 text-purple-400" />
+                  <p className="text-xl font-bold text-purple-400">{apiMonitor.reqPerHour}</p>
+                  <p className="text-[10px] text-muted-foreground">Req / Hour</p>
+                </div>
+                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <BarChart2 className="mb-1.5 h-4 w-4 text-blue-400" />
+                  <p className="text-xl font-bold text-blue-400">{apiMonitor.peakHour?.total ?? 0}</p>
+                  <p className="text-[10px] text-muted-foreground">Peak Hour</p>
+                </div>
+              </div>
+
+              {/* ── Request Volume + Error Overlay (Bar Chart) ── */}
+              {apiMonitor.hourly.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Request Volume & Error Rate</p>
+                  <div className="flex items-end gap-1 h-32 rounded-lg border border-white/5 bg-black/20 p-2">
+                    {(() => {
+                      const maxTotal = Math.max(...apiMonitor.hourly.map(x => x.total), 1)
+                      const barWidth = apiMonitor.hourly.length === 1 ? "100%" : undefined
+                      return apiMonitor.hourly.map((h, i) => {
+                        const heightPct = Math.max((h.total / maxTotal) * 100, 2)
+                        const errorPct = h.total > 0 ? (h.errors / h.total) * 100 : 0
+                        return (
+                          <div key={i} className="flex flex-col items-center justify-end group relative" style={{ flex: 1, maxWidth: barWidth, minWidth: 8 }}>
+                            <div className="w-full rounded-t bg-emerald-500/50 relative overflow-hidden transition-all" style={{ height: `${heightPct}%` }}>
+                              {errorPct > 0 && (
+                                <div className="absolute bottom-0 w-full bg-red-500/70" style={{ height: `${errorPct}%` }} />
+                              )}
+                            </div>
+                            <div className="absolute -top-12 hidden group-hover:block whitespace-nowrap rounded-lg bg-black/90 px-2.5 py-1.5 text-[10px] text-white z-20 border border-white/10">
+                              <div className="font-medium">{h.hour.slice(11, 16)}</div>
+                              <div className="text-emerald-400">{h.total} requests</div>
+                              <div className="text-red-400">{h.errors} errors ({h.errorRate}%)</div>
+                              <div className="text-yellow-400">{h.avgDuration}ms avg</div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+                  <div className="flex justify-between mt-1.5 text-[9px] text-muted-foreground">
+                    <span>{apiMonitor.hourly[0]?.hour.slice(5, 16)}</span>
+                    {apiMonitor.hourly.length > 1 && <span>{apiMonitor.hourly[apiMonitor.hourly.length - 1]?.hour.slice(5, 16)}</span>}
+                  </div>
+                  <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-emerald-500/50" /> Success</span>
+                    <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-red-500/70" /> Errors</span>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Success Rate Trend (Line Chart) ── */}
+              {apiMonitor.successRateTrend.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Success Rate Trend</p>
+                  <div className="relative h-20 rounded-lg border border-white/5 bg-black/20 p-2">
+                    {(() => {
+                      const pts = apiMonitor.successRateTrend
+                      if (pts.length === 1) {
+                        return (
+                          <div className="flex items-center justify-center h-full">
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="h-2 w-2 rounded-full bg-emerald-400" />
+                              <span className="text-[10px] text-emerald-400 font-medium">{pts[0].successRate}%</span>
+                            </div>
+                          </div>
+                        )
+                      }
+                      const w = pts.length - 1
+                      return (
+                        <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${w} 100`}>
+                          <polyline
+                            points={pts.map((p, i) => `${i},${100 - p.successRate}`).join(" ")}
+                            fill="none"
+                            stroke="rgb(52 211 153)"
+                            strokeWidth="2"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                          <polygon
+                            points={`0,100 ${pts.map((p, i) => `${i},${100 - p.successRate}`).join(" ")} ${w},100`}
+                            fill="rgba(52, 211, 153, 0.1)"
+                          />
+                        </svg>
+                      )
+                    })()}
+                    <div className="absolute top-1 left-2 text-[9px] text-emerald-400/60">100%</div>
+                    <div className="absolute bottom-1 left-2 text-[9px] text-muted-foreground">0%</div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Response Time Trend (Line Chart) ── */}
+              {apiMonitor.durationTrend.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Response Time Trend (ms)</p>
+                  <div className="relative h-20 rounded-lg border border-white/5 bg-black/20 p-2">
+                    {(() => {
+                      const pts = apiMonitor.durationTrend
+                      if (pts.length === 1) {
+                        return (
+                          <div className="flex items-center justify-center h-full">
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="h-2 w-2 rounded-full bg-yellow-400" />
+                              <span className="text-[10px] text-yellow-400 font-medium">{pts[0].avgDuration}ms</span>
+                            </div>
+                          </div>
+                        )
+                      }
+                      const maxDur = Math.max(...pts.map(d => d.avgDuration), 1)
+                      const w = pts.length - 1
+                      return (
+                        <svg className="w-full h-full" preserveAspectRatio="none" viewBox={`0 0 ${w} 100`}>
+                          <polyline
+                            points={pts.map((p, i) => `${i},${100 - (p.avgDuration / maxDur) * 100}`).join(" ")}
+                            fill="none"
+                            stroke="rgb(250 204 21)"
+                            strokeWidth="2"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                          <polygon
+                            points={`0,100 ${pts.map((p, i) => `${i},${100 - (p.avgDuration / maxDur) * 100}`).join(" ")} ${w},100`}
+                            fill="rgba(250, 204, 21, 0.08)"
+                          />
+                        </svg>
+                      )
+                    })()}
+                    <div className="absolute top-1 left-2 text-[9px] text-yellow-400/60">peak</div>
+                    <div className="absolute bottom-1 left-2 text-[9px] text-muted-foreground">0ms</div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Endpoint Health Table ── */}
+              <div>
+                <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Endpoint Health</p>
+                <div className="space-y-1.5">
+                  {apiMonitor.endpoints.map(ep => (
+                    <div key={ep.endpoint} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="flex-1 truncate text-xs font-medium text-white">{ep.endpoint}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{ep.total} req</span>
+                        <span className={cn("shrink-0 text-xs font-medium", ep.errorRate > 10 ? "text-red-400" : ep.errorRate > 0 ? "text-yellow-400" : "text-emerald-400")}>
+                          {ep.errorRate}% err
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{ep.avgDuration}ms</span>
+                      </div>
+                      {/* Mini sparkline */}
+                      {ep.hourlyTrend.length > 1 && (
+                        <div className="flex items-end gap-px h-6">
+                          {(() => {
+                            const maxT = Math.max(...ep.hourlyTrend.map(t => t.total), 1)
+                            return ep.hourlyTrend.map((t, i) => (
+                              <div
+                                key={i}
+                                className="flex-1 rounded-sm transition-colors"
+                                style={{
+                                  height: `${(t.total / maxT) * 100}%`,
+                                  backgroundColor: t.errors > 0 ? "rgba(239,68,68,0.4)" : "rgba(52,211,153,0.3)",
+                                  minWidth: 2,
+                                }}
+                                title={`${t.hour.slice(11, 16)}: ${t.total} req, ${t.errors} err, ${t.avgDuration}ms`}
+                              />
+                            ))
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Two-column: Status Codes + Top Errors ── */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* Status Code Distribution */}
+                {apiMonitor.statusCodes.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Status Code Distribution</p>
+                    <div className="space-y-1.5">
+                      {apiMonitor.statusCodes.map(sc => {
+                        const maxCount = Math.max(...apiMonitor.statusCodes.map(s => s.count), 1)
+                        return (
+                          <div key={sc.code} className="flex items-center gap-2">
+                            <span className={cn(
+                              "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold w-12 text-center",
+                              sc.code < 300 ? "bg-emerald-500/10 text-emerald-400" :
+                              sc.code < 400 ? "bg-blue-500/10 text-blue-400" :
+                              sc.code < 500 ? "bg-yellow-500/10 text-yellow-400" :
+                              "bg-red-500/10 text-red-400"
+                            )}>
+                              {sc.code}
+                            </span>
+                            <div className="flex-1 h-4 rounded-sm bg-white/5 overflow-hidden">
+                              <div
+                                className={cn(
+                                  "h-full rounded-sm",
+                                  sc.code < 300 ? "bg-emerald-500/40" :
+                                  sc.code < 400 ? "bg-blue-500/40" :
+                                  sc.code < 500 ? "bg-yellow-500/40" :
+                                  "bg-red-500/40"
+                                )}
+                                style={{ width: `${(sc.count / maxCount) * 100}%` }}
+                              />
+                            </div>
+                            <span className="shrink-0 text-[10px] text-muted-foreground w-8 text-right">{sc.count}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top Error Endpoints */}
+                {apiMonitor.topErrors.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Top Error Endpoints</p>
+                    <div className="space-y-1.5">
+                      {apiMonitor.topErrors.map((te, i) => {
+                        const maxErr = Math.max(...apiMonitor.topErrors.map(t => t.count), 1)
+                        return (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="flex-1 truncate text-[10px] text-white/70">{te.endpoint}</span>
+                            <div className="w-20 h-4 rounded-sm bg-white/5 overflow-hidden">
+                              <div className="h-full bg-red-500/40 rounded-sm" style={{ width: `${(te.count / maxErr) * 100}%` }} />
+                            </div>
+                            <span className="shrink-0 text-[10px] text-red-400 font-medium w-6 text-right">{te.count}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Recent Error Logs ── */}
+              <div>
+                <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Recent Error Logs</p>
+                {apiMonitor.recentLogs.length === 0 ? (
+                  <p className="text-xs text-emerald-400/60 py-3 text-center">No errors recorded — all requests successful.</p>
+                ) : (
+                  <>
+                    <div className="space-y-1 max-h-64 overflow-y-auto rounded-lg border border-white/5">
+                      {apiMonitor.recentLogs.slice(apiLogsPage * 10, (apiLogsPage + 1) * 10).map(log => (
+                        <div key={log.id} className="flex items-center gap-2 rounded-md bg-white/[0.02] px-3 py-2 border-b border-white/[0.02] last:border-0">
+                          <span className={cn(
+                            "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold w-12 text-center",
+                            log.status_code < 400 ? "bg-yellow-500/10 text-yellow-400" :
+                            log.status_code < 500 ? "bg-orange-500/10 text-orange-400" :
+                            "bg-red-500/10 text-red-400"
+                          )}>
+                            {log.status_code}
+                          </span>
+                          <span className="shrink-0 text-[10px] font-medium text-muted-foreground w-10">{log.method}</span>
+                          <span className="flex-1 truncate text-xs text-white/80">{log.endpoint}</span>
+                          {log.error && <span className="hidden sm:block shrink-0 max-w-[200px] truncate text-[10px] text-red-400/60">{log.error}</span>}
+                          <span className="shrink-0 text-[10px] text-muted-foreground">{log.duration_ms ? `${log.duration_ms}ms` : "-"}</span>
+                          <span className="shrink-0 text-[10px] text-muted-foreground">{new Date(log.created_at).toLocaleTimeString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {apiMonitor.recentLogs.length > 10 && (
+                      <div className="flex items-center justify-center gap-3 mt-2">
+                        <button
+                          onClick={() => setApiLogsPage(p => Math.max(0, p - 1))}
+                          disabled={apiLogsPage === 0}
+                          className="rounded-lg p-1 text-muted-foreground hover:bg-white/5 disabled:opacity-30 transition-colors"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <span className="text-[10px] text-muted-foreground">
+                          {apiLogsPage + 1} / {Math.ceil(apiMonitor.recentLogs.length / 10)}
+                        </span>
+                        <button
+                          onClick={() => setApiLogsPage(p => Math.min(Math.ceil(apiMonitor.recentLogs.length / 10) - 1, p + 1))}
+                          disabled={apiLogsPage >= Math.ceil(apiMonitor.recentLogs.length / 10) - 1}
+                          className="rounded-lg p-1 text-muted-foreground hover:bg-white/5 disabled:opacity-30 transition-colors"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>
