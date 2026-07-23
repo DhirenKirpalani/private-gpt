@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 import { supabase, getUser, getSession, signOut, getProfile, type Profile } from "@/lib/supabase"
 import { getSubscription, startTrial, type Subscription } from "@/lib/subscription"
 import type { User, Session } from "@supabase/supabase-js"
@@ -166,6 +167,7 @@ export function useAuth() {
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
+  const router = useRouter()
 
   if (loading) {
     return <PageLoadingScreen />
@@ -173,7 +175,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (!user) {
     if (typeof window !== "undefined") {
-      window.location.href = "/login"
+      router.push("/login")
     }
     return null
   }

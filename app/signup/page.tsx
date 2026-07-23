@@ -66,12 +66,15 @@ function SignupForm() {
       await signUp(email, password, name)
       // Try auto-signin — may fail if email confirmation is required
       try {
-        const { user } = await signIn(email, password)
-        if (user) {
+        const { user, session } = await signIn(email, password)
+        if (user && session) {
           await startTrial(user.id)
           await refreshSubscription()
+          router.push(inviteToken ? `/invite?token=${inviteToken}` : "/profile")
+        } else if (user && !session) {
+          // User exists but session is null — email confirmation required
+          setSuccess("Account created! Please check your email and click the confirmation link. Then come back and log in.")
         }
-        router.push(inviteToken ? `/invite?token=${inviteToken}` : "/profile")
       } catch (loginErr: any) {
         if (loginErr.message?.toLowerCase().includes("email not confirmed") || loginErr.message?.toLowerCase().includes("not confirmed")) {
           setSuccess("Account created! Please check your email and click the confirmation link. Then come back and log in.")

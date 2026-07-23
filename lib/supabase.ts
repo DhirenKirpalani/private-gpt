@@ -166,8 +166,11 @@ export function onAuthStateChange(callback: (event: string, session: any) => voi
 }
 
 export async function resetPassword(email: string) {
+  const origin = typeof window !== "undefined"
+    ? window.location.origin
+    : "https://exploro-os.com"
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
+    redirectTo: `${origin}/reset-password`,
   })
   if (error) throw error
 }
