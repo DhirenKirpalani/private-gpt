@@ -561,13 +561,14 @@ export default function KnowledgePage() {
               </div>
             ))}
             {addingCategory ? (
-              <div id="addCategoryRow" className="mt-1 flex items-center gap-1.5 px-2">
+              <div id="addCategoryRow" className="mt-1 px-2">
                 <input
                   type="text"
                   value={newCategoryName}
                   onChange={e => setNewCategoryName(e.target.value)}
                   onKeyDown={async e => {
                     if (e.key === "Enter" && newCategoryName.trim()) {
+                      e.preventDefault()
                       if (!user) return
                       const name = newCategoryName.trim()
                       try {
@@ -583,36 +584,16 @@ export default function KnowledgePage() {
                       setNewCategoryName("")
                     }
                   }}
-                  placeholder={t("knowledgeNewCategoryPlaceholder")}
-                  autoFocus
-                  className="flex-1 rounded-md border border-white/10 bg-background px-2 py-1.5 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!user) return
-                    const name = newCategoryName.trim()
-                    if (name) {
-                      try {
-                        const cat = await insertCategory(user.id, name, currentWorkspace?.id)
-                        setCustomCategories(prev => [...prev, cat])
-                      } catch (err) { console.error(err) }
-                      setActiveCategory(name)
-                      setNewCategoryName("")
+                  onBlur={() => {
+                    if (!newCategoryName.trim()) {
                       setAddingCategory(false)
+                      setNewCategoryName("")
                     }
                   }}
-                  className="rounded-md p-1.5 text-emerald-400 hover:bg-emerald-600/10 transition-colors"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setAddingCategory(false); setNewCategoryName("") }}
-                  className="rounded-md p-1.5 text-muted-foreground hover:bg-muted/50 transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                  placeholder={t("knowledgeNewCategoryPlaceholder") || "Type a name and press Enter…"}
+                  autoFocus
+                  className="w-full rounded-lg border border-emerald-500/30 bg-emerald-600/5 px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                />
               </div>
             ) : (
               <button
@@ -686,7 +667,7 @@ export default function KnowledgePage() {
           </div>
 
           {/* Mobile category tabs */}
-          <div className="flex md:hidden overflow-x-auto border-b px-3 py-2 scrollbar-hide">
+          <div className="flex md:hidden overflow-x-auto border-b px-3 py-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex items-center gap-1.5">
               {allCategories.map(cat => {
                 const count = categoryCounts[cat] ?? 0

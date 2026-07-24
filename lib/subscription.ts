@@ -71,8 +71,16 @@ export function planName(sub: Subscription | null): string {
 
 export async function startTrial(userId: string): Promise<void> {
   const now = new Date()
-  const trialDays = await getTrialDays()
-  const end = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000)
+
+  // Check for per-user override in profiles.trial_days
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("trial_days")
+    .eq("user_id", userId)
+    .single()
+
+  const days = profile?.trial_days ?? await getTrialDays()
+  const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
   const { error } = await supabase.from("subscriptions").upsert(
     {
       user_id: userId,

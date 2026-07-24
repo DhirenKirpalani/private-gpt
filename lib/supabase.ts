@@ -595,11 +595,13 @@ export async function saveMessage(
 }
 
 export async function updateMessageContent(messageId: string, content: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("chat_messages")
     .update({ content })
     .eq("id", messageId)
+    .select("id")
   if (error) throw error
+  if (!data || data.length === 0) throw new Error("No rows updated — message ID not found in DB")
 }
 
 // Email messages

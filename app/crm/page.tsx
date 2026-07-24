@@ -2428,7 +2428,7 @@ export default function CRMPage() {
                       <input
                         value={composeTo}
                         onChange={e => setComposeTo(e.target.value)}
-                        placeholder="To: recipient@example.com"
+                        placeholder="To: recipient@example.com, another@example.com"
                         className="w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                       />
                       <input

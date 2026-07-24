@@ -6,7 +6,7 @@ import {
   Plus, MessageSquare, Search, Send, BookOpen, Globe, Radio,
   Bot, Copy, RefreshCw, Share2, Sparkles,
   PanelLeftClose, X, User, Paperclip, File, CheckCircle2, ChevronDown,
-  Mail, Phone, CalendarDays, Check, Loader2, Menu,
+  Mail, Phone, CalendarDays, Check, Loader2, Menu, Edit2, AlertCircle,
   HardDrive, Video, Eye,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
@@ -16,6 +16,7 @@ import { TrialPaywall } from "@/components/trial-paywall"
 import { AnnouncementBanner } from "@/components/announcement-banner"
 import { ConversationSkeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { EmailEditForm } from "@/components/email-edit-form"
 import { useAuth } from "@/app/auth-provider"
 import { useWorkspace } from "@/app/workspace-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
@@ -178,6 +179,7 @@ export default function ChatPage() {
   const [openCategoryIndex, setOpenCategoryIndex] = useState<number | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [executingActions, setExecutingActions] = useState<Set<string>>(new Set())
+  const [editingActionMsgId, setEditingActionMsgId] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const [failedMessageId, setFailedMessageId] = useState<string | null>(null)
   const [previewDoc, setPreviewDoc] = useState<{ name: string; content: string; category: string } | null>(null)
@@ -544,11 +546,12 @@ export default function ChatPage() {
         `3. Tell the user: "Please review the draft above and click the Send Email button to send it."`,
         ``,
         `Rules for the action block:`,
-        `- The "to" field MUST be the recipient's email address that the user specified`,
+        `- The "to" field MUST be the recipient's email address. For multiple recipients, separate with commas: "a@example.com, b@example.com"`,
         `- The "subject" field MUST be the email subject`,
         `- The "body" field MUST be the full email body text (use \\n for line breaks)`,
+        `- IMPORTANT: Write email drafts as PLAIN TEXT. Do NOT use markdown formatting (no **bold**, no *italic*, no # headers, no - bullet points). Use simple dashes (-) for lists and plain text for everything else. The email should read like a natural business email, not a formatted document.`,
         `- If there is a CC recipient, add a "cc" field. Otherwise omit it.`,
-        `- The action block MUST be the LAST thing in your response, after the draft`,
+        `- If there is a BCC recipient, add a "bcc" field. Otherwise omit it.`,
         `- NEVER skip the action block. Without it, the email cannot be sent and the user will have no button to click.`,
         `- Do NOT say "I have sent the email" — you have NOT sent it. The user must click the button.`,
         `- REMINDER: You MUST ALWAYS append the <!--ACTION:...--> block when drafting an email. If you write an email draft without the action block, the user cannot send it. This is NON-NEGOTIABLE.`,
@@ -724,14 +727,18 @@ export default function ChatPage() {
         sources: wsData?.sources?.map((s: any) => s.url).filter(Boolean) || undefined,
       }
       setMessages(prev => [...prev, assistantMsg])
-      // Save assistant message to DB and update local ID with DB row ID
-      saveMessage(convId, "assistant", assistantMsg.content, assistantMsg.sources)
+      // Save assistant message to DB with ACTION block base64-encoded so buttons persist on refresh
+      const contentToSave = assistantMsg.action
+        ? `${assistantMsg.content}\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(assistantMsg.action))))}-->`
+        : assistantMsg.content
+      saveMessage(convId, "assistant", contentToSave, assistantMsg.sources)
         .then((saved) => {
           if (saved?.id) {
+            console.log("[CHAT] Saved assistant message to DB, id:", saved.id, "has action:", !!assistantMsg.action)
             setMessages(prev => prev.map(m => m.id === assistantMsg.id ? { ...m, id: saved.id } : m))
           }
         })
-        .catch(() => {})
+        .catch((e) => console.error("[CHAT] Failed to save assistant message:", e))
       // Generate title from AI after first exchange
       if (messages.length === 0) {
         generateTitle(convId, userMsg.content, assistantMsg.content).catch(() => {})
@@ -740,6 +747,19 @@ export default function ChatPage() {
       if (err?.name === "AbortError") return // Aborted by new request, don't show error
       console.error("[CHAT] sendMessage error:", err)
       setChatError(err?.message || "Something went wrong. Please try again.")
+      // Clean up verbose API error messages
+      setChatError(prev => {
+        let msg = prev
+        try {
+          const parsed = JSON.parse(msg)
+          if (parsed?.error?.message) msg = parsed.error.message
+          else if (parsed?.message) msg = parsed.message
+        } catch {}
+        if (msg.includes("service_unavailable_error") || msg.includes("Service is too busy")) {
+          msg = "AI service is temporarily busy. Please try again in a moment."
+        }
+        return msg
+      })
       setFailedMessageId(userMsg.id)
     } finally {
       clearInterval(iv)
@@ -989,6 +1009,7 @@ export default function ChatPage() {
           providerId: connected.provider,
           to: action.to,
           cc: action.cc || undefined,
+          bcc: action.bcc || undefined,
           subject: action.subject,
           body: action.body,
           originalMessageId: action.originalMessageId || undefined,
@@ -1138,14 +1159,26 @@ export default function ChatPage() {
     try {
       const dbMessages = await getMessages(convId)
       setMessages(dbMessages.map(m => {
-        // Strip any action block comments from loaded messages — actions are only for new responses
-        const cleanContent = m.content?.replace(/<!--ACTION:{[\s\S]+?}-->/g, "").trim() || m.content
+        // Re-parse ACTION blocks from saved content to restore action buttons after refresh
+        const rawContent = m.content || ""
+        const actionMatch = rawContent.match(/<!--ACTION_B64:([A-Za-z0-9+/=]+)-->/)
+        let action: { type: string; [key: string]: any } | undefined
+        let cleanContent = rawContent
+        if (actionMatch) {
+          try {
+            action = JSON.parse(decodeURIComponent(escape(atob(actionMatch[1]))))
+            cleanContent = rawContent.replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
+          } catch {
+            cleanContent = rawContent.replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
+          }
+        }
         return {
           id: m.id,
           role: m.role,
           content: cleanContent,
           sources: m.sources || undefined,
           timestamp: new Date(m.created_at),
+          action,
         }
       }))
     } catch (e) { console.error("[CHAT] Failed to load conversation messages:", e) }
@@ -1792,7 +1825,7 @@ export default function ChatPage() {
                       {formatMessageTime(msg.timestamp)}
                     </div>
                     {/* Inline action buttons */}
-                    {msg.role === "assistant" && msg.action && (
+                    {msg.role === "assistant" && msg.action && editingActionMsgId !== msg.id && (
                       <div className="mt-2 flex items-center gap-2">
                         <button
                           onClick={() => handleExecuteAction(msg.id, msg.action!)}
@@ -1819,6 +1852,16 @@ export default function ChatPage() {
                             </>
                           )}
                         </button>
+                        {msg.action!.type === "send_email" && (
+                          <button
+                            onClick={() => setEditingActionMsgId(msg.id)}
+                            disabled={executingActions.has(msg.id)}
+                            className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-50"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                            Edit
+                          </button>
+                        )}
                         <button
                           onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, action: undefined } : m))}
                           disabled={executingActions.has(msg.id)}
@@ -1827,6 +1870,39 @@ export default function ChatPage() {
                           Cancel
                         </button>
                       </div>
+                    )}
+                    {/* Email edit form */}
+                    {msg.role === "assistant" && msg.action && msg.action.type === "send_email" && editingActionMsgId === msg.id && (
+                      <EmailEditForm
+                        initialTo={msg.action.to || ""}
+                        initialCc={msg.action.cc || ""}
+                        initialBcc={msg.action.bcc || ""}
+                        initialSubject={msg.action.subject || ""}
+                        initialBody={msg.action.body || ""}
+                        onSave={(edited: { to: string; cc?: string; bcc?: string; subject: string; body: string }) => {
+                          const updatedAction = { ...msg.action!, ...edited }
+                          const updatedContent = `Here's the updated email draft:\n\nTo: ${edited.to}\n${edited.cc ? `CC: ${edited.cc}\n` : ""}${edited.bcc ? `BCC: ${edited.bcc}\n` : ""}Subject: ${edited.subject}\n\n${edited.body}`
+                          setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, content: updatedContent, action: updatedAction } : m))
+                          // Update DB with new content + base64 action
+                          const contentToSave = `${updatedContent}\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(updatedAction))))}-->`
+                          updateMessageContent(msg.id, contentToSave).catch((e) => {
+                            console.error("[CHAT] updateMessageContent failed for edit save, trying fallback:", e)
+                            // Fallback: if update fails (temp ID), save as new message and remove old one from state
+                            if (currentConversationId) {
+                              saveMessage(currentConversationId, "assistant", contentToSave, msg.sources)
+                                .then((saved) => {
+                                  if (saved?.id) {
+                                    console.log("[CHAT] Fallback save succeeded, new id:", saved.id)
+                                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, id: saved.id, content: updatedContent, action: updatedAction } : m))
+                                  }
+                                })
+                                .catch((e2) => console.error("[CHAT] Fallback saveMessage also failed:", e2))
+                            }
+                          })
+                          setEditingActionMsgId(null)
+                        }}
+                        onCancel={() => setEditingActionMsgId(null)}
+                      />
                     )}
                     {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
                       <div className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
@@ -2083,8 +2159,11 @@ export default function ChatPage() {
                 </div>
               </div>
               {chatError && (
-                <div className="mt-2 flex items-center justify-center gap-3">
-                  <p className="text-xs text-red-400">{chatError}</p>
+                <div className="mt-3 flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/10">
+                    <AlertCircle className="h-4 w-4 text-red-400" />
+                  </div>
+                  <p className="flex-1 text-sm text-red-300">{chatError}</p>
                   {failedMessageId && (
                     <button
                       onClick={() => {
@@ -2095,9 +2174,9 @@ export default function ChatPage() {
                         }
                       }}
                       disabled={loading}
-                      className="inline-flex items-center gap-1 rounded-lg border border-red-400/30 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-semibold text-red-300 transition-colors hover:bg-red-500/25 disabled:opacity-40"
                     >
-                      <RefreshCw className="h-3 w-3" />
+                      <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
                       Retry
                     </button>
                   )}
