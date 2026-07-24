@@ -905,7 +905,7 @@ function ChannelsPageContent() {
             <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">To *</label>
-                <input className={field} type="email" placeholder="recipient@example.com" value={composeForm.to} onChange={e => setComposeForm(p => ({ ...p, to: e.target.value }))} />
+                <input className={field} type="text" placeholder="recipient@example.com, another@example.com" value={composeForm.to} onChange={e => setComposeForm(p => ({ ...p, to: e.target.value }))} />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">Subject *</label>

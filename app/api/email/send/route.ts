@@ -60,7 +60,7 @@ async function refreshIfNeeded(conn: any): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, providerId, to, cc, subject, body, html, threadId: clientThreadId, originalMessageId } = await req.json()
+    const { userId, providerId, to, cc, bcc, subject, body, html, threadId: clientThreadId, originalMessageId } = await req.json()
     let threadId = clientThreadId || null
     if (!userId || !providerId || !to || !subject || !body) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -119,6 +119,7 @@ export async function POST(req: NextRequest) {
         const mimeParts = [
           `To: ${to}`,
           ...(cc ? [`Cc: ${cc}`] : []),
+          ...(bcc ? [`Bcc: ${bcc}`] : []),
           `From: ${senderName} <${conn.email_address}>`,
           `Subject: ${encodeMimeHeader(subject)}`,
           ...replyHeaders,
@@ -157,8 +158,9 @@ export async function POST(req: NextRequest) {
             message: {
               subject,
               body: { contentType: "HTML", content: html || bodyToHtml(body) },
-              toRecipients: [{ emailAddress: { address: to } }],
+              toRecipients: to.split(",").map((addr: string) => ({ emailAddress: { address: addr.trim() } })),
               ...(cc ? { ccRecipients: cc.split(",").map((addr: string) => ({ emailAddress: { address: addr.trim() } })) } : {}),
+              ...(bcc ? { bccRecipients: bcc.split(",").map((addr: string) => ({ emailAddress: { address: addr.trim() } })) } : {}),
               from: { emailAddress: { name: senderName, address: conn.email_address } },
             },
             saveToSentItems: true,
@@ -198,6 +200,7 @@ export async function POST(req: NextRequest) {
         from: `"${senderName}" <${conn.email_address || conn.smtp_user}>`,
         to,
         cc: cc || undefined,
+        bcc: bcc || undefined,
         subject,
         text: body,
         html: html || bodyToHtml(body),
@@ -218,6 +221,7 @@ export async function POST(req: NextRequest) {
       from_address: `${senderName} <${conn.email_address || conn.smtp_user || conn.email_account}>`,
       to_address: to,
       cc_address: cc || null,
+      bcc_address: bcc || null,
       subject,
       body,
       html_body: sentHtml,

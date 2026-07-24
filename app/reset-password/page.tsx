@@ -22,41 +22,39 @@ function ResetPasswordContent() {
   const [success, setSuccess] = useState("")
   const [recoveryReady, setRecoveryReady] = useState(false)
 
-  // detectSessionInUrl: true processes the recovery hash on module load,
-  // BEFORE this useEffect runs. So the PASSWORD_RECOVERY event fires and
-  // the hash gets cleared before we can listen. Fix: check for an existing
-  // session on mount as a fallback.
+  // detectSessionInUrl: true creates a valid session from the recovery token.
+  // We keep the session alive (needed to call updateUser for password change)
+  // but prevent navigation away by intercepting route changes.
   useEffect(() => {
     let mounted = true
 
-    // 1. Check if a session already exists (recovery token was already processed)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (mounted && session) {
-        setRecoveryReady(true)
-      }
-    })
+    async function handleRecovery() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!mounted || !session) return
 
-    // 2. Also listen for late-firing auth events
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (mounted && (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session))) {
-        setRecoveryReady(true)
+      // Clear the URL hash so tokens aren't visible
+      if (typeof window !== "undefined" && window.location.hash) {
+        window.history.replaceState(null, "", window.location.pathname)
       }
-    })
 
-    // 3. Fallback: check URL hash/search for recovery params
-    if (typeof window !== "undefined") {
-      const hash = window.location.hash
-      const search = window.location.search
-      if (hash?.includes("type=recovery") || search?.includes("type=recovery")) {
-        setRecoveryReady(true)
-      }
+      setRecoveryReady(true)
     }
+
+    handleRecovery()
+
+    // Prevent the user from navigating away without resetting password
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!recoveryReady) return
+      e.preventDefault()
+      e.returnValue = ""
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
 
     return () => {
       mounted = false
-      subscription.unsubscribe()
+      window.removeEventListener("beforeunload", handleBeforeUnload)
     }
-  }, [])
+  }, [recoveryReady])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

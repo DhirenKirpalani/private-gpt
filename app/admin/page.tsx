@@ -81,6 +81,68 @@ export default function AdminPage() {
   const [roleTarget, setRoleTarget] = useState("admin")
   const [savingRole, setSavingRole] = useState(false)
 
+  // Per-user trial override
+  const [trialEmail, setTrialEmail] = useState("")
+  const [trialUserDays, setTrialUserDays] = useState(15)
+  const [savingUserTrial, setSavingUserTrial] = useState(false)
+  const [emailCheck, setEmailCheck] = useState<{ loading: boolean; found: boolean | null; name: string | null }>({ loading: false, found: null, name: null })
+  const [customTrialUsers, setCustomTrialUsers] = useState<{ userId: string; name: string; email: string; trialDays: number; subStatus: string | null; periodEnd: string | null }[]>([])
+  const [customTrialsLoading, setCustomTrialsLoading] = useState(false)
+  const [auditLogs, setAuditLogs] = useState<{ id: string; admin_email: string; action: string; target_email: string; old_value: string | null; new_value: string | null; created_at: string }[]>([])
+  const [auditLoading, setAuditLoading] = useState(false)
+
+  // Debounced email validation
+  useEffect(() => {
+    if (!trialEmail.trim() || !trialEmail.includes("@")) {
+      setEmailCheck({ loading: false, found: null, name: null })
+      return
+    }
+    setEmailCheck({ loading: true, found: null, name: null })
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/admin/lookup-user?email=${encodeURIComponent(trialEmail.trim().toLowerCase())}&requestingUserId=${user?.id || ""}`)
+        const data = await res.json()
+        if (res.ok && data.found) {
+          setEmailCheck({ loading: false, found: true, name: data.name })
+        } else {
+          setEmailCheck({ loading: false, found: false, name: null })
+        }
+      } catch {
+        setEmailCheck({ loading: false, found: false, name: null })
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [trialEmail, user])
+
+  // Load users with custom trial overrides
+  async function loadCustomTrials() {
+    if (!user) return
+    setCustomTrialsLoading(true)
+    try {
+      const res = await fetch(`/api/admin/custom-trials?requestingUserId=${user.id}`)
+      const data = await res.json()
+      if (res.ok) setCustomTrialUsers(data.users ?? [])
+    } catch {
+      console.error("[ADMIN] Failed to load custom trials")
+    } finally {
+      setCustomTrialsLoading(false)
+    }
+  }
+
+  async function loadAuditLogs() {
+    if (!user) return
+    setAuditLoading(true)
+    try {
+      const res = await fetch(`/api/admin/audit-log?requestingUserId=${user.id}&limit=20`)
+      const data = await res.json()
+      if (res.ok) setAuditLogs(data.logs ?? [])
+    } catch {
+      console.error("[ADMIN] Failed to load audit logs")
+    } finally {
+      setAuditLoading(false)
+    }
+  }
+
   // API Monitoring
   type ApiLog = { id: string; method: string; endpoint: string; status_code: number; duration_ms: number | null; error: string | null; created_at: string; user_id: string | null; user_name: string; user_email: string }
   type ApiEndpointStat = { endpoint: string; total: number; success: number; errors: number; errorRate: number; avgDuration: number; p50: number; p95: number; p99: number; methods: { method: string; count: number }[]; lastCalled: string; peakHour: { hour: string; total: number } | null; hourlyTrend: { hour: string; total: number; errors: number; avgDuration: number }[] }
@@ -148,6 +210,7 @@ export default function AdminPage() {
     loadStats()
     loadCompanies()
     loadApiMonitor()
+    loadCustomTrials()
   }, [user, role, loading, router])
 
   async function loadApiMonitor(range?: string, uid?: string | null) {
@@ -1356,6 +1419,166 @@ export default function AdminPage() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Per-User Trial Override */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-1 flex items-center gap-2">
+            <Clock className="h-3.5 w-3.5 text-[#FFBF00]/60" />
+            <h2 className="text-[10px] font-semibold text-[#FFBF00]/60 uppercase tracking-widest">Per-User Trial Override</h2>
+          </div>
+          <p className="mb-5 text-xs text-muted-foreground">Set a custom trial period for a specific user. This overrides the global default. Set to 0 or leave blank to use the global setting.</p>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="trialEmail" className="text-sm font-medium text-white/80">User Email</Label>
+              <div className="relative mt-1.5">
+                <Input
+                  id="trialEmail"
+                  type="email"
+                  placeholder="user@example.com"
+                  value={trialEmail}
+                  onChange={(e) => setTrialEmail(e.target.value)}
+                  className={cn(
+                    "bg-white/[0.03] border-white/10 pr-10 transition-colors",
+                    emailCheck.found === true && "border-emerald-500/40 bg-emerald-500/5",
+                    emailCheck.found === false && "border-red-500/40 bg-red-500/5",
+                  )}
+                />
+                {emailCheck.loading && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+                {!emailCheck.loading && emailCheck.found === true && (
+                  <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-400" />
+                )}
+                {!emailCheck.loading && emailCheck.found === false && (
+                  <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-400" />
+                )}
+              </div>
+              {emailCheck.found === true && emailCheck.name && (
+                <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] font-bold text-emerald-400">
+                    {emailCheck.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <span className="text-xs font-medium text-emerald-300">{emailCheck.name}</span>
+                  <span className="ml-auto text-[10px] font-semibold uppercase tracking-wider text-emerald-400/60">Verified</span>
+                </div>
+              )}
+              {emailCheck.found === false && trialEmail.includes("@") && (
+                <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">
+                  <XCircle className="h-4 w-4 shrink-0 text-red-400" />
+                  <span className="text-xs font-medium text-red-300">No user found with this email</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="trialUserDays" className="text-sm font-medium text-white/80">Custom Trial Days</Label>
+              <div className="mt-1.5 flex items-center gap-3">
+                <Input
+                  id="trialUserDays"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={trialUserDays}
+                  onChange={(e) => setTrialUserDays(parseInt(e.target.value, 10) || 0)}
+                  className="w-32"
+                />
+                <span className="text-sm text-muted-foreground">
+                  = <span className="font-semibold text-foreground">{trialUserDays} days free access for this user</span>
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                if (!user || !trialEmail.trim() || !trialUserDays) return
+                setSavingUserTrial(true)
+                try {
+                  const res = await fetch("/api/admin/user-trial", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ requestingUserId: user.id, targetUserEmail: trialEmail.trim(), trialDays: trialUserDays }),
+                  })
+                  const data = await res.json()
+                  if (!res.ok) throw new Error(data.error || "Failed to update")
+                  toast({ title: "Trial updated", description: `${trialEmail} now has ${trialUserDays} trial days.` })
+                  setTrialEmail("")
+                  loadCustomTrials()
+                  loadAuditLogs()
+                } catch (err: any) {
+                  toast({ title: "Error", description: err.message || "Failed to update trial", variant: "error" })
+                } finally {
+                  setSavingUserTrial(false)
+                }
+              }}
+              disabled={savingUserTrial || !trialEmail.trim() || !trialUserDays || emailCheck.found === false || emailCheck.loading}
+              className="inline-flex items-center gap-2 rounded-xl border border-[#FFBF00]/30 bg-[#FFBF00]/10 px-5 py-2.5 text-sm font-semibold text-[#FFBF00] transition-colors hover:bg-[#FFBF00]/15 hover:border-[#FFBF00]/40 disabled:opacity-50"
+            >
+              {savingUserTrial ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />}
+              Set Custom Trial
+            </button>
+          </div>
+        </div>
+
+        {/* Audit Trail */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-blue-400" />
+              <h2 className="text-sm font-semibold text-white/90">Audit Trail</h2>
+            </div>
+            <button
+              onClick={() => loadAuditLogs()}
+              disabled={auditLoading}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-50"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", auditLoading && "animate-spin")} />
+              Refresh
+            </button>
+          </div>
+          {auditLoading ? (
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+            </div>
+          ) : auditLogs.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-10 text-center">
+              <Activity className="h-8 w-8 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">No audit entries yet</p>
+            </div>
+          ) : (
+            <div className="relative space-y-3 pl-4">
+              {/* Timeline line */}
+              <div className="absolute left-[7px] top-2 bottom-2 w-px bg-white/10" />
+              {auditLogs.map(log => (
+                <div key={log.id} className="relative flex items-start gap-3">
+                  {/* Timeline dot */}
+                  <div className={cn(
+                    "relative z-10 mt-1 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-2 border-[#1a1f2b]",
+                    log.action === "set_trial_override" ? "bg-[#FFBF00]" : "bg-red-500"
+                  )} />
+                  <div className="min-w-0 flex-1 rounded-lg border border-white/5 bg-white/[0.02] px-4 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm text-white/90">
+                        <span className="font-medium text-blue-400">{log.admin_email}</span>
+                        {" "}
+                        {log.action === "set_trial_override" ? (
+                          <>set <span className="font-semibold text-[#FFBF00]">{log.new_value} days</span> trial for</>
+                        ) : (
+                          <>removed trial override for</>
+                        )}
+                        {" "}
+                        <span className="font-medium text-emerald-400">{log.target_email}</span>
+                      </p>
+                    </div>
+                    <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                      {log.old_value && (
+                        <span className="rounded bg-white/5 px-1.5 py-0.5">was {log.old_value} days</span>
+                      )}
+                      <span className="ml-auto tabular-nums">{new Date(log.created_at).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Trial Configuration */}
