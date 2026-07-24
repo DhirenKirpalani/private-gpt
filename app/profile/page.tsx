@@ -547,7 +547,7 @@ export default function ProfilePage() {
           </div>
           <TrialPill className="hidden md:flex" />
           <NotificationBell />
-          <Link href="/chat" className={cn("relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-xs font-bold text-white transition-colors overflow-hidden", form.avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
+          <Link href="/profile" className={cn("relative flex h-9 w-9 md:h-8 md:w-8 cursor-pointer items-center justify-center rounded-full text-xs font-bold text-white transition-colors overflow-hidden", form.avatarUrl ? "bg-[#1a1f2b]" : "bg-emerald-600 hover:bg-emerald-500")}>
             {!form.avatarUrl && (form.fullName.trim()
               ? form.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
               : <User className="h-5 w-5 md:h-4 md:w-4 text-white" />)}
