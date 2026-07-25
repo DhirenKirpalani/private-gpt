@@ -2824,12 +2824,12 @@ export default function CRMPage() {
             <button onClick={() => setContactsModalOpen(false)} className="absolute right-3 top-3 text-muted-foreground hover:text-white transition-colors">
               <X className="h-5 w-5" />
             </button>
-            <h2 className="mb-1 text-lg font-bold text-white">Contacts</h2>
-            <p className="mb-4 text-xs text-muted-foreground">{filtered.length} total · {filtered.filter((c: Contact) => c.tags.includes("whatsapp")).length} WhatsApp · {filtered.filter((c: Contact) => c.email).length} Email</p>
+            <h2 className="mb-1 text-lg font-bold text-white">{t('crmContacts')}</h2>
+            <p className="mb-4 text-xs text-muted-foreground">{filtered.length} {t('crmTotal')} · {filtered.filter((c: Contact) => c.tags.includes("whatsapp")).length} {t('crmWhatsApp')} · {filtered.filter((c: Contact) => c.email).length} {t('crmEmail')}</p>
             {filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
                 <User className="mb-2 h-6 w-6 text-muted-foreground opacity-40" />
-                <p className="text-sm text-muted-foreground">No contacts yet. Send an email and replies will auto-import contacts.</p>
+                <p className="text-sm text-muted-foreground">{t('crmNoContactsYet')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -2858,7 +2858,7 @@ export default function CRMPage() {
                           </span>
                         )}
                         {!c.email && !c.phone && (
-                          <span className="text-[10px] text-muted-foreground">{c.company || "No contact info"}</span>
+                          <span className="text-[10px] text-muted-foreground">{c.company || t('crmNoContactInfo')}</span>
                         )}
                       </div>
                     </div>
@@ -2916,10 +2916,10 @@ export default function CRMPage() {
               {/* Contact info grid */}
               <div className="mb-6 grid gap-3 sm:grid-cols-2">
                 {[
-                  { icon: Mail, label: "Email", value: c.email },
-                  { icon: Phone, label: "Phone", value: c.phone },
-                  { icon: Building2, label: "Company", value: c.company },
-                  { icon: MapPin, label: "Location", value: c.location },
+                  { icon: Mail, label: t('crmEmail'), value: c.email },
+                  { icon: Phone, label: t('crmPhone'), value: c.phone },
+                  { icon: Building2, label: t('crmCompany'), value: c.company },
+                  { icon: MapPin, label: t('crmLocation'), value: c.location },
                 ].map(({ icon: Icon, label, value }) => (
                   <div key={label} className="flex items-center gap-3 rounded-xl border bg-card p-3">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
@@ -2936,10 +2936,10 @@ export default function CRMPage() {
               {/* Deal info */}
               {(c.dealValue > 0 || c.dealStage) && (
                 <div className="mb-6 rounded-xl border bg-card p-4">
-                  <h3 className="mb-2 text-sm font-semibold">Deal Info</h3>
+                  <h3 className="mb-2 text-sm font-semibold">{t('crmDealInfo')}</h3>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Stage: <span className="text-white">{c.dealStage || "—"}</span></span>
-                    <span className="text-muted-foreground">Value: <span className="text-emerald-400 font-semibold">${c.dealValue.toLocaleString()}</span></span>
+                    <span className="text-muted-foreground">{t('crmStage')}: <span className="text-white">{c.dealStage || "—"}</span></span>
+                    <span className="text-muted-foreground">{t('crmValue')}: <span className="text-emerald-400 font-semibold">${c.dealValue.toLocaleString()}</span></span>
                   </div>
                 </div>
               )}
@@ -2947,7 +2947,7 @@ export default function CRMPage() {
               {/* Email thread */}
               <div className="mb-6">
                 <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Email Thread ({contactEmails.length})</h3>
+                  <h3 className="text-sm font-semibold">{t('crmEmailThread')} ({contactEmails.length})</h3>
                   {c.email && (
                     <button
                       onClick={() => {
@@ -2958,14 +2958,14 @@ export default function CRMPage() {
                       className="flex items-center gap-1.5 rounded-lg bg-blue-600/20 px-2.5 py-1 text-[11px] font-semibold text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 transition-colors"
                     >
                       <Mail className="h-3 w-3" />
-                      View in Email Tab
+                      {t('crmViewInEmailTab')}
                     </button>
                   )}
                 </div>
                 {contactEmails.length === 0 ? (
                   <div className="rounded-xl border border-dashed py-6 text-center">
                     <Mail className="mx-auto mb-2 h-5 w-5 text-muted-foreground opacity-40" />
-                    <p className="text-xs text-muted-foreground">No email thread with this contact</p>
+                    <p className="text-xs text-muted-foreground">{t('crmNoEmailThread')}</p>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -2976,7 +2976,7 @@ export default function CRMPage() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-xs font-semibold">{m.subject || "(No subject)"}</p>
+                            <p className="truncate text-xs font-semibold">{m.subject || t('crmNoSubject')}</p>
                             <span className="shrink-0 text-[10px] text-muted-foreground">
                               {m.received_at ? new Date(m.received_at).toLocaleDateString() : m.sent_at ? new Date(m.sent_at).toLocaleDateString() : ""}
                             </span>
@@ -2991,9 +2991,9 @@ export default function CRMPage() {
 
               {/* Recent activity */}
               <div>
-                <h3 className="mb-3 text-sm font-semibold">Recent Activity</h3>
+                <h3 className="mb-3 text-sm font-semibold">{t('crmRecentActivity')}</h3>
                 {contactActivities.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No recent activity.</p>
+                  <p className="text-xs text-muted-foreground">{t('crmNoRecentActivity')}</p>
                 ) : (
                   <div className="space-y-2">
                     {contactActivities.slice(0, 5).map(a => (
@@ -3025,7 +3025,7 @@ export default function CRMPage() {
                     className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
                   >
                     <Mail className="h-3.5 w-3.5" />
-                    Send Email
+                    {t('crmSendEmail')}
                   </button>
                 )}
                 <button
@@ -3033,7 +3033,7 @@ export default function CRMPage() {
                   className="flex items-center gap-1.5 rounded-lg border border-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/5 transition-colors"
                 >
                   <User className="h-3.5 w-3.5" />
-                  Open Full Profile
+                  {t('crmOpenFullProfile')}
                 </button>
               </div>
             </div>
