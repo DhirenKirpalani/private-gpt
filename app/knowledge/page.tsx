@@ -133,11 +133,13 @@ export default function KnowledgePage() {
   const [driveImporting, setDriveImporting] = useState<string | null>(null)
   const [drivePickerLoading, setDrivePickerLoading] = useState(false)
   const [driveConnected, setDriveConnected] = useState(false)
+  const [driveImportVersion, setDriveImportVersion] = useState(0)
   const { openPicker: openGooglePicker, loading: pickerLoading } = useGooglePicker()
 
   useEffect(() => {
     async function load() {
       if (!user) return
+      console.log("[KB PAGE] load() triggered, driveImportVersion:", driveImportVersion)
       setDocsLoading(true)
       try {
         const profile = await getProfile(user.id)
@@ -187,7 +189,7 @@ export default function KnowledgePage() {
       }
     }
     load()
-  }, [user, currentWorkspace?.id])
+  }, [user, currentWorkspace?.id, driveImportVersion])
 
   // Close add-category input on outside click
   useEffect(() => {
@@ -329,21 +331,63 @@ export default function KnowledgePage() {
     if (!user) return
     setDrivePickerLoading(true)
     try {
-      // Get Drive access token
-      const tokenRes = await fetch(`/api/drive/token?userId=${user.id}`)
-      const tokenData = await tokenRes.json()
-      if (!tokenRes.ok) throw new Error(tokenData.error || "Failed to get Drive token")
-
-      // Open Google Picker
-      await openGooglePicker(tokenData.accessToken, async (files: PickedFile[]) => {
+      // Open Google Picker - it will get a fresh browser-side token via GIS
+      await openGooglePicker("", async (files: PickedFile[], freshToken: string) => {
+        console.log("[DRIVE IMPORT] Picker callback started, files:", files.length)
         const defaultCategory = activeCategory === "All Documents" ? DEFAULT_CATEGORIES[0] : activeCategory
         for (const file of files) {
           setDriveImporting(file.id)
           try {
+            // Download file client-side using the access token (works with drive.file scope)
+            const isGoogleWorkspace = file.mimeType.startsWith("application/vnd.google-apps.")
+            let downloadUrl: string
+            let outputMimeType = file.mimeType
+            let outputName = file.name
+
+            if (isGoogleWorkspace) {
+              const exportMime = file.mimeType === "application/vnd.google-apps.spreadsheet"
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "application/pdf"
+              downloadUrl = `https://www.googleapis.com/drive/v3/files/${file.id}/export?mimeType=${encodeURIComponent(exportMime)}&supportsAllDrives=true`
+              outputMimeType = exportMime
+              const ext = exportMime.includes("spreadsheet") ? ".xlsx" : ".pdf"
+              if (!outputName.toLowerCase().endsWith(ext)) outputName += ext
+            } else {
+              downloadUrl = `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&supportsAllDrives=true`
+            }
+
+            const fileRes = await fetch(downloadUrl, {
+              headers: { Authorization: `Bearer ${freshToken}` },
+            })
+            if (!fileRes.ok) {
+              const errData = await fileRes.json().catch(() => ({}))
+              throw new Error(errData.error?.message || `Failed to download ${file.name}`)
+            }
+
+            const blob = await fileRes.blob()
+            // Convert to base64
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onloadend = () => {
+                const result = reader.result as string
+                resolve(result.split(",")[1])
+              }
+              reader.onerror = reject
+              reader.readAsDataURL(blob)
+            })
+
+            // Send to import API with file content
             const res = await fetch("/api/drive/import", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId: user.id, driveFileId: file.id, category: defaultCategory }),
+              body: JSON.stringify({
+                userId: user.id,
+                fileName: outputName,
+                mimeType: outputMimeType,
+                content: base64,
+                category: defaultCategory,
+                workspaceId: currentWorkspace?.id,
+              }),
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || "Import failed")
@@ -354,26 +398,9 @@ export default function KnowledgePage() {
             setDriveImporting(null)
           }
         }
-        // Refresh document list after all imports
-        if (user) {
-          const docs = await fetchUserDocuments(user.id, currentWorkspace?.id)
-          const mapped: DocItem[] = docs.map((d: any) => ({
-            id: d.id,
-            name: d.original_filename,
-            category: d.category || "Uncategorized",
-            size: formatFileSize(d.file_size_bytes),
-            pages: d.page_count || 0,
-            status: (d.status?.toLowerCase() === "indexed" ? "indexed" : d.status?.toLowerCase() === "failed" ? "error" : "processing") as DocItem["status"],
-            uploaded: relativeTime(new Date(d.created_at)),
-            filename: d.filename,
-            mime_type: d.mime_type || "",
-            expiresAt: d.expires_at,
-            extendedAt: d.extended_at || null,
-            fileArchived: d.file_archived || false,
-            pinned: d.pinned || false,
-          }))
-          setDocList(mapped)
-        }
+        // Trigger re-fetch of document list
+        console.log("[DRIVE IMPORT] All files processed, bumping driveImportVersion")
+        setDriveImportVersion(v => v + 1)
       })
     } catch (err: any) {
       toast({ title: "Drive error", description: err?.message || "Could not open Google Drive", variant: "error" })

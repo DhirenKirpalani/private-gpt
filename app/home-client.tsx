@@ -68,7 +68,7 @@ export default function HomeClient() {
     <div className="flex flex-col">
 
       {/* ── HERO ── */}
-      <section className="relative flex flex-col items-center justify-center overflow-hidden px-4 pt-20 pb-16 text-center sm:py-40">
+      <section className="relative flex flex-col items-center justify-center overflow-hidden px-4 pt-20 pb-16 text-center sm:pt-24 sm:pb-20 lg:pt-28 lg:pb-24">
         <div className="animate-fade-in-up mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-400 sm:mb-5 [animation-delay:0ms]">
           {t("heroBadge")}
         </div>

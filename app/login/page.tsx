@@ -4,12 +4,13 @@ import Link from "next/link"
 import Image from "next/image"
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Eye, EyeOff, CheckCircle2, Loader2, X, Mail } from "lucide-react"
+import { Eye, EyeOff, CheckCircle2, Loader2, X, Mail, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useI18n } from "@/lib/i18n"
 import { signIn, resetPassword } from "@/lib/supabase"
+import { getWebmailUrl } from "@/lib/email-provider"
 
 const featureKeys = [
   "loginFeature1",
@@ -63,7 +64,7 @@ function LoginContent() {
           setAttemptCount(0)
         }, 30000)
       } else if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
-        setError("Please confirm your email before signing in. Check your inbox for the confirmation link.")
+        setError(t("emailNotConfirmed"))
       } else if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
         setError(`Invalid email or password. ${5 - newCount} attempt${5 - newCount === 1 ? "" : "s"} remaining.`)
       } else {
@@ -174,9 +175,22 @@ function LoginContent() {
                 <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
                 </div>
-                <p className="text-sm leading-relaxed text-emerald-300">
-                  Email confirmed! Please log in with your password.
-                </p>
+                <div className="flex-1">
+                  <p className="text-sm leading-relaxed text-emerald-300">
+                    {t("emailConfirmedLogin")}
+                  </p>
+                  {email && getWebmailUrl(email) && (
+                    <a
+                      href={getWebmailUrl(email)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 transition-colors"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {t("openEmail")}
+                    </a>
+                  )}
+                </div>
               </div>
             )}
             {error && (
@@ -184,7 +198,20 @@ function LoginContent() {
                 <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500/20">
                   <span className="text-xs font-bold text-red-400">!</span>
                 </div>
-                <p className="text-sm leading-relaxed text-red-300">{error}</p>
+                <div className="flex-1">
+                  <p className="text-sm leading-relaxed text-red-300">{error}</p>
+                  {error.includes("confirm") && email && getWebmailUrl(email) && (
+                    <a
+                      href={getWebmailUrl(email)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 transition-colors"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {t("openEmail")}
+                    </a>
+                  )}
+                </div>
               </div>
             )}
             <Button type="submit" disabled={loading}
@@ -239,9 +266,22 @@ function LoginContent() {
                 <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
                 </div>
-                <p className="text-sm leading-relaxed text-emerald-300">
-                  Reset link sent! Check your email and follow the instructions to reset your password.
-                </p>
+                <div className="flex-1">
+                  <p className="text-sm leading-relaxed text-emerald-300">
+                    {t("resetLinkSent")}
+                  </p>
+                  {(forgotEmail || email) && getWebmailUrl(forgotEmail || email) && (
+                    <a
+                      href={getWebmailUrl(forgotEmail || email)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600/20 px-3 py-1.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 transition-colors"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {t("openEmail")}
+                    </a>
+                  )}
+                </div>
               </div>
             ) : (
               <>

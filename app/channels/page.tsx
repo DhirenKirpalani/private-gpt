@@ -21,15 +21,15 @@ import { getProfile, getEmailConnections, saveEmailConnection, deleteEmailConnec
 import { toast, Toaster } from "@/components/ui/toast"
 
 type SmtpDefaults = { smtp_host: string; smtp_port: number; imap_host: string; imap_port: number; smtp_secure?: boolean }
-type EmailProvider = { id: string; name: string; icon: React.ReactNode; defaults: SmtpDefaults; note: string; noteLink?: string; descKey: string; isOAuth?: boolean }
+type EmailProvider = { id: string; name: string; icon: React.ReactNode; defaults: SmtpDefaults; note?: string; noteKey?: string; noteLink?: string; descKey: string; isOAuth?: boolean }
 
 const EMAIL_PROVIDERS: EmailProvider[] = [
-  { id: "gmail", name: "Gmail / Google Workspace", icon: <SiGmail className="h-6 w-6" style={{ color: "#EA4335" }} />, defaults: { smtp_host: "smtp.gmail.com", smtp_port: 587, imap_host: "imap.gmail.com", imap_port: 993 }, note: "One-click sign in with your Google account.", descKey: "channelDescGmail", isOAuth: true },
-  { id: "outlook", name: "Microsoft 365 / Outlook", icon: <FaMicrosoft className="h-6 w-6" style={{ color: "#0078D4" }} />, defaults: { smtp_host: "smtp.office365.com", smtp_port: 587, imap_host: "outlook.office365.com", imap_port: 993 }, note: "One-click sign in with your Microsoft account.", descKey: "channelDescOutlook", isOAuth: true },
-  { id: "zoho", name: "Zoho Mail", icon: <SiZoho className="h-6 w-6" style={{ color: "#E42527" }} />, defaults: { smtp_host: "smtp.zoho.com", smtp_port: 587, imap_host: "imap.zoho.com", imap_port: 993 }, note: "Generate an App Password in Zoho Mail → Settings → Security.", noteLink: "https://accounts.zoho.com/home", descKey: "channelDescZoho" },
-  { id: "icloud", name: "iCloud Mail", icon: <SiIcloud className="h-6 w-6" style={{ color: "#3693F3" }} />, defaults: { smtp_host: "smtp.mail.me.com", smtp_port: 587, imap_host: "imap.mail.me.com", imap_port: 993 }, note: "Apple requires an App-Specific Password — your regular Apple ID password won't work.", noteLink: "https://appleid.apple.com/account/manage", descKey: "channelDescIcloud" },
-  { id: "hostinger", name: "Hostinger Email", icon: <Globe className="h-6 w-6" style={{ color: "#673DE6" }} />, defaults: { smtp_host: "smtp.hostinger.com", smtp_port: 587, imap_host: "imap.hostinger.com", imap_port: 993 }, note: "Use your Hostinger email address and the password from Hostinger hPanel.", descKey: "channelDescHostinger" },
-  { id: "godaddy", name: "GoDaddy Email", icon: <Mail className="h-6 w-6" style={{ color: "#1BDBDB" }} />, defaults: { smtp_host: "smtpout.secureserver.net", smtp_port: 465, imap_host: "imap.secureserver.net", imap_port: 993, smtp_secure: true }, note: "Use your GoDaddy Workspace Email address and password.", descKey: "channelDescGodaddy" },
+  { id: "gmail", name: "Gmail / Google Workspace", icon: <SiGmail className="h-6 w-6" style={{ color: "#EA4335" }} />, defaults: { smtp_host: "smtp.gmail.com", smtp_port: 587, imap_host: "imap.gmail.com", imap_port: 993 }, noteKey: "channelNoteGmail", descKey: "channelDescGmail", isOAuth: true },
+  { id: "outlook", name: "Microsoft 365 / Outlook", icon: <FaMicrosoft className="h-6 w-6" style={{ color: "#0078D4" }} />, defaults: { smtp_host: "smtp.office365.com", smtp_port: 587, imap_host: "outlook.office365.com", imap_port: 993 }, noteKey: "channelNoteOutlook", descKey: "channelDescOutlook", isOAuth: true },
+  { id: "zoho", name: "Zoho Mail", icon: <SiZoho className="h-6 w-6" style={{ color: "#E42527" }} />, defaults: { smtp_host: "smtp.zoho.com", smtp_port: 587, imap_host: "imap.zoho.com", imap_port: 993 }, noteKey: "channelNoteZoho", noteLink: "https://accounts.zoho.com/home", descKey: "channelDescZoho" },
+  { id: "icloud", name: "iCloud Mail", icon: <SiIcloud className="h-6 w-6" style={{ color: "#3693F3" }} />, defaults: { smtp_host: "smtp.mail.me.com", smtp_port: 587, imap_host: "imap.mail.me.com", imap_port: 993 }, noteKey: "channelNoteIcloud", noteLink: "https://appleid.apple.com/account/manage", descKey: "channelDescIcloud" },
+  { id: "hostinger", name: "Hostinger Email", icon: <Globe className="h-6 w-6" style={{ color: "#673DE6" }} />, defaults: { smtp_host: "smtp.hostinger.com", smtp_port: 587, imap_host: "imap.hostinger.com", imap_port: 993 }, noteKey: "channelNoteHostinger", descKey: "channelDescHostinger" },
+  { id: "godaddy", name: "GoDaddy Email", icon: <Mail className="h-6 w-6" style={{ color: "#1BDBDB" }} />, defaults: { smtp_host: "smtpout.secureserver.net", smtp_port: 465, imap_host: "imap.secureserver.net", imap_port: 993, smtp_secure: true }, noteKey: "channelNoteGodaddy", descKey: "channelDescGodaddy" },
 ]
 
 const MESSAGING_CHANNELS = [
@@ -213,7 +213,7 @@ function ChannelsPageContent() {
   const handleSave = async () => {
     if (!user || !modalProvider) return
     console.log(`[CHANNELS SAVE] Starting save for provider=${modalProvider.id}`)
-    if (!smtpForm.email_address || !smtpForm.smtp_pass) { setSaveError("Email address and password are required."); return }
+    if (!smtpForm.email_address || !smtpForm.smtp_pass) { setSaveError(t('channelEmailPassRequired')); return }
     setSaving(true); setSaveError("")
     try {
       // 1. Save connection first
@@ -810,10 +810,10 @@ function ChannelsPageContent() {
             <div className="mb-5 flex gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
               <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
               <div className="text-xs text-amber-300/80 leading-relaxed">
-                {modalProvider.note}
+                {modalProvider.noteKey ? t(modalProvider.noteKey as any) : modalProvider.note}
                 {modalProvider.noteLink && (
                   <a href={modalProvider.noteLink} target="_blank" rel="noopener noreferrer" className="ml-1 inline-flex items-center gap-0.5 text-amber-400 underline underline-offset-2 hover:text-amber-300">
-                    Get App Password <ExternalLink className="h-3 w-3" />
+                    {t('channelGetAppPassword')} <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
               </div>
@@ -821,11 +821,11 @@ function ChannelsPageContent() {
 
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Email Address *</label>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('channelEmailAddress')} *</label>
                 <input className={field} type="email" placeholder="you@example.com" value={smtpForm.email_address} onChange={e => setSmtpForm(p => ({ ...p, email_address: e.target.value }))} />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Password / App Password *</label>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('channelPasswordApp')} *</label>
                 <div className="relative">
                   <input className={cn(field, "pr-10")} type={showPass ? "text" : "password"} placeholder="••••••••••••" value={smtpForm.smtp_pass} onChange={e => setSmtpForm(p => ({ ...p, smtp_pass: e.target.value }))} />
                   <button type="button" onClick={() => setShowPass(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors">
@@ -837,23 +837,23 @@ function ChannelsPageContent() {
               {/* Advanced settings (collapsible via details) */}
               <details className="group">
                 <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-white transition-colors select-none">
-                  Advanced settings (SMTP / IMAP)
+                  {t('channelAdvancedSettings')}
                 </summary>
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">SMTP Host</label>
+                    <label className="mb-1 block text-xs text-muted-foreground">{t('channelSmtpHost')}</label>
                     <input className={field} value={smtpForm.smtp_host} onChange={e => setSmtpForm(p => ({ ...p, smtp_host: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">SMTP Port</label>
+                    <label className="mb-1 block text-xs text-muted-foreground">{t('channelSmtpPort')}</label>
                     <input className={field} type="number" value={smtpForm.smtp_port} onChange={e => setSmtpForm(p => ({ ...p, smtp_port: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">IMAP Host</label>
+                    <label className="mb-1 block text-xs text-muted-foreground">{t('channelImapHost')}</label>
                     <input className={field} value={smtpForm.imap_host} onChange={e => setSmtpForm(p => ({ ...p, imap_host: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">IMAP Port</label>
+                    <label className="mb-1 block text-xs text-muted-foreground">{t('channelImapPort')}</label>
                     <input className={field} type="number" value={smtpForm.imap_port} onChange={e => setSmtpForm(p => ({ ...p, imap_port: e.target.value }))} />
                   </div>
                 </div>
@@ -868,11 +868,11 @@ function ChannelsPageContent() {
 
             <div className="mt-5 flex gap-3">
               <button onClick={() => setModalProvider(null)} className="flex-1 rounded-lg border border-white/10 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-white">
-                Cancel
+                {t('channelCancel')}
               </button>
               <button onClick={handleSave} disabled={saving || testing} className="flex-1 rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-60 flex items-center justify-center gap-2">
                 {(saving || testing) && <Loader2 className="h-4 w-4 animate-spin" />}
-                {testing ? "Verifying…" : saving ? "Saving…" : "Save Connection"}
+                {testing ? t('channelVerifying') : saving ? t('channelSaving') : t('channelSaveConnection')}
               </button>
             </div>
           </div>
