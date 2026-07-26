@@ -604,6 +604,15 @@ export async function updateMessageContent(messageId: string, content: string): 
   if (!data || data.length === 0) throw new Error("No rows updated — message ID not found in DB")
 }
 
+export async function deleteMessagesAfter(conversationId: string, afterCreatedAt: string): Promise<void> {
+  const { error } = await supabase
+    .from("chat_messages")
+    .delete()
+    .eq("conversation_id", conversationId)
+    .gte("created_at", afterCreatedAt)
+  if (error) console.error("[deleteMessagesAfter] Failed:", error.message)
+}
+
 // Email messages
 export type EmailMessage = {
   id: string

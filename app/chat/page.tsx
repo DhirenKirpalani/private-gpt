@@ -23,7 +23,7 @@ import { WorkspaceSelector } from "@/components/workspace-selector"
 import {
   getProfile, fetchUserDocuments, type Profile,
   getConversations, createConversation, updateConversationTitle,
-  deleteConversation, getMessages, saveMessage, updateMessageContent, type ChatConversation,
+  deleteConversation, getMessages, saveMessage, updateMessageContent, deleteMessagesAfter, type ChatConversation,
   fetchDocumentContents, uploadDocument, updateDocumentText,
   getEmailConnections, getCalendarConnections, getWhatsAppConnections,
 } from "@/lib/supabase"
@@ -180,6 +180,9 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [executingActions, setExecutingActions] = useState<Set<string>>(new Set())
   const [editingActionMsgId, setEditingActionMsgId] = useState<string | null>(null)
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
+  const [editingMsgContent, setEditingMsgContent] = useState("")
+  const [editingMsgWidth, setEditingMsgWidth] = useState<number | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const [failedMessageId, setFailedMessageId] = useState<string | null>(null)
   const [previewDoc, setPreviewDoc] = useState<{ name: string; content: string; category: string } | null>(null)
@@ -353,7 +356,7 @@ export default function ChatPage() {
     return conv.id
   }
 
-  const sendMessage = async (retryContent?: string, retryConvId?: string) => {
+  const sendMessage = async (retryContent?: string, retryConvId?: string, overrideMessages?: Message[]) => {
     const content = retryContent || input
     if (!content.trim() || loading) return
     if (content.length > 5000) {
@@ -379,7 +382,8 @@ export default function ChatPage() {
     }
 
     const userMsg: Message = { id: Date.now().toString(), role: "user", content, timestamp: new Date() }
-    const nextMessages = [...messages, userMsg]
+    const baseMessages = overrideMessages || messages
+    const nextMessages = [...baseMessages, userMsg]
     setMessages(nextMessages)
     if (!retryContent) {
       setInput("")
@@ -556,6 +560,7 @@ export default function ChatPage() {
         `- Do NOT say "I have sent the email" — you have NOT sent it. The user must click the button.`,
         `- REMINDER: You MUST ALWAYS append the <!--ACTION:...--> block when drafting an email. If you write an email draft without the action block, the user cannot send it. This is NON-NEGOTIABLE.`,
         `- Even if you think the email is informational or educational, if the user asked you to "send" or "create" an email, you MUST include the action block.`,
+        `- The "body" field MUST contain ONLY the email body text. Do NOT include the <!--ACTION:...--> block inside the body field. Do NOT include any metadata, instructions, or action blocks in the body.`,
         ``,
         `# CRITICAL: CALENDAR EVENT PROTOCOL`,
         `Similarly, you CANNOT create calendar events yourself. When the user asks to create an event, draft it and append:`,
@@ -925,15 +930,34 @@ export default function ChatPage() {
 
   // Detect AI action blocks (<!--ACTION:{...}-->) and return stripped content + action data
   function extractAiAction(content: string, userMessage?: string): { content: string; action?: { type: string; [key: string]: any } } {
-    // Use [\s\S] to match across newlines — AI may generate multi-line JSON
-    const match = content.match(/<!--ACTION:({[\s\S]+?})-->/)
-    if (!match) {
-      console.log("[AI ACTION] No action block found in message — checking for email draft fallback")
-      // Fallback: detect email draft pattern and auto-generate action block
-      const subjectMatch = content.match(/Subject:\s*(.+)/i)
-      // Try to find recipient: first in AI response "To:" line, then in user's message
+    // Broad regex: match <!--ACTION: ... --> even if JSON is malformed (starts with { or ( )
+    const broadMatch = content.match(/<!--ACTION:[\s\S]*?-->/)
+    // Strict regex: only match well-formed JSON objects
+    const strictMatch = content.match(/<!--ACTION:({[\s\S]+?})-->/)
+    let action: { type: string; [key: string]: any } | undefined
+    let strippedContent = content
+
+    if (strictMatch) {
+      try {
+        action = JSON.parse(strictMatch[1])
+        strippedContent = content.replace(strictMatch[0], "").trim()
+        console.log("[AI ACTION] Extracted action:", action!.type, "to:", action!.to)
+      } catch (e: any) {
+        console.error("[AI ACTION] Failed to parse action JSON:", e?.message, "raw:", strictMatch[1])
+      }
+    }
+
+    // Always strip any ACTION block from content, even if JSON was malformed
+    if (broadMatch) {
+      strippedContent = strippedContent.replace(/<!--ACTION:[\s\S]*?-->/g, "").trim()
+    }
+
+    // If no valid action was extracted, try fallback email draft detection
+    if (!action) {
+      console.log("[AI ACTION] No valid action block found — checking for email draft fallback")
+      const subjectMatch = strippedContent.match(/Subject:\s*(.+)/i)
       let toEmail: string | null = null
-      const toInContent = content.match(/(?:To|to):\s*([^\s<]+@[^\s>]+)/i)
+      const toInContent = strippedContent.match(/(?:To|to):\s*([^\s<]+@[^\s>]+)/i)
       if (toInContent) {
         toEmail = toInContent[1].trim()
       } else if (userMessage) {
@@ -945,26 +969,41 @@ export default function ChatPage() {
           if (nameInUserMsg) toEmail = nameInUserMsg[1].trim()
         }
       }
-      // Check if the message looks like an email draft (has Subject: and a recipient)
       if (subjectMatch && toEmail) {
         const to = toEmail
         const subject = subjectMatch[1].trim()
-        // Extract body — everything after "Body:" line until trailing instructions
         let body = ""
-        const bodyIdx = content.search(/Body:\s*/i)
+        const bodyIdx = strippedContent.search(/Body:\s*/i)
         if (bodyIdx >= 0) {
-          body = content.slice(bodyIdx)
+          body = strippedContent.slice(bodyIdx)
             .replace(/^Body:\s*/i, "")
             .replace(/Please (?:review|click)[\s\S]*$/i, "")
             .replace(/Here is the (?:email )?draft[\s\S]*$/i, "")
             .replace(/I (?:am unable|cannot|can't|don't have)[\s\S]*$/i, "")
             .replace(/Click the Send Email button[\s\S]*$/i, "")
+            .replace(/Por favor (?:revisa|haz clic)[\s\S]*$/i, "")
             .trim()
+        } else {
+          // No "Body:" label — extract everything after the Subject line
+          const subjectIdx = strippedContent.search(/Subject:\s*.+/i)
+          if (subjectIdx >= 0) {
+            const afterSubject = strippedContent.slice(subjectIdx)
+            const subjectLineEnd = afterSubject.indexOf("\n")
+            if (subjectLineEnd >= 0) {
+              body = afterSubject.slice(subjectLineEnd + 1)
+                .replace(/Please (?:review|click)[\s\S]*$/i, "")
+                .replace(/Here is the (?:email )?draft[\s\S]*$/i, "")
+                .replace(/I (?:am unable|cannot|can't|don't have)[\s\S]*$/i, "")
+                .replace(/Click the Send Email button[\s\S]*$/i, "")
+                .replace(/Por favor (?:revisa|haz clic)[\s\S]*$/i, "")
+                .trim()
+            }
+          }
         }
         if (to && subject && body) {
           console.log(`[AI ACTION] Fallback: auto-generating send_email action to=${to} subject=${subject}`)
           return {
-            content: content
+            content: strippedContent
               .replace(/Please (?:review|click)[\s\S]*$/i, "")
               .replace(/Here is the (?:email )?draft[\s\S]*$/i, "")
               .replace(/I (?:am unable|cannot|can't)[\s\S]*$/i, "")
@@ -973,17 +1012,15 @@ export default function ChatPage() {
           }
         }
       }
-      return { content }
+      return { content: strippedContent }
     }
-    try {
-      const action = JSON.parse(match[1])
-      const stripped = content.replace(match[0], "").trim()
-      console.log("[AI ACTION] Extracted action:", action.type, "to:", action.to)
-      return { content: stripped, action }
-    } catch (e: any) {
-      console.error("[AI ACTION] Failed to parse action JSON:", e?.message, "raw:", match[1])
+
+    // Strip any <!--ACTION:...--> from the action body field (safety net)
+    if (action.body && typeof action.body === "string") {
+      action.body = action.body.replace(/<!--ACTION:[\s\S]*?-->/g, "").trim()
     }
-    return { content }
+
+    return { content: strippedContent, action }
   }
 
   async function executeAiAction(action: { type: string; [key: string]: any }): Promise<string> {
@@ -997,10 +1034,12 @@ export default function ChatPage() {
         || emailConns.find((c: any) => c.status === "connected")
       if (!connected) {
         console.error("[AI ACTION send_email] No connected email account found")
+        toast({ title: "No connected email", description: "Please connect an email provider in Channels.", variant: "error" })
         return "*(No connected email account. Please connect an email provider in Channels.)*"
       }
       console.log("[AI ACTION send_email] Using provider:", connected.provider, "email:", connected.email_address)
       console.log("[AI ACTION send_email] Sending to:", action.to, "subject:", action.subject)
+      const cleanBody = (action.body || "").replace(/<!--ACTION:[\s\S]*?-->/g, "").trim()
       const sendRes = await fetch("/api/email/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1011,16 +1050,20 @@ export default function ChatPage() {
           cc: action.cc || undefined,
           bcc: action.bcc || undefined,
           subject: action.subject,
-          body: action.body,
+          body: cleanBody,
           originalMessageId: action.originalMessageId || undefined,
           threadId: action.threadId || undefined,
         }),
       })
       const sendData = await sendRes.json()
       console.log("[AI ACTION send_email] Response:", sendRes.status, sendData)
-      return sendRes.ok
-        ? `*(Email sent to ${action.to})*`
-        : `*(Email failed: ${sendData.error || "Unknown error"})*`
+      if (sendRes.ok) {
+        toast({ title: "Email sent", description: `Sent to ${action.to}`, variant: "success" })
+        return `*(Email sent to ${action.to})*`
+      } else {
+        toast({ title: "Email failed", description: sendData.error || "Unknown error", variant: "error" })
+        return `*(Email failed: ${sendData.error || "Unknown error"})*`
+      }
     }
     if (action.type === "create_event" && user) {
       const calRes = await fetch("/api/calendar/create", {
@@ -1098,6 +1141,7 @@ export default function ChatPage() {
     setExecutingActions(prev => new Set(prev).add(msgId))
     try {
       const resultText = await executeAiAction(action)
+      const isFailure = resultText.includes("failed") || resultText.includes("No connected")
       setMessages(prev => prev.map(m => {
         if (m.id !== msgId) return m
         const updatedContent = m.content + "\n\n" + resultText
@@ -1108,7 +1152,7 @@ export default function ChatPage() {
             saveMessage(currentConversationId, "assistant", updatedContent, m.sources).catch(() => {})
           }
         })
-        return { ...m, content: updatedContent, action: undefined }
+        return { ...m, content: updatedContent, action: isFailure ? m.action : undefined }
       }))
     } catch (err: any) {
       console.error("[AI ACTION] handleExecuteAction error:", err?.message, err)
@@ -1120,7 +1164,7 @@ export default function ChatPage() {
             saveMessage(currentConversationId, "assistant", updatedContent, m.sources).catch(() => {})
           }
         })
-        return { ...m, content: updatedContent, action: undefined }
+        return { ...m, content: updatedContent, action: m.action }
       }))
     } finally {
       setExecutingActions(prev => {
@@ -1754,8 +1798,9 @@ export default function ChatPage() {
                   </div>
                   <div className={cn("max-w-[72%] space-y-2", msg.role === "user" && "flex flex-col items-end")}>
                     <div
+                      data-bubble
                       className={cn(
-                        "rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                        "group relative rounded-2xl px-4 py-3 text-sm leading-relaxed",
                         msg.role === "user"
                           ? "rounded-tr-sm text-white"
                           : "rounded-tl-sm border border-white/15 shadow-xl"
@@ -1764,7 +1809,90 @@ export default function ChatPage() {
                         ? { backgroundColor: themePrimary, color: "#fff" }
                         : { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.15)", color: "#f1f5f9", boxShadow: "0 2px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)" }
                       }>
-                      {msg.role === "assistant" ? (
+                      {msg.role === "user" && !loading && editingMsgId !== msg.id && (
+                        <button
+                          onClick={(e) => {
+                            const bubble = e.currentTarget.closest('[data-bubble]') as HTMLElement
+                            if (bubble) setEditingMsgWidth(bubble.offsetWidth)
+                            setEditingMsgId(msg.id)
+                            setEditingMsgContent(msg.content)
+                          }}
+                          className="absolute -top-2.5 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 backdrop-blur-sm border border-white/15 text-muted-foreground opacity-0 shadow-lg transition-all hover:scale-110 hover:text-emerald-400 hover:border-emerald-500/40 group-hover:opacity-100"
+                          title="Edit message"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </button>
+                      )}
+                      {msg.role === "user" && editingMsgId === msg.id ? (
+                        <div className="flex flex-col gap-2" style={editingMsgWidth ? { width: editingMsgWidth - 32 } : { width: '100%' }}>
+                          <textarea
+                            ref={el => {
+                              if (el) {
+                                el.style.height = "auto"
+                                el.style.height = el.scrollHeight + "px"
+                              }
+                            }}
+                            value={editingMsgContent}
+                            onChange={e => {
+                              setEditingMsgContent(e.target.value)
+                              e.target.style.height = "auto"
+                              e.target.style.height = e.target.scrollHeight + "px"
+                            }}
+                            autoFocus
+                            className="w-full resize-none bg-transparent text-sm text-white outline-none placeholder:text-white/40"
+                            style={{ minHeight: "1.5rem" }}
+                            onKeyDown={async (e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault()
+                                if (editingMsgContent.trim()) {
+                                  const msgIndex = messages.findIndex(m => m.id === msg.id)
+                                  if (msgIndex !== -1) {
+                                    const truncated = messages.slice(0, msgIndex)
+                                    setMessages(truncated)
+                                    setEditingMsgId(null)
+                                    if (currentConversationId && msg.timestamp) {
+                                      await deleteMessagesAfter(currentConversationId, msg.timestamp.toISOString()).catch(e => console.error("[CHAT] deleteMessagesAfter failed:", e))
+                                    }
+                                    sendMessage(editingMsgContent.trim(), undefined, truncated)
+                                  }
+                                }
+                              }
+                              if (e.key === "Escape") {
+                                setEditingMsgId(null)
+                                setEditingMsgContent("")
+                              }
+                            }}
+                          />
+                          <div className="flex items-center justify-end gap-1.5 -mb-1">
+                            <button
+                              onClick={() => { setEditingMsgId(null); setEditingMsgContent("") }}
+                              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                            >
+                              <X className="h-3 w-3" />
+                              Cancel
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!editingMsgContent.trim()) return
+                                const msgIndex = messages.findIndex(m => m.id === msg.id)
+                                if (msgIndex !== -1) {
+                                  const truncated = messages.slice(0, msgIndex)
+                                  setMessages(truncated)
+                                  setEditingMsgId(null)
+                                  if (currentConversationId && msg.timestamp) {
+                                    await deleteMessagesAfter(currentConversationId, msg.timestamp.toISOString()).catch(e => console.error("[CHAT] deleteMessagesAfter failed:", e))
+                                  }
+                                  sendMessage(editingMsgContent.trim(), undefined, truncated)
+                                }
+                              }}
+                              className="flex items-center gap-1 rounded-md bg-white/20 px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-white/30"
+                            >
+                              <Send className="h-3 w-3" />
+                              Send
+                            </button>
+                          </div>
+                        </div>
+                      ) : msg.role === "assistant" ? (
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
@@ -1862,13 +1990,6 @@ export default function ChatPage() {
                             Edit
                           </button>
                         )}
-                        <button
-                          onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, action: undefined } : m))}
-                          disabled={executingActions.has(msg.id)}
-                          className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
-                        >
-                          Cancel
-                        </button>
                       </div>
                     )}
                     {/* Email edit form */}
