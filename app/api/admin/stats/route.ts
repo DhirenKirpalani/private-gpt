@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase"
 
+export const dynamic = "force-dynamic"
+
 const PLAN_PRICE: Record<string, number> = {
   solo: 30,
   team: 50,
   enterprise: 0,
 }
+
+// DeepSeek pricing per 1M tokens (approximate)
+const DEEPSEEK_PROMPT_PRICE = 0.14 // $/1M tokens
+const DEEPSEEK_COMPLETION_PRICE = 0.28 // $/1M tokens
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -35,7 +41,6 @@ export async function GET(req: NextRequest) {
 
   // ── Batch 1: Basic counts ─────────────────────────────────────
   const [
-    { count: totalUsers },
     { count: activeTrials },
     { count: expiredTrials },
     { data: activeSubs },
@@ -45,11 +50,8 @@ export async function GET(req: NextRequest) {
     { count: totalWorkspaceMembers },
     { count: totalDocuments },
     { count: totalChatMessages },
-    { count: dauCount },
-    { count: users30DaysAgo },
     { data: canceledSubsData },
   ] = await Promise.all([
-    supabase.from("profiles").select("*", { count: "exact", head: true }),
     supabase.from("subscriptions").select("*", { count: "exact", head: true })
       .eq("status", "trialing").gt("current_period_end", nowIso),
     supabase.from("subscriptions").select("*", { count: "exact", head: true })
@@ -62,10 +64,44 @@ export async function GET(req: NextRequest) {
     supabase.from("workspace_members").select("*", { count: "exact", head: true }),
     supabase.from("documents").select("*", { count: "exact", head: true }),
     supabase.from("chat_messages").select("*", { count: "exact", head: true }),
-    supabase.from("chat_messages").select("user_id", { count: "exact", head: true }).gt("created_at", oneDayAgo),
-    supabase.from("profiles").select("*", { count: "exact", head: true }).lt("created_at", thirtyDaysAgo),
     supabase.from("subscriptions").select("plan, created_at, current_period_end").eq("status", "canceled"),
   ])
+
+  // ── Count total auth users (handle pagination) ────────────────
+  let totalUsers = 0
+  let users30DaysAgo = 0
+  {
+    let pg = 1
+    let more = true
+    while (more) {
+      const { data: authUsers } = await supabase.auth.admin.listUsers({ page: pg, perPage: 1000 })
+      const users = authUsers?.users ?? []
+      totalUsers += users.length
+      for (const u of users) {
+        if (u.created_at && new Date(u.created_at) < new Date(thirtyDaysAgo)) users30DaysAgo++
+      }
+      more = users.length === 1000
+      pg++
+    }
+  }
+
+  // ── DAU, WAU & MAU (unique active users) ──────────────────────
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: dauData } = await supabase
+    .from("chat_messages")
+    .select("user_id")
+    .gt("created_at", oneDayAgo)
+  const { data: wauData } = await supabase
+    .from("chat_messages")
+    .select("user_id")
+    .gt("created_at", sevenDaysAgo)
+  const { data: mauData } = await supabase
+    .from("chat_messages")
+    .select("user_id")
+    .gt("created_at", thirtyDaysAgo)
+  const dau = new Set((dauData ?? []).map(r => r.user_id)).size
+  const wau = new Set((wauData ?? []).map(r => r.user_id)).size
+  const trueMau = new Set((mauData ?? []).map(r => r.user_id)).size
 
   // ── MRR & Plan counts ─────────────────────────────────────────
   const planCounts: Record<string, number> = {}
@@ -169,9 +205,9 @@ export async function GET(req: NextRequest) {
     : 100
 
   // ── Growth metrics ────────────────────────────────────────────
-  const prevUsers = users30DaysAgo ?? 0
+  const prevUsers = users30DaysAgo
   const userGrowthRate = prevUsers > 0
-    ? Math.round(((totalUsers ?? 0 - prevUsers) / prevUsers) * 100)
+    ? Math.round(((totalUsers - prevUsers) / prevUsers) * 100)
     : 0
 
   // New MRR this month
@@ -186,9 +222,8 @@ export async function GET(req: NextRequest) {
     : 0
 
   // ── Usage / Engagement ────────────────────────────────────────
-  const totalUsersNum = totalUsers ?? 0
-  const dau = dauCount ?? 0
-  const mau = totalUsersNum
+  const totalUsersNum = totalUsers
+  const mau = trueMau
   const stickiness = mau > 0 ? Math.round((dau / mau) * 100) : 0
   const docsPerUser = totalUsersNum > 0 ? Math.round((totalDocuments ?? 0) / totalUsersNum) : 0
   const messagesPerUser = totalUsersNum > 0 ? Math.round((totalChatMessages ?? 0) / totalUsersNum) : 0
@@ -205,13 +240,117 @@ export async function GET(req: NextRequest) {
     { count: users30dAgoCount },
     { count: users60dAgoCount },
     { count: retained30dCount },
+    { data: tokenData },
+    { data: allConversations },
+    { data: newSubsData },
   ] = await Promise.all([
     supabase.from("workspaces").select("*", { count: "exact", head: true }).gt("created_at", thirtyDaysAgo),
     supabase.from("workspace_members").select("*", { count: "exact", head: true }).gt("created_at", thirtyDaysAgo),
     supabase.from("profiles").select("*", { count: "exact", head: true }).lt("created_at", thirtyDaysAgo),
     supabase.from("profiles").select("*", { count: "exact", head: true }).lt("created_at", sixtyDaysAgo),
     supabase.from("chat_messages").select("user_id", { count: "exact", head: true }).gt("created_at", thirtyDaysAgo),
+    supabase.from("chat_messages").select("prompt_tokens, completion_tokens, total_tokens, conversation_id"),
+    // All-time messages per user (for power users + activation rate)
+    supabase.from("chat_conversations").select("id, user_id"),
+    // New subscriptions this month (for expansion MRR)
+    supabase.from("subscriptions").select("plan, user_id, created_at, status").gte("created_at", thirtyDaysAgo).order("created_at", { ascending: false }),
   ])
+
+  // ── Token usage aggregation ───────────────────────────────────
+  let totalPromptTokens = 0
+  let totalCompletionTokens = 0
+  let totalTokensUsed = 0
+  const tokenUsageByUser: Record<string, { prompt: number; completion: number; total: number }> = {}
+
+  // Fetch conversation → user_id mapping
+  const convIds = Array.from(new Set((tokenData ?? []).map((m: any) => m.conversation_id)))
+  let convUserMap: Record<string, string> = {}
+  if (convIds.length > 0) {
+    const { data: convs } = await supabase
+      .from("chat_conversations")
+      .select("id, user_id")
+      .in("id", convIds)
+    for (const c of convs ?? []) convUserMap[c.id] = c.user_id
+  }
+
+  for (const msg of tokenData ?? []) {
+    const tokens = msg as any
+    const pt = tokens.prompt_tokens ?? 0
+    const ct = tokens.completion_tokens ?? 0
+    const tt = tokens.total_tokens ?? 0
+    totalPromptTokens += pt
+    totalCompletionTokens += ct
+    totalTokensUsed += tt
+    const userId = convUserMap[tokens.conversation_id]
+    if (userId) {
+      if (!tokenUsageByUser[userId]) tokenUsageByUser[userId] = { prompt: 0, completion: 0, total: 0 }
+      tokenUsageByUser[userId].prompt += pt
+      tokenUsageByUser[userId].completion += ct
+      tokenUsageByUser[userId].total += tt
+    }
+  }
+  console.log(`[ADMIN STATS] Token usage: total=${totalTokensUsed} prompt=${totalPromptTokens} completion=${totalCompletionTokens} users=${Object.keys(tokenUsageByUser).length}`)
+
+  // ── Activation Rate & Power Users ─────────────────────────────
+  // allConvs = all conversations with user_id (from batch 2)
+  const messagesPerUserMap: Record<string, number> = {}
+  // Count messages per user via conversations
+  // We already have convUserMap from token data, but need all conversations
+  const allConvsData = allConversations ?? []
+  const allConvUserMap: Record<string, string> = {}
+  for (const c of allConvsData as any[]) allConvUserMap[c.id] = c.user_id
+  // Count unique users who have at least 1 conversation (activated)
+  const activatedUserIds = new Set(allConvsData.map((c: any) => c.user_id).filter(Boolean))
+  const activationRate = totalUsers > 0 ? Math.round((activatedUserIds.size / totalUsers) * 100) : 0
+
+  // Power users: users with >10 conversations
+  const convCountPerUser: Record<string, number> = {}
+  for (const c of allConvsData as any[]) {
+    if (c.user_id) convCountPerUser[c.user_id] = (convCountPerUser[c.user_id] ?? 0) + 1
+  }
+  const powerUsers = Object.values(convCountPerUser).filter(c => c >= 10).length
+
+  // ── MRR by Plan ───────────────────────────────────────────────
+  const mrrByPlan: Record<string, number> = {}
+  for (const sub of activeSubs ?? []) {
+    const plan = sub.plan ?? "solo"
+    if (plan === "team") {
+      const seats = seatsPerOwner[sub.user_id] ?? 1
+      mrrByPlan[plan] = (mrrByPlan[plan] ?? 0) + seats * PLAN_PRICE.team
+    } else {
+      mrrByPlan[plan] = (mrrByPlan[plan] ?? 0) + (PLAN_PRICE[plan] ?? 0)
+    }
+  }
+
+  // ── Net New MRR & Quick Ratio ─────────────────────────────────
+  // New MRR = subscriptions created this month (already computed as newMrrThisMonth)
+  // Churned MRR = canceledMrr (already computed)
+  // Expansion MRR = existing subs that upgraded to team this month (approx: new team subs this month that aren't brand new users)
+  const newSubsThisMonth = newSubsData ?? []
+  const expansionMrr = newSubsThisMonth
+    .filter((s: any) => s.status === "active" && s.plan === "team")
+    .reduce((sum: number, s: any) => sum + (PLAN_PRICE.team * (seatsPerOwner[s.user_id] ?? 1)), 0)
+  // Net New MRR = New + Expansion - Churned
+  const netNewMrr = newMrrThisMonth + expansionMrr - canceledMrr
+  // Quick Ratio = (New MRR + Expansion MRR) / (Churned MRR + Contraction MRR)
+  // We don't track contraction separately, so use churned MRR only
+  const quickRatio = canceledMrr > 0
+    ? Math.round(((newMrrThisMonth + expansionMrr) / canceledMrr) * 10) / 10
+    : 0
+
+  // ── Trial → Paid Funnel ───────────────────────────────────────
+  const totalSignups = totalUsers
+  const trialStarted = (activeTrials ?? 0) + expired + activeSubscriptions
+  const trialToPaid = activeSubscriptions
+  const funnelSignupToTrial = totalSignups > 0 ? Math.round((trialStarted / totalSignups) * 100) : 0
+  const funnelTrialToPaid = trialStarted > 0 ? Math.round((trialToPaid / trialStarted) * 100) : 0
+  const funnelSignupToPaid = totalSignups > 0 ? Math.round((trialToPaid / totalSignups) * 100) : 0
+
+  // ── Token Cost Economics ──────────────────────────────────────
+  const tokenCost = (totalPromptTokens / 1_000_000 * DEEPSEEK_PROMPT_PRICE) + (totalCompletionTokens / 1_000_000 * DEEPSEEK_COMPLETION_PRICE)
+  const costPerToken = totalTokensUsed > 0 ? tokenCost / totalTokensUsed * 1000 : 0 // $ per 1K tokens
+  const revenuePerToken = totalTokensUsed > 0 && mrr > 0 ? mrr / totalTokensUsed * 1000 : 0 // $ per 1K tokens
+  const grossMargin = mrr > 0 ? Math.round(((mrr - tokenCost) / mrr) * 100) : 100
 
   // ── Seat metrics ──────────────────────────────────────────────
   const avgSeatsPerTeam = teamOwnerIds.length > 0
@@ -253,6 +392,7 @@ export async function GET(req: NextRequest) {
 
     // Usage / Engagement
     dau,
+    wau,
     mau,
     stickiness,
     docsPerUser,
@@ -277,5 +417,26 @@ export async function GET(req: NextRequest) {
     retention30d,
     users30dAgo: users30dAgoCount ?? 0,
     users60dAgo: users60dAgoCount ?? 0,
+
+    // Token usage
+    totalPromptTokens,
+    totalCompletionTokens,
+    totalTokensUsed,
+    tokenUsageByUser,
+
+    // Investor metrics
+    mrrByPlan,
+    netNewMrr,
+    expansionMrr,
+    quickRatio,
+    activationRate,
+    powerUsers,
+    funnelSignupToTrial,
+    funnelTrialToPaid,
+    funnelSignupToPaid,
+    tokenCost: Math.round(tokenCost * 100) / 100,
+    costPerToken: Math.round(costPerToken * 10000) / 10000,
+    revenuePerToken: Math.round(revenuePerToken * 10000) / 10000,
+    grossMargin,
   })
 }

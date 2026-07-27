@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Save, ArrowLeft, Users, Clock, TrendingUp, CreditCard, Megaphone, BarChart2, UserCog, ShieldCheck, Building2, ChevronDown, ChevronRight, Crown, Shield, User, AlertTriangle, Bell, Activity, Zap, CheckCircle2, XCircle, ChevronLeft, RefreshCw } from "lucide-react"
+import { Loader2, Save, ArrowLeft, Users, Clock, TrendingUp, CreditCard, Megaphone, BarChart2, UserCog, ShieldCheck, Building2, ChevronDown, ChevronRight, Crown, Shield, User, AlertTriangle, Bell, Activity, Zap, CheckCircle2, XCircle, ChevronLeft, RefreshCw, MoreVertical, Download } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/app/auth-provider"
 import { getAppSettings } from "@/lib/app-settings"
@@ -43,6 +43,7 @@ type Stats = {
   soloToTeamRate: number
   // Usage
   dau: number
+  wau: number
   mau: number
   stickiness: number
   docsPerUser: number
@@ -63,6 +64,25 @@ type Stats = {
   retention30d: number
   users30dAgo: number
   users60dAgo: number
+  // Token usage
+  totalPromptTokens: number
+  totalCompletionTokens: number
+  totalTokensUsed: number
+  tokenUsageByUser: Record<string, { prompt: number; completion: number; total: number }>
+  // Investor metrics
+  mrrByPlan: Record<string, number>
+  netNewMrr: number
+  expansionMrr: number
+  quickRatio: number
+  activationRate: number
+  powerUsers: number
+  funnelSignupToTrial: number
+  funnelTrialToPaid: number
+  funnelSignupToPaid: number
+  tokenCost: number
+  costPerToken: number
+  revenuePerToken: number
+  grossMargin: number
 }
 
 export default function AdminPage() {
@@ -75,6 +95,10 @@ export default function AdminPage() {
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [stats, setStats] = useState<Stats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [inlineActionUser, setInlineActionUser] = useState<string | null>(null)
+  const [inlineActionLoading, setInlineActionLoading] = useState(false)
   const [bannerText, setBannerText] = useState("")
   const [bannerEnabled, setBannerEnabled] = useState(false)
   const [roleEmail, setRoleEmail] = useState("")
@@ -163,17 +187,22 @@ export default function AdminPage() {
   const [apiMonitorLoading, setApiMonitorLoading] = useState(true)
   const [apiMonitorRange, setApiMonitorRange] = useState<"24h" | "7d" | "30d">("24h")
   const [apiLogsPage, setApiLogsPage] = useState(0)
-  const [activeTab, setActiveTab] = useState<"dashboard" | "api" | "workspace" | "settings">("dashboard")
+  const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "api" | "settings">("dashboard")
   const [filterUserId, setFilterUserId] = useState<string | null>(null)
 
   // Companies & workspaces
-  type CompanyMember = { userId: string; email: string; role: string }
+  type CompanyMember = { userId: string; email: string; fullName: string; role: string }
   type CompanyWorkspace = { id: string; name: string; icon: string; createdAt: string; members: CompanyMember[] }
-  type Company = { userId: string; email: string; companyName: string; platformRole: string; workspaces: CompanyWorkspace[] }
+  type Company = { userId: string; email: string; fullName: string; jobTitle: string; companyName: string; platformRole: string; createdAt: string | null; lastSignIn: string | null; subStatus: string | null; subPlan: string | null; trialEnd: string | null; trialDaysRemaining: number | null; workspaces: CompanyWorkspace[] }
   const [companies, setCompanies] = useState<Company[]>([])
   const [companiesLoading, setCompaniesLoading] = useState(true)
   const [expandedCompany, setExpandedCompany] = useState<string | null>(null)
   const [expandedWs, setExpandedWs] = useState<string | null>(null)
+  const [companySearch, setCompanySearch] = useState("")
+  const [companyFilterStatus, setCompanyFilterStatus] = useState<string>("all")
+  const [companyFilterPlan, setCompanyFilterPlan] = useState<string>("all")
+  const [savedViews, setSavedViews] = useState<{ name: string; search: string; status: string; plan: string }[]>([])
+  const [savedViewName, setSavedViewName] = useState("")
 
   useEffect(() => {
     if (loading) return
@@ -197,9 +226,12 @@ export default function AdminPage() {
 
     async function loadStats() {
       try {
-        const res = await fetch(`/api/admin/stats?userId=${user!.id}`)
+        const res = await fetch(`/api/admin/stats?userId=${user!.id}`, { cache: "no-store" })
         const data = await res.json()
-        if (res.ok) setStats(data)
+        if (res.ok) {
+          setStats(data)
+          setLastUpdated(new Date())
+        }
       } catch {
       } finally {
         setStatsLoading(false)
@@ -211,7 +243,15 @@ export default function AdminPage() {
     loadCompanies()
     loadApiMonitor()
     loadCustomTrials()
-  }, [user, role, loading, router])
+
+    // Auto-refresh stats every 30 seconds
+    if (autoRefresh) {
+      const interval = setInterval(() => {
+        loadStats()
+      }, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [user, role, loading, router, autoRefresh])
 
   async function loadApiMonitor(range?: string, uid?: string | null) {
     try {
@@ -240,6 +280,62 @@ export default function AdminPage() {
     }, 30000)
     return () => clearInterval(interval)
   }, [user, role, apiMonitorRange])
+
+  // Auto-refresh companies & workspaces every 30 seconds
+  useEffect(() => {
+    if (!user || role !== "super_admin") return
+    const interval = setInterval(() => {
+      loadCompanies()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [user, role])
+
+  // Load saved views from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("admin_saved_views")
+      if (stored) setSavedViews(JSON.parse(stored))
+    } catch {}
+  }, [])
+
+  // Save view handler
+  const saveView = () => {
+    if (!savedViewName.trim()) return
+    const newView = { name: savedViewName.trim(), search: companySearch, status: companyFilterStatus, plan: companyFilterPlan }
+    const updated = [...savedViews.filter(v => v.name !== newView.name), newView]
+    setSavedViews(updated)
+    localStorage.setItem("admin_saved_views", JSON.stringify(updated))
+    setSavedViewName("")
+    toast({ title: "View saved", description: `"${newView.name}" saved to filters.` })
+  }
+
+  // Apply saved view
+  const applyView = (view: { name: string; search: string; status: string; plan: string }) => {
+    setCompanySearch(view.search)
+    setCompanyFilterStatus(view.status)
+    setCompanyFilterPlan(view.plan)
+  }
+
+  // Delete saved view
+  const deleteView = (name: string) => {
+    const updated = savedViews.filter(v => v.name !== name)
+    setSavedViews(updated)
+    localStorage.setItem("admin_saved_views", JSON.stringify(updated))
+  }
+
+  // Filtered companies
+  const filteredCompanies = companies.filter(c => {
+    if (companySearch.trim()) {
+      const q = companySearch.toLowerCase()
+      const matches = (c.companyName?.toLowerCase().includes(q) ||
+        c.fullName?.toLowerCase().includes(q) ||
+        c.email?.toLowerCase().includes(q))
+      if (!matches) return false
+    }
+    if (companyFilterStatus !== "all" && c.subStatus !== companyFilterStatus) return false
+    if (companyFilterPlan !== "all" && c.subPlan !== companyFilterPlan) return false
+    return true
+  })
 
   async function loadCompanies() {
     try {
@@ -317,6 +413,125 @@ export default function AdminPage() {
     }
   }
 
+  const handleInlineAction = async (email: string, action: "trial7" | "trial15" | "trial30" | "roleAdmin" | "roleUser") => {
+    if (!user || !email) return
+    setInlineActionLoading(true)
+    try {
+      if (action.startsWith("trial")) {
+        const days = parseInt(action.replace("trial", ""))
+        const res = await fetch("/api/admin/user-trial", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestingUserId: user.id, targetUserEmail: email, trialDays: days }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || "Failed")
+        toast({ title: "Trial updated", description: `${email} now has ${days} trial days.` })
+        loadCustomTrials()
+      } else if (action.startsWith("role")) {
+        const newRole = action.replace("role", "").toLowerCase()
+        const res = await fetch("/api/admin/set-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestingUserId: user.id, targetEmail: email, role: newRole }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || "Failed")
+        toast({ title: "Role updated", description: `${email} is now ${newRole}.` })
+      }
+      setInlineActionUser(null)
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Action failed", variant: "error" })
+    } finally {
+      setInlineActionLoading(false)
+    }
+  }
+
+  const exportCSV = () => {
+    if (!stats) return
+    const rows: string[][] = [
+      ["Metric", "Value"],
+      ["Report Date", new Date().toISOString()],
+      [""],
+      ["--- Platform ---", ""],
+      ["Total Users", String(stats.totalUsers)],
+      ["Active Trials", String(stats.activeTrials)],
+      ["Expired Trials", String(stats.expiredTrials)],
+      ["Active Subscriptions", String(stats.activeSubscriptions)],
+      ["Canceled Subscriptions", String(stats.canceledSubscriptions)],
+      [""],
+      ["--- Revenue ---", ""],
+      ["MRR", `$${stats.mrr}`],
+      ["ARR", `$${stats.arr}`],
+      ["ARPU", `$${stats.arpu}`],
+      ["LTV", `$${stats.ltv}`],
+      ["Net New MRR", `$${stats.netNewMrr}`],
+      ["Expansion MRR", `$${stats.expansionMrr}`],
+      ["Quick Ratio", String(stats.quickRatio)],
+      ["Gross Margin", `${stats.grossMargin}%`],
+      ["Conversion Rate", `${stats.conversionRate}%`],
+      ["Churn Rate", `${stats.churnRate}%`],
+      ["Revenue Churn Rate", `${stats.revenueChurnRate}%`],
+      ["Net Revenue Retention", `${stats.netRevenueRetention}%`],
+      ["MRR Growth Rate", `${stats.mrrGrowthRate}%`],
+      ["New MRR This Month", `$${stats.newMrrThisMonth}`],
+      [""],
+      ["--- Usage & Engagement ---", ""],
+      ["DAU", String(stats.dau)],
+      ["WAU", String(stats.wau)],
+      ["MAU", String(stats.mau)],
+      ["Stickiness", `${stats.stickiness}%`],
+      ["Activation Rate", `${stats.activationRate}%`],
+      ["Power Users", String(stats.powerUsers)],
+      ["Total Documents", String(stats.totalDocuments)],
+      ["Total Chat Messages", String(stats.totalChatMessages)],
+      ["Messages per User", String(stats.messagesPerUser)],
+      [""],
+      ["--- Token Usage ---", ""],
+      ["Prompt Tokens", String(stats.totalPromptTokens)],
+      ["Completion Tokens", String(stats.totalCompletionTokens)],
+      ["Total Tokens", String(stats.totalTokensUsed)],
+      ["AI Cost (est.)", `$${stats.tokenCost}`],
+      ["Cost per 1K Tokens", `$${stats.costPerToken.toFixed(4)}`],
+      ["Revenue per 1K Tokens", `$${stats.revenuePerToken.toFixed(4)}`],
+      [""],
+      ["--- Funnel ---", ""],
+      ["Signup → Trial", `${stats.funnelSignupToTrial}%`],
+      ["Trial → Paid", `${stats.funnelTrialToPaid}%`],
+      ["Signup → Paid", `${stats.funnelSignupToPaid}%`],
+      [""],
+      ["--- Growth ---", ""],
+      ["User Growth Rate", `${stats.userGrowthRate}%`],
+      ["Retention 30d", `${stats.retention30d}%`],
+      [""],
+      ["--- Workspace ---", ""],
+      ["Total Workspaces", String(stats.totalWorkspaces)],
+      ["Total Active Seats", String(stats.totalActiveSeats)],
+      ["Avg Seats per Team", String(stats.avgSeatsPerTeam)],
+      ["New Workspaces (30d)", String(stats.newWorkspaces30d)],
+      ["New Seats (30d)", String(stats.newSeats30d)],
+    ]
+
+    // Add per-user token breakdown
+    if (stats.tokenUsageByUser && Object.keys(stats.tokenUsageByUser).length > 0) {
+      rows.push([""], ["--- Per-User Token Usage ---", ""])
+      rows.push(["User ID", "Prompt Tokens", "Completion Tokens", "Total Tokens"])
+      for (const [userId, usage] of Object.entries(stats.tokenUsageByUser).sort(([, a], [, b]) => b.total - a.total)) {
+        rows.push([userId, String(usage.prompt), String(usage.completion), String(usage.total)])
+      }
+    }
+
+    const csv = rows.map(r => r.map(cell => `"${cell.replace(/"/g, '""')}"`).join(",")).join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `admin-report-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    toast({ title: "Report exported", description: "CSV downloaded successfully." })
+  }
+
   if (loading || settingsLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -348,8 +563,8 @@ export default function AdminPage() {
         <div className="flex items-center gap-1 rounded-xl border border-white/5 bg-[#1a1f2b] p-1.5">
           {([
             { id: "dashboard", label: "Dashboard", icon: BarChart2 },
+            { id: "users", label: "Companies & Users", icon: Users },
             { id: "api", label: "API Monitoring", icon: Activity },
-            { id: "workspace", label: "Workspaces", icon: Building2 },
             { id: "settings", label: "Settings", icon: UserCog },
           ] as const).map(tab => (
             <button
@@ -371,6 +586,34 @@ export default function AdminPage() {
         {/* ───── Dashboard Tab ───── */}
         {activeTab === "dashboard" && (
           <>
+        {/* Auto-refresh control */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            {lastUpdated && <span>Updated {lastUpdated.toLocaleTimeString()}</span>}
+            {autoRefresh && lastUpdated && <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />Live</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exportCSV}
+              disabled={!stats}
+              className="flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
+            >
+              <Download className="h-3 w-3" />
+              Export CSV
+            </button>
+            <button
+              onClick={() => setAutoRefresh(v => !v)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors",
+                autoRefresh ? "bg-emerald-500/10 text-emerald-400" : "bg-white/5 text-muted-foreground hover:text-white"
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", autoRefresh ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground")} />
+              {autoRefresh ? "Auto-refresh (30s)" : "Paused"}
+            </button>
+          </div>
+        </div>
+
         {/* Platform Stats */}
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center gap-2">
@@ -492,13 +735,295 @@ export default function AdminPage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
                 { label: "DAU", value: stats?.dau ?? 0, sub: t("adminActive24h"), color: "text-blue-400" },
-                { label: "MAU", value: stats?.mau ?? 0, sub: t("adminTotalRegistered"), color: "text-blue-400" },
+                { label: "WAU", value: stats?.wau ?? 0, sub: "Active last 7 days", color: "text-blue-400" },
+                { label: "MAU", value: stats?.mau ?? 0, sub: "Active last 30 days", color: "text-blue-400" },
                 { label: t("adminStickiness"), value: `${stats?.stickiness ?? 0}%`, sub: t("adminDauMauRatio"), color: (stats?.stickiness ?? 0) > 20 ? "text-emerald-400" : "text-[#FFBF00]" },
                 { label: t("adminDocsPerUser"), value: stats?.docsPerUser ?? 0, sub: t("adminAvgDocuments"), color: "text-purple-400" },
                 { label: t("adminMessagesPerUser"), value: stats?.messagesPerUser ?? 0, sub: t("adminAvgChatMessages"), color: "text-purple-400" },
                 { label: t("adminTotalDocs"), value: stats?.totalDocuments ?? 0, sub: t("adminAllDocuments"), color: "text-muted-foreground" },
                 { label: t("adminTotalMessages"), value: stats?.totalChatMessages ?? 0, sub: t("adminAllChatMessages"), color: "text-muted-foreground" },
                 { label: t("adminUsers30dAgo"), value: stats?.users30dAgo ?? 0, sub: t("adminRegistered30d"), color: "text-muted-foreground" },
+              ].map((m) => (
+                <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <p className="text-xs text-muted-foreground">{m.label}</p>
+                  <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Workspace & Seats */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Building2 className="h-3.5 w-3.5 text-purple-400/60" />
+            <h2 className="text-[10px] font-semibold text-purple-400/60 uppercase tracking-widest">{t("adminWorkspaceSeats")}</h2>
+          </div>
+          {statsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: t("adminTotalWorkspaces"), value: stats?.totalWorkspaces ?? 0, sub: t("adminAllWorkspaces"), color: "text-blue-400" },
+                { label: t("adminNewWorkspaces30d"), value: stats?.newWorkspaces30d ?? 0, sub: t("adminCreatedThisMonth"), color: "text-emerald-400" },
+                { label: t("adminSeatsPerWorkspace"), value: stats?.seatsPerWorkspace ?? 0, sub: t("adminAvgTeamSize"), color: "text-purple-400" },
+                { label: t("adminTotalActiveSeats"), value: stats?.totalActiveSeats ?? 0, sub: t("adminTeamPlanSeats"), color: "text-emerald-400" },
+                { label: t("adminAvgSeatsPerTeam"), value: stats?.avgSeatsPerTeam ?? 0, sub: t("adminTeamPlanOnly"), color: "text-[#FFBF00]" },
+                { label: t("adminNewSeats30d"), value: stats?.newSeats30d ?? 0, sub: t("adminMembersAddedThisMonth"), color: "text-emerald-400" },
+              ].map((m) => (
+                <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <p className="text-xs text-muted-foreground">{m.label}</p>
+                  <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Token Usage */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Zap className="h-3.5 w-3.5 text-[#FFBF00]/60" />
+            <h2 className="text-[10px] font-semibold text-[#FFBF00]/60 uppercase tracking-widest">Token Usage</h2>
+          </div>
+          {statsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  { label: "Prompt Tokens", value: (stats?.totalPromptTokens ?? 0).toLocaleString(), sub: "Total input tokens", color: "text-blue-400" },
+                  { label: "Completion Tokens", value: (stats?.totalCompletionTokens ?? 0).toLocaleString(), sub: "Total output tokens", color: "text-emerald-400" },
+                  { label: "Total Tokens", value: (stats?.totalTokensUsed ?? 0).toLocaleString(), sub: "All token usage", color: "text-[#FFBF00]" },
+                  { label: "Avg / User", value: stats && stats.totalUsers > 0 ? Math.round((stats.totalTokensUsed ?? 0) / stats.totalUsers).toLocaleString() : "0", sub: "Tokens per registered user", color: "text-purple-400" },
+                ].map((m) => (
+                  <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                    <p className="text-xs text-muted-foreground">{m.label}</p>
+                    <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Per-user breakdown */}
+              {stats?.tokenUsageByUser && Object.entries(stats.tokenUsageByUser).filter(([, u]) => u.total > 0).length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Per-User Breakdown</p>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                    {Object.entries(stats.tokenUsageByUser)
+                      .filter(([, u]) => u.total > 0)
+                      .sort(([, a], [, b]) => b.total - a.total)
+                      .map(([userId, usage]) => {
+                        const company = companies.find(c => c.userId === userId)
+                        const displayName = company ? (company.companyName || company.fullName || company.email) : userId.slice(0, 8) + "…"
+                        const maxTotal = Math.max(...Object.values(stats.tokenUsageByUser).map(u => u.total).filter(t => t > 0))
+                        const pct = maxTotal > 0 ? Math.round((usage.total / maxTotal) * 100) : 0
+                        return (
+                          <div key={userId} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5">
+                            <div className="flex items-center gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-medium text-white/90">{displayName}</p>
+                                <div className="mt-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                  <div className="h-full rounded-full bg-[#FFBF00]/60" style={{ width: `${pct}%` }} />
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <p className="text-xs font-bold text-[#FFBF00]">{usage.total.toLocaleString()}</p>
+                                <p className="text-[10px] text-muted-foreground">{usage.prompt.toLocaleString()} in · {usage.completion.toLocaleString()} out</p>
+                              </div>
+                            </div>
+                            {company && (
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                                {company.email && company.email !== displayName && (
+                                  <span className="truncate">{company.email}</span>
+                                )}
+                                {company.fullName && company.fullName !== displayName && (
+                                  <span className="rounded bg-white/5 px-1.5 py-0.5">{company.fullName}</span>
+                                )}
+                                {company.subPlan && (
+                                  <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-400 capitalize">{company.subPlan}</span>
+                                )}
+                                {company.subStatus && (
+                                  <span className={cn(
+                                    "rounded px-1.5 py-0.5 capitalize",
+                                    company.subStatus === "active" ? "bg-emerald-500/10 text-emerald-400" :
+                                    company.subStatus === "trialing" ? "bg-[#FFBF00]/10 text-[#FFBF00]" :
+                                    "bg-red-500/10 text-red-400"
+                                  )}>{company.subStatus}</span>
+                                )}
+                                {company.platformRole && company.platformRole !== "user" && (
+                                  <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400 capitalize">{company.platformRole}</span>
+                                )}
+                                {/* Inline actions */}
+                                <div className="relative ml-auto">
+                                  <button
+                                    onClick={() => setInlineActionUser(inlineActionUser === userId ? null : userId)}
+                                    disabled={inlineActionLoading}
+                                    className="rounded p-1 text-muted-foreground hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                                  >
+                                    {inlineActionLoading && inlineActionUser === userId ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <MoreVertical className="h-3 w-3" />
+                                    )}
+                                  </button>
+                                  {inlineActionUser === userId && (
+                                    <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-white/10 bg-[#1a1f2b] p-1 shadow-xl">
+                                      <p className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Set Trial</p>
+                                      {[
+                                        { label: "7 days", action: "trial7" as const },
+                                        { label: "15 days", action: "trial15" as const },
+                                        { label: "30 days", action: "trial30" as const },
+                                      ].map(opt => (
+                                        <button
+                                          key={opt.action}
+                                          onClick={() => company.email && handleInlineAction(company.email, opt.action)}
+                                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-[11px] text-white/80 hover:bg-white/10 transition-colors"
+                                        >
+                                          <Clock className="h-3 w-3 text-[#FFBF00]" />
+                                          {opt.label}
+                                        </button>
+                                      ))}
+                                      <div className="my-1 h-px bg-white/10" />
+                                      <p className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Set Role</p>
+                                      <button
+                                        onClick={() => company.email && handleInlineAction(company.email, "roleAdmin")}
+                                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-[11px] text-white/80 hover:bg-white/10 transition-colors"
+                                      >
+                                        <Shield className="h-3 w-3 text-blue-400" />
+                                        Admin
+                                      </button>
+                                      <button
+                                        onClick={() => company.email && handleInlineAction(company.email, "roleUser")}
+                                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-[11px] text-white/80 hover:bg-white/10 transition-colors"
+                                      >
+                                        <User className="h-3 w-3 text-muted-foreground" />
+                                        User
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Unit Economics */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <TrendingUp className="h-3.5 w-3.5 text-emerald-400/60" />
+            <h2 className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-widest">Unit Economics</h2>
+          </div>
+          {statsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  { label: "Net New MRR", value: `${stats?.netNewMrr && stats.netNewMrr >= 0 ? "+" : ""}$${stats?.netNewMrr ?? 0}`, sub: "New + Expansion - Churn", color: (stats?.netNewMrr ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
+                  { label: "Expansion MRR", value: `$${stats?.expansionMrr ?? 0}`, sub: "From upgrades this month", color: "text-emerald-400" },
+                  { label: "Quick Ratio", value: stats?.quickRatio ?? 0, sub: "Growth efficiency (4+ is great)", color: (stats?.quickRatio ?? 0) >= 4 ? "text-emerald-400" : (stats?.quickRatio ?? 0) >= 2 ? "text-[#FFBF00]" : "text-red-400" },
+                  { label: "Gross Margin", value: `${stats?.grossMargin ?? 100}%`, sub: "Revenue after AI costs", color: (stats?.grossMargin ?? 100) > 80 ? "text-emerald-400" : "text-[#FFBF00]" },
+                  { label: "AI Cost / Month", value: `$${stats?.tokenCost ?? 0}`, sub: "DeepSeek API spend", color: "text-muted-foreground" },
+                  { label: "Cost / 1K Tokens", value: `$${(stats?.costPerToken ?? 0).toFixed(4)}`, sub: "Per 1K tokens used", color: "text-blue-400" },
+                  { label: "Revenue / 1K Tokens", value: `$${(stats?.revenuePerToken ?? 0).toFixed(4)}`, sub: "MRR per 1K tokens", color: "text-emerald-400" },
+                  { label: "LTV:CAC", value: "—", sub: "Needs ad spend data", color: "text-muted-foreground" },
+                ].map((m) => (
+                  <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                    <p className="text-xs text-muted-foreground">{m.label}</p>
+                    <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
+                  </div>
+                ))}
+              </div>
+              {stats?.mrrByPlan && Object.keys(stats.mrrByPlan).length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">MRR by Plan</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(stats.mrrByPlan).map(([plan, revenue]) => (
+                      <span key={plan} className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400 capitalize">
+                        {plan}: ${revenue}/mo
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Trial → Paid Funnel */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <CreditCard className="h-3.5 w-3.5 text-[#FFBF00]/60" />
+            <h2 className="text-[10px] font-semibold text-[#FFBF00]/60 uppercase tracking-widest">Trial → Paid Funnel</h2>
+          </div>
+          {statsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { label: "Signups", value: stats?.totalUsers ?? 0, pct: 100, color: "bg-blue-500/60" },
+                { label: "Started Trial", value: (stats?.activeTrials ?? 0) + (stats?.expiredTrials ?? 0) + (stats?.activeSubscriptions ?? 0), pct: stats?.funnelSignupToTrial ?? 0, color: "bg-[#FFBF00]/60" },
+                { label: "Converted to Paid", value: stats?.activeSubscriptions ?? 0, pct: stats?.funnelSignupToPaid ?? 0, color: "bg-emerald-500/60" },
+              ].map((stage, i) => (
+                <div key={stage.label}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-white/90">{stage.label}</span>
+                    <span className="text-xs text-muted-foreground">{stage.value.toLocaleString()} ({stage.pct}%)</span>
+                  </div>
+                  <div className="h-7 rounded-lg bg-white/5 overflow-hidden">
+                    <div className={cn("h-full rounded-lg flex items-center justify-end px-2 transition-all", stage.color)} style={{ width: `${Math.max(stage.pct, 2)}%` }}>
+                      {stage.pct > 10 && <span className="text-[10px] font-bold text-white">{stage.pct}%</span>}
+                    </div>
+                  </div>
+                  {i < 2 && (
+                    <div className="flex items-center justify-between mt-1 mb-1">
+                      <span className="text-[10px] text-muted-foreground">
+                        {i === 0 ? `→ ${stats?.funnelSignupToTrial ?? 0}% start trial` : `→ ${stats?.funnelTrialToPaid ?? 0}% trial → paid`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Growth & Activation */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Users className="h-3.5 w-3.5 text-blue-400/60" />
+            <h2 className="text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest">Growth & Activation</h2>
+          </div>
+          {statsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: "Activation Rate", value: `${stats?.activationRate ?? 0}%`, sub: "Signups who sent ≥1 message", color: (stats?.activationRate ?? 0) > 50 ? "text-emerald-400" : (stats?.activationRate ?? 0) > 25 ? "text-[#FFBF00]" : "text-red-400" },
+                { label: "Power Users", value: stats?.powerUsers ?? 0, sub: "Users with ≥10 conversations", color: "text-purple-400" },
+                { label: "User Growth", value: `${stats?.userGrowthRate ?? 0}%`, sub: "Last 30 days", color: "text-blue-400" },
+                { label: "Retention 30d", value: `${stats?.retention30d ?? 0}%`, sub: "Users active after 30d", color: (stats?.retention30d ?? 0) > 50 ? "text-emerald-400" : "text-red-400" },
               ].map((m) => (
                 <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
                   <p className="text-xs text-muted-foreground">{m.label}</p>
@@ -1217,39 +1742,9 @@ export default function AdminPage() {
           </>
         )}
 
-        {/* ───── Workspace Tab ───── */}
-        {activeTab === "workspace" && (
+        {/* ───── Companies & Users Tab ───── */}
+        {activeTab === "users" && (
           <>
-        {/* Workspace & Seats */}
-        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <Building2 className="h-3.5 w-3.5 text-purple-400/60" />
-            <h2 className="text-[10px] font-semibold text-purple-400/60 uppercase tracking-widest">{t("adminWorkspaceSeats")}</h2>
-          </div>
-          {statsLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                { label: t("adminTotalWorkspaces"), value: stats?.totalWorkspaces ?? 0, sub: t("adminAllWorkspaces"), color: "text-blue-400" },
-                { label: t("adminNewWorkspaces30d"), value: stats?.newWorkspaces30d ?? 0, sub: t("adminCreatedThisMonth"), color: "text-emerald-400" },
-                { label: t("adminSeatsPerWorkspace"), value: stats?.seatsPerWorkspace ?? 0, sub: t("adminAvgTeamSize"), color: "text-purple-400" },
-                { label: t("adminTotalActiveSeats"), value: stats?.totalActiveSeats ?? 0, sub: t("adminTeamPlanSeats"), color: "text-emerald-400" },
-                { label: t("adminAvgSeatsPerTeam"), value: stats?.avgSeatsPerTeam ?? 0, sub: t("adminTeamPlanOnly"), color: "text-[#FFBF00]" },
-                { label: t("adminNewSeats30d"), value: stats?.newSeats30d ?? 0, sub: t("adminMembersAddedThisMonth"), color: "text-emerald-400" },
-              ].map((m) => (
-                <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                  <p className="text-xs text-muted-foreground">{m.label}</p>
-                  <p className={cn("text-xl font-bold mt-0.5", m.color)}>{m.value}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">{m.sub}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
         {/* Companies & Workspaces */}
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-1 flex items-center gap-2">
@@ -1258,32 +1753,180 @@ export default function AdminPage() {
           </div>
           <p className="mb-4 text-xs text-muted-foreground">{t("adminCompaniesDesc")}</p>
 
+          {/* Search & Filters */}
+          <div className="mb-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                placeholder="Search by name, company, or email…"
+                value={companySearch}
+                onChange={(e) => setCompanySearch(e.target.value)}
+                className="flex-1 min-w-[200px] rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white placeholder:text-muted-foreground focus:border-emerald-500/40 focus:outline-none"
+              />
+              <select
+                value={companyFilterStatus}
+                onChange={(e) => setCompanyFilterStatus(e.target.value)}
+                className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white focus:border-emerald-500/40 focus:outline-none"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="trialing">Trialing</option>
+                <option value="canceled">Canceled</option>
+              </select>
+              <select
+                value={companyFilterPlan}
+                onChange={(e) => setCompanyFilterPlan(e.target.value)}
+                className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white focus:border-emerald-500/40 focus:outline-none"
+              >
+                <option value="all">All Plans</option>
+                <option value="solo">Solo</option>
+                <option value="team">Team</option>
+                <option value="enterprise">Enterprise</option>
+              </select>
+            </div>
+
+            {/* Saved views */}
+            <div className="flex flex-wrap items-center gap-2">
+              {savedViews.length > 0 && (
+                <>
+                  <span className="text-[10px] text-muted-foreground">Saved:</span>
+                  {savedViews.map(v => (
+                    <div key={v.name} className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
+                      <button
+                        onClick={() => applyView(v)}
+                        className="text-[10px] font-medium text-white/80 hover:text-white"
+                      >
+                        {v.name}
+                      </button>
+                      <button
+                        onClick={() => deleteView(v.name)}
+                        className="text-muted-foreground hover:text-red-400"
+                      >
+                        <XCircle className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+              <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  placeholder="View name…"
+                  value={savedViewName}
+                  onChange={(e) => setSavedViewName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveView()}
+                  className="w-24 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] text-white placeholder:text-muted-foreground focus:border-emerald-500/40 focus:outline-none"
+                />
+                <button
+                  onClick={saveView}
+                  disabled={!savedViewName.trim()}
+                  className="rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-400 hover:bg-emerald-500/15 disabled:opacity-50"
+                >
+                  Save View
+                </button>
+              </div>
+              {(companySearch || companyFilterStatus !== "all" || companyFilterPlan !== "all") && (
+                <button
+                  onClick={() => { setCompanySearch(""); setCompanyFilterStatus("all"); setCompanyFilterPlan("all") }}
+                  className="text-[10px] text-muted-foreground hover:text-white"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+
+            {/* Result count */}
+            <p className="text-[10px] text-muted-foreground">
+              Showing {filteredCompanies.length} of {companies.length} {companies.length === 1 ? "company" : "companies"}
+            </p>
+          </div>
+
           {companiesLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> {t("adminLoading")}
             </div>
-          ) : companies.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("adminNoCompanies")}</p>
+          ) : filteredCompanies.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{companies.length === 0 ? t("adminNoCompanies") : "No companies match your filters."}</p>
           ) : (
             <div className="space-y-2">
-              {companies.map(c => (
-                <div key={c.userId} className="rounded-lg border border-white/5 bg-background overflow-hidden">
+              {filteredCompanies.map(c => {
+                const displayName = c.companyName || c.fullName || c.email
+                const initials = displayName.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
+                const isTrial = c.subStatus === "trialing"
+                const isActive = c.subStatus === "active"
+                const isCanceled = c.subStatus === "canceled"
+                const isNoSub = !c.subStatus
+                const trialUrgent = isTrial && c.trialDaysRemaining !== null && c.trialDaysRemaining <= 3
+                return (
+                <div key={c.userId} className="rounded-xl border border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent overflow-hidden transition-all hover:border-white/10">
                   {/* Company header row */}
                   <button
                     onClick={() => setExpandedCompany(expandedCompany === c.userId ? null : c.userId)}
-                    className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-white/[0.03]"
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.02]"
                   >
                     {expandedCompany === c.userId
                       ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                       : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                     }
-                    <Building2 className="h-4 w-4 shrink-0 text-blue-400" />
+                    {/* Avatar circle */}
+                    <div className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                      c.platformRole === "super_admin" ? "bg-[#FFBF00]/15 text-[#FFBF00]" :
+                      c.platformRole === "admin" ? "bg-emerald-500/15 text-emerald-400" :
+                      "bg-blue-500/15 text-blue-400"
+                    )}>
+                      {initials}
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm font-medium text-white">{c.companyName}</p>
-                      <p className="truncate text-xs text-muted-foreground">{c.email}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-white">{displayName}</p>
+                        {c.workspaces.length > 0 && (
+                          <span className="shrink-0 rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            {c.workspaces.length} ws
+                          </span>
+                        )}
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground mt-0.5">
+                        {c.fullName && c.fullName !== displayName && c.fullName}{c.jobTitle && (c.fullName && c.fullName !== displayName) ? ` · ` : ``}{c.jobTitle}{(c.fullName !== displayName || c.jobTitle) ? ` · ` : ``}{c.email !== displayName ? c.email : ``}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {c.createdAt && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/70">
+                            <Clock className="h-2.5 w-2.5" />
+                            {new Date(c.createdAt).toLocaleDateString()}
+                          </span>
+                        )}
+                        {isTrial && c.trialDaysRemaining !== null && (
+                          <span className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                            trialUrgent ? "bg-[#FFBF00]/20 text-[#FFBF00] ring-1 ring-[#FFBF00]/30" : "bg-emerald-500/10 text-emerald-400/90"
+                          )}>
+                            <Zap className="h-2.5 w-2.5" />
+                            {c.trialDaysRemaining}d left · {(c.subPlan || "Solo").charAt(0).toUpperCase() + (c.subPlan || "Solo").slice(1)} Trial
+                          </span>
+                        )}
+                        {isActive && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                            <CheckCircle2 className="h-2.5 w-2.5" />
+                            {(c.subPlan || "Solo").charAt(0).toUpperCase() + (c.subPlan || "Solo").slice(1)} · Active
+                          </span>
+                        )}
+                        {isCanceled && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-400">
+                            <XCircle className="h-2.5 w-2.5" />
+                            Canceled
+                          </span>
+                        )}
+                        {isNoSub && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-medium text-orange-400">
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                            {c.lastSignIn ? `Last login ${new Date(c.lastSignIn).toLocaleDateString()}` : "Never logged in"}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <span className={cn(
-                      "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                      "shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold",
                       c.platformRole === "super_admin" ? "border-[#FFBF00]/30 bg-[#FFBF00]/10 text-[#FFBF00]" :
                       c.platformRole === "admin" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" :
                       c.platformRole === "manager" ? "border-blue-500/30 bg-blue-500/10 text-blue-400" :
@@ -1291,14 +1934,13 @@ export default function AdminPage() {
                     )}>
                       {c.platformRole}
                     </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{c.workspaces.length} ws</span>
                   </button>
 
                   {/* Expanded: workspaces */}
                   {expandedCompany === c.userId && (
-                    <div className="border-t border-white/5 p-3 space-y-2">
+                    <div className="border-t border-white/5 p-3 space-y-2 bg-black/20">
                       {c.workspaces.length === 0 ? (
-                        <p className="px-2 py-2 text-xs text-muted-foreground">{t("adminNoWorkspaces")}</p>
+                        <p className="px-2 py-3 text-xs text-muted-foreground text-center">{t("adminNoWorkspaces")}</p>
                       ) : (
                         c.workspaces.map(ws => (
                           <div key={ws.id} className="rounded-lg border border-white/5 bg-white/[0.02] overflow-hidden">
@@ -1313,16 +1955,28 @@ export default function AdminPage() {
                               }
                               {(() => { const Icon = getFirstDeptIcon(ws.icon); return <Icon className="h-4 w-4 shrink-0 text-muted-foreground" /> })()}
                               <span className="flex-1 truncate text-sm font-medium">{ws.name}</span>
-                              <span className="shrink-0 text-xs text-muted-foreground">{ws.members.length} {ws.members.length !== 1 ? t("adminMembers") : t("adminMember")}</span>
+                              <span className="shrink-0 rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{ws.members.length} {ws.members.length !== 1 ? t("adminMembers") : t("adminMember")}</span>
                             </button>
 
                             {/* Expanded: members */}
                             {expandedWs === ws.id && (
                               <div className="border-t border-white/5 p-2 space-y-1">
-                                {ws.members.map(m => (
-                                  <div key={m.userId} className="flex items-center gap-2 rounded-md px-3 py-1.5">
-                                    {m.role === "owner" && <Crown className="h-3 w-3 shrink-0 text-[#FFBF00]" />}
-                                    <span className="flex-1 truncate text-xs text-white/80">{m.email}</span>
+                                {ws.members.map(m => {
+                                  const mInitials = (m.fullName || m.email).split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
+                                  return (
+                                  <div key={m.userId} className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-white/[0.02] transition-colors">
+                                    <div className={cn(
+                                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                                      m.role === "owner" ? "bg-[#FFBF00]/15 text-[#FFBF00]" :
+                                      m.role === "admin" ? "bg-emerald-500/15 text-emerald-400" :
+                                      "bg-blue-500/15 text-blue-400"
+                                    )}>
+                                      {mInitials}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="truncate text-xs font-medium text-white/90">{m.fullName || m.email}</p>
+                                      <p className="truncate text-[10px] text-muted-foreground">{m.email}</p>
+                                    </div>
                                     <span className={cn(
                                       "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize",
                                       m.role === "owner" ? "border-[#FFBF00]/30 bg-[#FFBF00]/10 text-[#FFBF00]" :
@@ -1332,7 +1986,8 @@ export default function AdminPage() {
                                       {m.role}
                                     </span>
                                   </div>
-                                ))}
+                                  )
+                                })}
                               </div>
                             )}
                           </div>
@@ -1341,16 +1996,12 @@ export default function AdminPage() {
                     </div>
                   )}
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
-          </>
-        )}
 
-        {/* ───── Settings Tab ───── */}
-        {activeTab === "settings" && (
-          <>
         {/* User Management */}
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-1 flex items-center gap-2">
@@ -1517,6 +2168,70 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
+          </>
+        )}
+
+        {/* ───── Settings Tab ───── */}
+        {activeTab === "settings" && (
+          <>
+        {/* Trial Configuration */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-1 flex items-center gap-2">
+            <Clock className="h-3.5 w-3.5 text-[#FFBF00]/60" />
+            <h2 className="text-[10px] font-semibold text-[#FFBF00]/60 uppercase tracking-widest">{t("adminTrialConfig")}</h2>
+          </div>
+          <p className="mb-4 text-xs text-muted-foreground">{t("adminTrialDesc")}</p>
+          <div className="space-y-4">
+            {/* Presets */}
+            <div>
+              <Label className="mb-2 block">{t("adminQuickPresets")}</Label>
+              <div className="flex flex-wrap gap-2">
+                {TRIAL_PRESETS.map((p) => (
+                  <button
+                    key={p.value}
+                    onClick={() => setTrialDays(p.value)}
+                    className={cn(
+                      "rounded-lg border px-4 py-1.5 text-sm font-medium transition-colors",
+                      trialDays === p.value
+                        ? "border-[#FFBF00] bg-[#FFBF00]/10 text-[#FFBF00]"
+                        : "border-border text-muted-foreground hover:border-[#FFBF00]/50 hover:text-foreground"
+                    )}
+                  >
+                    {p.value} {t("adminDays")}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom input */}
+            <div>
+              <Label htmlFor="trialDays">{t("adminCustomValue")}</Label>
+              <div className="mt-1.5 flex items-center gap-3">
+                <Input
+                  id="trialDays"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={trialDays}
+                  onChange={(e) => setTrialDays(parseInt(e.target.value, 10) || 1)}
+                  className="w-32"
+                />
+                <span className="text-sm text-muted-foreground">
+                  = <span className="font-semibold text-foreground">{trialDays} {t("adminDaysFreeAccess")}</span>
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveTrial}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {t("adminSaveTrial")}
+            </button>
+          </div>
+        </div>
 
         {/* Audit Trail */}
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
@@ -1579,65 +2294,6 @@ export default function AdminPage() {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Trial Configuration */}
-        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
-          <div className="mb-1 flex items-center gap-2">
-            <Clock className="h-3.5 w-3.5 text-[#FFBF00]/60" />
-            <h2 className="text-[10px] font-semibold text-[#FFBF00]/60 uppercase tracking-widest">{t("adminTrialConfig")}</h2>
-          </div>
-          <p className="mb-4 text-xs text-muted-foreground">{t("adminTrialDesc")}</p>
-          <div className="space-y-4">
-            {/* Presets */}
-            <div>
-              <Label className="mb-2 block">{t("adminQuickPresets")}</Label>
-              <div className="flex flex-wrap gap-2">
-                {TRIAL_PRESETS.map((p) => (
-                  <button
-                    key={p.value}
-                    onClick={() => setTrialDays(p.value)}
-                    className={cn(
-                      "rounded-lg border px-4 py-1.5 text-sm font-medium transition-colors",
-                      trialDays === p.value
-                        ? "border-[#FFBF00] bg-[#FFBF00]/10 text-[#FFBF00]"
-                        : "border-border text-muted-foreground hover:border-[#FFBF00]/50 hover:text-foreground"
-                    )}
-                  >
-                    {p.value} {t("adminDays")}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom input */}
-            <div>
-              <Label htmlFor="trialDays">{t("adminCustomValue")}</Label>
-              <div className="mt-1.5 flex items-center gap-3">
-                <Input
-                  id="trialDays"
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={trialDays}
-                  onChange={(e) => setTrialDays(parseInt(e.target.value, 10) || 1)}
-                  className="w-32"
-                />
-                <span className="text-sm text-muted-foreground">
-                  = <span className="font-semibold text-foreground">{trialDays} {t("adminDaysFreeAccess")}</span>
-                </span>
-              </div>
-            </div>
-
-            <button
-              onClick={handleSaveTrial}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {t("adminSaveTrial")}
-            </button>
-          </div>
         </div>
 
         {/* Announcement Banner */}

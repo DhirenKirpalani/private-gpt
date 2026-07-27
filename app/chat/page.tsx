@@ -343,6 +343,21 @@ export default function ChatPage() {
     messageCountRef.current = newCount
   }, [messages])
 
+  // Auto-scroll during streaming (content updates without message count change)
+  useEffect(() => {
+    if (loading && messages.length > 0) {
+      const last = messages[messages.length - 1]
+      if (last.role === "assistant" && last.content) {
+        requestAnimationFrame(() => {
+          const container = messagesContainerRef.current
+          if (container) {
+            container.scrollTo({ top: container.scrollHeight, behavior: "auto" })
+          }
+        })
+      }
+    }
+  }, [messages, loading])
+
   const toggleSidebar = () => {
     setSidebarOpen(v => !v)
   }
@@ -715,38 +730,121 @@ export default function ChatPage() {
           messages: apiMessages,
           systemPrompt: finalSystemPrompt,
           responseLength: aiProfile?.response_length || "Standard",
+          stream: true,
         }),
         signal: controller.signal,
       })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || "Request failed")
-      // Extract any AI action blocks for inline confirm buttons
-      const extracted = extractAiAction(data.content, userMsg.content)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || "Request failed")
+      }
+
+      // ── Stream response with typing indicator ───────────────────
+      const assistantMsgId = (Date.now() + 1).toString()
       const assistantMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: assistantMsgId,
         role: "assistant",
-        content: extracted.content,
-        action: extracted.action,
+        content: "",
+        action: undefined,
         confidence: "high",
         timestamp: new Date(),
         sources: wsData?.sources?.map((s: any) => s.url).filter(Boolean) || undefined,
       }
       setMessages(prev => [...prev, assistantMsg])
-      // Save assistant message to DB with ACTION block base64-encoded so buttons persist on refresh
-      const contentToSave = assistantMsg.action
-        ? `${assistantMsg.content}\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(assistantMsg.action))))}-->`
-        : assistantMsg.content
-      saveMessage(convId, "assistant", contentToSave, assistantMsg.sources)
+
+      let streamedContent = ""
+      let streamUsage: any = null
+
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let sseBuffer = ""
+      let currentEvent = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        sseBuffer += decoder.decode(value, { stream: true })
+        const lines = sseBuffer.split("\n")
+        sseBuffer = lines.pop() || ""
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+
+          // Track SSE event type
+          if (trimmed.startsWith("event: ")) {
+            currentEvent = trimmed.slice(7)
+            continue
+          }
+
+          if (trimmed.startsWith("data: ")) {
+            const dataStr = trimmed.slice(6)
+            try {
+              const parsed = JSON.parse(dataStr)
+
+              // Handle done event — extract usage only, NOT content (it's the full response)
+              if (currentEvent === "done") {
+                if (parsed.usage) streamUsage = parsed.usage
+                currentEvent = ""
+                continue
+              }
+
+              // Handle error event
+              if (currentEvent === "error") {
+                if (parsed.error) throw new Error(parsed.error)
+                currentEvent = ""
+                continue
+              }
+
+              // Normal delta content
+              if (parsed.content) {
+                streamedContent += parsed.content
+                // Update the assistant message progressively
+                setMessages(prev => prev.map(m =>
+                  m.id === assistantMsgId
+                    ? { ...m, content: streamedContent }
+                    : m
+                ))
+              }
+              if (parsed.usage) {
+                streamUsage = parsed.usage
+              }
+              if (parsed.error) {
+                throw new Error(parsed.error)
+              }
+            } catch (e: any) {
+              if (e?.message) throw e
+            }
+          }
+        }
+      }
+
+      // Extract action blocks from final content
+      const extracted = extractAiAction(streamedContent, userMsg.content)
+      setMessages(prev => prev.map(m =>
+        m.id === assistantMsgId
+          ? { ...m, content: extracted.content, action: extracted.action }
+          : m
+      ))
+
+      // Save assistant message to DB
+      const contentToSave = extracted.action
+        ? `${extracted.content}\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(extracted.action))))}-->`
+        : extracted.content
+      saveMessage(convId, "assistant", contentToSave, assistantMsg.sources, streamUsage
+        ? { prompt_tokens: streamUsage.prompt_tokens ?? 0, completion_tokens: streamUsage.completion_tokens ?? 0, total_tokens: streamUsage.total_tokens ?? 0 }
+        : undefined)
         .then((saved) => {
           if (saved?.id) {
-            console.log("[CHAT] Saved assistant message to DB, id:", saved.id, "has action:", !!assistantMsg.action)
-            setMessages(prev => prev.map(m => m.id === assistantMsg.id ? { ...m, id: saved.id } : m))
+            console.log("[CHAT] Saved assistant message to DB, id:", saved.id, "has action:", !!extracted.action)
+            setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, id: saved.id } : m))
           }
         })
         .catch((e) => console.error("[CHAT] Failed to save assistant message:", e))
       // Generate title from AI after first exchange
       if (messages.length === 0) {
-        generateTitle(convId, userMsg.content, assistantMsg.content).catch(() => {})
+        generateTitle(convId, userMsg.content, streamedContent).catch(() => {})
       }
     } catch (err: any) {
       if (err?.name === "AbortError") return // Aborted by new request, don't show error
@@ -2052,7 +2150,7 @@ export default function ChatPage() {
               </div>
               )
             })}
-              {loading && (
+              {loading && (!messages.length || messages[messages.length - 1].role !== "assistant" || !messages[messages.length - 1].content) && (
                 <div className="flex gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent overflow-hidden">
                     <img src="/assets/images/exploro-icon.svg" alt="" className="h-8 w-8 object-contain" />
