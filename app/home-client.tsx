@@ -52,7 +52,7 @@ import { Button } from "@/components/ui/button"
 import { FaqSection } from "@/components/faq-section"
 
 export default function HomeClient() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const router = useRouter()
   const { user } = useAuth()
 
@@ -91,7 +91,7 @@ export default function HomeClient() {
               <Button size="lg" onClick={handleCTA} className="pulse-ring gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:shadow-emerald-700/50 hover:scale-105">
                 {t("heroStartFree")} <ArrowRight className="h-4 w-4" />
               </Button>
-              <a href="https://yellow-rabbit-520973.hostingersite.com/Videos/Exploro%20Walkthrough%20Video%201.mp4" target="_blank" rel="noopener noreferrer">
+              <a href={lang === "es" ? "https://yellow-rabbit-520973.hostingersite.com/Videos/Final%20Demo%20Video%20Spanish.mp4" : "https://yellow-rabbit-520973.hostingersite.com/Videos/Exploro%20Walkthrough%20Video%201.mp4"} target="_blank" rel="noopener noreferrer">
                 <Button size="lg" variant="outline" className="gap-2 px-8 transition-all duration-200 hover:scale-105">
                   <Play className="h-4 w-4" /> {t("heroWatchDemo")}
                 </Button>

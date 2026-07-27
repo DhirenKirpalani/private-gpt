@@ -581,10 +581,16 @@ export async function saveMessage(
   conversationId: string,
   role: "user" | "assistant",
   content: string,
-  sources?: string[]
+  sources?: string[],
+  tokenUsage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
 ): Promise<ChatMessage> {
   const payload: Record<string, any> = { conversation_id: conversationId, role, content }
   if (sources && sources.length > 0) payload.sources = sources
+  if (tokenUsage) {
+    payload.prompt_tokens = tokenUsage.prompt_tokens
+    payload.completion_tokens = tokenUsage.completion_tokens
+    payload.total_tokens = tokenUsage.total_tokens
+  }
   const { data, error } = await supabase
     .from("chat_messages")
     .insert(payload)
