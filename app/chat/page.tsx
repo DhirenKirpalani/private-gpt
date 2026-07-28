@@ -7,7 +7,7 @@ import {
   Bot, Copy, RefreshCw, Share2, Sparkles,
   PanelLeftClose, X, User, Paperclip, File, CheckCircle2, ChevronDown,
   Mail, Phone, CalendarDays, Check, Loader2, Menu, Edit2, AlertCircle,
-  HardDrive, Video, Eye,
+  HardDrive, Video, Eye, Lock, Zap,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { NotificationBell } from "@/components/notification-bell"
@@ -155,6 +155,10 @@ export default function ChatPage() {
   const [kbDocContents, setKbDocContents] = useState<Record<string, string>>({})
   const [kbLoading, setKbLoading] = useState(false)
   const [chatError, setChatError] = useState("")
+  const [quotaExceeded, setQuotaExceeded] = useState<{ reason: string; message: string; usage?: any } | null>(null)
+  const [usageDegraded, setUsageDegraded] = useState(false)
+  const [usageSummary, setUsageSummary] = useState<{ tokensUsed: number; tokenLimit: number; messagesUsedToday: number; messageLimit: number; plan: string } | null>(null)
+  const [showUsageBar, setShowUsageBar] = useState(true)
   const [websiteContent, setWebsiteContent] = useState("")
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
@@ -306,9 +310,45 @@ export default function ChatPage() {
         setUserInitials(getInitials(name))
         setUserName(name)
       }
+
+      // Load usage bar visibility setting + initial usage
+      try {
+        const [settingsRes, ur] = await Promise.all([
+          fetch("/api/app-settings"),
+          fetch("/api/usage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id }),
+          }),
+        ])
+        if (settingsRes.ok) {
+          const sd = await settingsRes.json()
+          setShowUsageBar(sd.show_usage_bar !== false)
+        }
+        if (ur.ok) {
+          const ud = await ur.json()
+          setUsageSummary({ tokensUsed: ud.tokensUsed, tokenLimit: ud.tokenLimit, messagesUsedToday: ud.messagesUsedToday, messageLimit: ud.messageLimit, plan: ud.plan })
+        }
+      } catch { /* silent */ }
     }
     load()
   }, [user])
+
+  // Re-fetch show_usage_bar setting when the tab becomes visible (admin may have toggled it)
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState !== "visible") return
+      try {
+        const res = await fetch("/api/app-settings")
+        if (res.ok) {
+          const sd = await res.json()
+          setShowUsageBar(sd.show_usage_bar !== false)
+        }
+      } catch { /* silent */ }
+    }
+    document.addEventListener("visibilitychange", handleVisibility)
+    return () => document.removeEventListener("visibilitychange", handleVisibility)
+  }, [])
 
   // Sync theme changes to localStorage (DB writes happen only via profile page Save button)
   useEffect(() => {
@@ -379,6 +419,7 @@ export default function ChatPage() {
       return
     }
     setChatError("")
+    setQuotaExceeded(null)
     setFailedMessageId(null)
 
     // Abort any in-flight request
@@ -407,9 +448,6 @@ export default function ChatPage() {
     }
     setShowKbPanel(false)
     setLoading(true)
-
-    // Save user message to DB
-    saveMessage(convId, "user", userMsg.content).catch((e) => console.error("[CHAT] Failed to save user message:", e))
 
     // Detect if user is asking about internal documents — skip web search if so
     // Only applies when KB is actually enabled and has documents
@@ -731,12 +769,39 @@ export default function ChatPage() {
           systemPrompt: finalSystemPrompt,
           responseLength: aiProfile?.response_length || "Standard",
           stream: true,
+          userId: user?.id,
         }),
         signal: controller.signal,
       })
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
+        // Handle quota exceeded (429)
+        if (res.status === 429 && errData.quotaExceeded) {
+          setQuotaExceeded({
+            reason: errData.reason || "token_limit",
+            message: errData.error || "Usage limit exceeded",
+            usage: errData.usage,
+          })
+          throw new Error("__QUOTA_EXCEEDED__")
+        }
         throw new Error(errData.error || "Request failed")
+      }
+
+      // Save user message to DB only after API confirms request is allowed
+      saveMessage(convId, "user", userMsg.content).catch((e) => console.error("[CHAT] Failed to save user message:", e))
+
+      // Check if response is degraded (>80% quota used)
+      const isDegraded = res.headers.get("x-usage-degraded") === "true"
+      setUsageDegraded(isDegraded)
+
+      // Update usage bar reactively from response headers (no extra fetch needed)
+      const hTokensUsed = parseInt(res.headers.get("x-usage-tokens-used") || "0", 10)
+      const hTokenLimit = parseInt(res.headers.get("x-usage-token-limit") || "0", 10)
+      const hMsgsToday = parseInt(res.headers.get("x-usage-messages-today") || "0", 10)
+      const hMsgLimit = parseInt(res.headers.get("x-usage-message-limit") || "0", 10)
+      const hPlan = res.headers.get("x-usage-plan") || ""
+      if (hTokenLimit > 0) {
+        setUsageSummary({ tokensUsed: hTokensUsed, tokenLimit: hTokenLimit, messagesUsedToday: hMsgsToday, messageLimit: hMsgLimit, plan: hPlan })
       }
 
       // ── Stream response with typing indicator ───────────────────
@@ -848,6 +913,8 @@ export default function ChatPage() {
       }
     } catch (err: any) {
       if (err?.name === "AbortError") return // Aborted by new request, don't show error
+      // Skip error banner if quota exceeded modal is already shown
+      if (err?.message === "__QUOTA_EXCEEDED__") return
       console.error("[CHAT] sendMessage error:", err)
       setChatError(err?.message || "Something went wrong. Please try again.")
       // Clean up verbose API error messages
@@ -1569,6 +1636,67 @@ export default function ChatPage() {
 
       <AnnouncementBanner />
       <TrialPaywall />
+
+      {/* Quota Exceeded Modal */}
+      {quotaExceeded && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 backdrop-blur-md bg-black/60" onClick={() => setQuotaExceeded(null)} />
+          <div className="relative z-10 mx-4 w-full max-w-md rounded-2xl border border-[#FFBF00]/20 bg-[#0f1117] p-8 shadow-2xl text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#FFBF00]/10 border border-[#FFBF00]/20">
+              {quotaExceeded.reason === "trial_expired" ? (
+                <Lock className="h-6 w-6 text-[#FFBF00]" />
+              ) : (
+                <Zap className="h-6 w-6 text-[#FFBF00]" />
+              )}
+            </div>
+            <h2 className="mb-2 text-xl font-bold text-white">
+              {quotaExceeded.reason === "trial_expired" ? "Free trial ended" :
+               quotaExceeded.reason === "token_limit" ? "Monthly token limit reached" :
+               "Daily message limit reached"}
+            </h2>
+            <p className="mb-6 text-sm text-muted-foreground">{quotaExceeded.message}</p>
+            {quotaExceeded.usage && (
+              <div className="mb-6 rounded-xl border border-white/5 bg-white/[0.03] p-4">
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Tokens used</span>
+                  <span className="font-medium text-white">
+                    {Number(quotaExceeded.usage.tokensUsed || 0).toLocaleString()} / {Number(quotaExceeded.usage.tokenLimit || 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-[#FFBF00]"
+                    style={{ width: `${Math.min(100, ((quotaExceeded.usage.tokensUsed || 0) / (quotaExceeded.usage.tokenLimit || 1)) * 100)}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Messages today</span>
+                  <span className="font-medium text-white">
+                    {quotaExceeded.usage.messagesUsedToday || 0} / {quotaExceeded.usage.messageLimit || 0}
+                  </span>
+                </div>
+                {quotaExceeded.reason === "message_limit" ? (
+                  <p className="mt-3 text-[11px] text-muted-foreground">Resets at <span className="text-white/70">midnight tonight</span></p>
+                ) : quotaExceeded.usage.periodStart ? (
+                  <p className="mt-3 text-[11px] text-muted-foreground">Monthly quota resets on <span className="text-white/70">{new Date(new Date(quotaExceeded.usage.periodStart).setMonth(new Date(quotaExceeded.usage.periodStart).getMonth() + 1)).toLocaleDateString(undefined, { month: "long", day: "numeric" })}</span></p>
+                ) : null}
+              </div>
+            )}
+            <Link
+              href="/pricing"
+              className="inline-flex w-full items-center justify-center rounded-xl bg-[#FFBF00] px-6 py-3 text-sm font-semibold text-black transition-colors hover:bg-[#FFBF00]/90"
+            >
+              Upgrade Plan
+            </Link>
+            <button
+              onClick={() => setQuotaExceeded(null)}
+              className="mt-3 text-xs text-muted-foreground hover:text-white"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── BODY ── */}
       <div className="relative z-10 flex flex-1 overflow-hidden">
@@ -2401,7 +2529,70 @@ export default function ChatPage() {
                   )}
                 </div>
               )}
-              {!chatError && (
+              {usageDegraded && !chatError && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#FFBF00]/20 bg-[#FFBF00]/5 px-4 py-2.5">
+                  <Zap className="h-3.5 w-3.5 shrink-0 text-[#FFBF00]/80" />
+                  <p className="flex-1 text-xs text-[#FFBF00]/80">You&apos;re approaching your monthly limit — responses are shortened to preserve your quota.</p>
+                  <button onClick={() => setUsageDegraded(false)} className="text-[#FFBF00]/50 hover:text-[#FFBF00]"><X className="h-3.5 w-3.5" /></button>
+                </div>
+              )}
+              {showUsageBar && usageSummary && !chatError && (() => {
+                const tokenPct = Math.min(100, Math.round((usageSummary.tokensUsed / usageSummary.tokenLimit) * 100))
+                const msgPct = Math.min(100, Math.round((usageSummary.messagesUsedToday / usageSummary.messageLimit) * 100))
+                const isBlocked = tokenPct >= 100
+                const isAtRisk = !isBlocked && tokenPct >= 80
+                const barColor = isBlocked ? "bg-red-500" : isAtRisk ? "bg-[#FFBF00]" : "bg-emerald-500"
+                const textColor = isBlocked ? "text-red-400" : isAtRisk ? "text-[#FFBF00]" : "text-emerald-400"
+                const borderColor = isBlocked ? "border-red-500/20" : isAtRisk ? "border-[#FFBF00]/20" : "border-white/[0.06]"
+                const planColors: Record<string, string> = {
+                  trial: "bg-[#FFBF00]/10 text-[#FFBF00] border-[#FFBF00]/20",
+                  solo: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                  team: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                  enterprise: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+                  free: "bg-white/5 text-white/40 border-white/10",
+                }
+                const planStyle = planColors[usageSummary.plan] || planColors.free
+                return (
+                  <div className={cn("mt-2 rounded-xl border px-3 py-2 transition-all", borderColor, isAtRisk && !isBlocked ? "bg-[#FFBF00]/[0.03]" : isBlocked ? "bg-red-500/[0.03]" : "bg-white/[0.02]")}>
+                    <div className="flex items-center gap-2">
+                      {/* Plan badge */}
+                      <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest", planStyle)}>
+                        {usageSummary.plan}
+                      </span>
+
+                      {/* Token bar */}
+                      <div className="flex flex-1 items-center gap-1.5 min-w-0">
+                        <div className="flex-1 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+                          <div
+                            className={cn("h-full rounded-full transition-all duration-500", barColor)}
+                            style={{ width: `${tokenPct}%` }}
+                          />
+                        </div>
+                        <span className={cn("shrink-0 text-[10px] font-medium tabular-nums", textColor)}>
+                          {tokenPct}%
+                        </span>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="h-3 w-px bg-white/10 shrink-0" />
+
+                      {/* Token count */}
+                      <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums hidden sm:inline">
+                        {usageSummary.tokensUsed.toLocaleString()}<span className="text-white/20"> / </span>{usageSummary.tokenLimit >= 1_000_000 ? `${(usageSummary.tokenLimit / 1_000_000).toFixed(0)}M` : `${(usageSummary.tokenLimit / 1000).toFixed(0)}K`}
+                      </span>
+
+                      {/* Divider */}
+                      <div className="h-3 w-px bg-white/10 shrink-0 hidden sm:block" />
+
+                      {/* Messages today */}
+                      <span className={cn("shrink-0 text-[10px] tabular-nums", msgPct >= 100 ? "text-red-400" : "text-muted-foreground")}>
+                        <span className="font-medium text-white/50">msgs</span> {usageSummary.messagesUsedToday}<span className="text-white/20">/</span>{usageSummary.messageLimit}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })()}
+              {(!showUsageBar || !usageSummary) && !chatError && !usageDegraded && (
                 <p className="mt-2 text-center text-xs text-muted-foreground">
                   {t("chatFooter")}
                 </p>

@@ -58,6 +58,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "You cannot change your own role" }, { status: 400 })
     }
 
+    // Fetch old role for audit log
+    const { data: targetProfile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("user_id", targetUser.id)
+      .single()
+    const oldRole = targetProfile?.role ?? null
+
     // Update role in profiles table
     const { error } = await supabase
       .from("profiles")
@@ -65,6 +73,18 @@ export async function POST(req: NextRequest) {
       .eq("user_id", targetUser.id)
 
     if (error) throw error
+
+    // Write audit log
+    const adminEmail = userList?.users?.find(u => u.id === requestingUserId)?.email ?? ""
+    await supabase.from("admin_audit_log").insert({
+      admin_user_id: requestingUserId,
+      admin_email: adminEmail,
+      action: "set_role",
+      target_user_id: targetUser.id,
+      target_email: targetEmail,
+      old_value: oldRole,
+      new_value: role,
+    })
 
     // Send email notification to the user
     try {

@@ -3,9 +3,9 @@ import { createAdminClient } from "@/lib/supabase"
 
 export async function POST(req: NextRequest) {
   try {
-    const { requestingUserId, settings } = await req.json()
+    const { requestingUserId, targetUserId } = await req.json()
 
-    if (!requestingUserId || !settings) {
+    if (!requestingUserId || !targetUserId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, contact_email")
+      .select("role")
       .eq("user_id", requestingUserId)
       .single()
 
@@ -21,25 +21,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const now = new Date().toISOString()
-    const entries = Object.entries(settings as Record<string, string>)
+    // Get admin + target emails for audit log
+    const { data: authData } = await supabase.auth.admin.listUsers()
+    const adminEmail = authData?.users?.find((u: any) => u.id === requestingUserId)?.email ?? ""
+    const targetEmail = authData?.users?.find((u: any) => u.id === targetUserId)?.email ?? targetUserId
 
-    for (const [key, value] of entries) {
-      await supabase
-        .from("app_settings")
-        .upsert({ key, value, updated_at: now }, { onConflict: "key" })
-    }
+    // Reset usage by moving current_period_start to now
+    const now = new Date().toISOString()
+    const { error } = await supabase
+      .from("subscriptions")
+      .update({ current_period_start: now })
+      .eq("user_id", targetUserId)
+
+    if (error) throw error
 
     // Write audit log
-    const adminEmail = (profile as any)?.contact_email ?? ""
     await supabase.from("admin_audit_log").insert({
       admin_user_id: requestingUserId,
       admin_email: adminEmail,
-      action: "update_settings",
-      target_user_id: requestingUserId,
-      target_email: adminEmail,
+      action: "reset_usage",
+      target_user_id: targetUserId,
+      target_email: targetEmail,
       old_value: null,
-      new_value: JSON.stringify(settings),
+      new_value: now,
     })
 
     return NextResponse.json({ success: true })
