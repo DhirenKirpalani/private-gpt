@@ -115,6 +115,26 @@ export default function AdminPage() {
   const [auditLogs, setAuditLogs] = useState<{ id: string; admin_email: string; action: string; target_email: string; old_value: string | null; new_value: string | null; created_at: string }[]>([])
   const [auditLoading, setAuditLoading] = useState(false)
 
+  // Token & message limits
+  const [tokenLimitTrial, setTokenLimitTrial] = useState(50000)
+  const [tokenLimitSolo, setTokenLimitSolo] = useState(500000)
+  const [tokenLimitTeam, setTokenLimitTeam] = useState(2000000)
+  const [tokenLimitEnterprise, setTokenLimitEnterprise] = useState(10000000)
+  const [messageLimitTrial, setMessageLimitTrial] = useState(20)
+  const [messageLimitSolo, setMessageLimitSolo] = useState(50)
+  const [messageLimitTeam, setMessageLimitTeam] = useState(200)
+  const [messageLimitEnterprise, setMessageLimitEnterprise] = useState(1000)
+  const [savingLimits, setSavingLimits] = useState(false)
+  const [showUsageBarSetting, setShowUsageBarSetting] = useState(true)
+
+  // Usage monitor
+  type UserUsageRow = { userId: string; name: string; email: string; plan: string; status: string; periodStart: string; periodEnd: string | null; tokensUsed: number; tokenLimit: number; tokenPct: number; messagesUsedToday: number; messageLimit: number; msgPct: number }
+  const [usageRows, setUsageRows] = useState<UserUsageRow[]>([])
+  const [usageLoading, setUsageLoading] = useState(false)
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null)
+  const [resetConfirm, setResetConfirm] = useState<{ userId: string; email: string; name: string } | null>(null)
+  const [savingUsageBarToggle, setSavingUsageBarToggle] = useState(false)
+
   // Debounced email validation
   useEffect(() => {
     if (!trialEmail.trim() || !trialEmail.includes("@")) {
@@ -217,6 +237,15 @@ export default function AdminPage() {
         setTrialDays(settings.trial_days)
         setBannerText(settings.announcement_text ?? "")
         setBannerEnabled(settings.announcement_enabled === "true")
+        setTokenLimitTrial(settings.token_limit_trial)
+        setTokenLimitSolo(settings.token_limit_solo)
+        setTokenLimitTeam(settings.token_limit_team)
+        setTokenLimitEnterprise(settings.token_limit_enterprise)
+        setMessageLimitTrial(settings.message_limit_trial)
+        setMessageLimitSolo(settings.message_limit_solo)
+        setMessageLimitTeam(settings.message_limit_team)
+        setMessageLimitEnterprise(settings.message_limit_enterprise)
+        setShowUsageBarSetting(settings.show_usage_bar !== false)
       } catch (err: any) {
         toast({ title: "Error", description: err.message || "Failed to load settings", variant: "error" })
       } finally {
@@ -243,14 +272,17 @@ export default function AdminPage() {
     loadCompanies()
     loadApiMonitor()
     loadCustomTrials()
+    loadAuditLogs()
+    loadUsageMonitor()
 
-    // Auto-refresh stats every 30 seconds
+    // Auto-refresh every 30 seconds
+    const intervals: ReturnType<typeof setInterval>[] = []
     if (autoRefresh) {
-      const interval = setInterval(() => {
-        loadStats()
-      }, 30000)
-      return () => clearInterval(interval)
+      intervals.push(setInterval(() => loadStats(), 30000))
     }
+    intervals.push(setInterval(() => loadAuditLogs(), 30000))
+    intervals.push(setInterval(() => loadUsageMonitor(), 30000))
+    return () => intervals.forEach(clearInterval)
   }, [user, role, loading, router, autoRefresh])
 
   async function loadApiMonitor(range?: string, uid?: string | null) {
@@ -390,6 +422,89 @@ export default function AdminPage() {
       toast({ title: "Error", description: err.message || "Failed to save", variant: "error" })
     } finally {
       setSavingBanner(false)
+    }
+  }
+
+  const handleSaveLimits = async () => {
+    if (!user) return
+    setSavingLimits(true)
+    try {
+      const res = await fetch("/api/admin/update-limits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestingUserId: user.id,
+          tokenLimitTrial, tokenLimitSolo, tokenLimitTeam, tokenLimitEnterprise,
+          messageLimitTrial, messageLimitSolo, messageLimitTeam, messageLimitEnterprise,
+          showUsageBar: showUsageBarSetting,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to save")
+      toast({ title: "Saved", description: "Token & message limits updated." })
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to save", variant: "error" })
+    } finally {
+      setSavingLimits(false)
+    }
+  }
+
+  const handleToggleUsageBar = async () => {
+    if (!user) return
+    const next = !showUsageBarSetting
+    setShowUsageBarSetting(next)
+    setSavingUsageBarToggle(true)
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestingUserId: user.id,
+          settings: { show_usage_bar: next ? "true" : "false" },
+        }),
+      })
+      if (!res.ok) throw new Error("Failed to save")
+      toast({ title: next ? "Usage bar enabled" : "Usage bar hidden", description: next ? "Users will see the usage bar in chat." : "Usage bar is now hidden from chat." })
+    } catch {
+      setShowUsageBarSetting(!next) // revert
+      toast({ title: "Error", description: "Failed to save setting", variant: "error" })
+    } finally {
+      setSavingUsageBarToggle(false)
+    }
+  }
+
+  const loadUsageMonitor = async () => {
+    if (!user) return
+    setUsageLoading(true)
+    try {
+      const res = await fetch(`/api/admin/user-usage?userId=${user.id}`, { cache: "no-store" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to load")
+      setUsageRows(data.users || [])
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to load usage", variant: "error" })
+    } finally {
+      setUsageLoading(false)
+    }
+  }
+
+  const handleResetUsage = async (targetUserId: string, targetEmail: string) => {
+    if (!user) return
+    setResettingUserId(targetUserId)
+    try {
+      const res = await fetch("/api/admin/reset-usage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestingUserId: user.id, targetUserId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to reset")
+      toast({ title: "Usage reset", description: "User's billing period has been reset to now." })
+      await loadUsageMonitor()
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to reset", variant: "error" })
+    } finally {
+      setResettingUserId(null)
     }
   }
 
@@ -543,6 +658,45 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-[#0f1520] p-6 sm:p-10">
       <Toaster />
+
+      {/* Reset Usage Confirmation Modal */}
+      {resetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setResetConfirm(null)} />
+          <div className="relative z-10 mx-4 w-full max-w-sm rounded-2xl border border-white/10 bg-[#151b27] p-6 shadow-2xl">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full border border-[#FFBF00]/20 bg-[#FFBF00]/10">
+              <RefreshCw className="h-5 w-5 text-[#FFBF00]" />
+            </div>
+            <h3 className="mb-1 text-base font-semibold text-white">Reset token usage?</h3>
+            <p className="mb-1 text-sm font-medium text-white/80">{resetConfirm.name}</p>
+            <p className="mb-4 text-xs text-muted-foreground">{resetConfirm.email}</p>
+            <p className="mb-6 text-sm text-muted-foreground leading-relaxed">
+              This moves their billing period start to <span className="text-white/70 font-medium">now</span>, effectively zeroing their token counter. The action is logged in the audit trail and <span className="text-white/70">cannot be undone</span>.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setResetConfirm(null)}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white/70 transition-colors hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const { userId, email } = resetConfirm
+                  setResetConfirm(null)
+                  await handleResetUsage(userId, email)
+                }}
+                disabled={resettingUserId === resetConfirm.userId}
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-50"
+              >
+                {resettingUserId === resetConfirm.userId ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Reset usage
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-3xl space-y-6">
 
         {/* Header */}
@@ -2233,12 +2387,235 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* Token & Message Limits */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-1 flex items-center gap-2">
+            <Zap className="h-3.5 w-3.5 text-[#FFBF00]/60" />
+            <h2 className="text-[10px] font-semibold text-[#FFBF00]/60 uppercase tracking-widest">Token &amp; Message Limits</h2>
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Set how much AI usage each plan gets per month. Changes take effect immediately for all users on that plan.
+          </p>
+          {/* Context cards */}
+          <div className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="rounded-lg border border-blue-500/10 bg-blue-500/5 p-3">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-blue-400">What is a token?</p>
+              <p className="text-[11px] text-muted-foreground">1 token ≈ ¾ of an English word. A typical question + answer exchange uses <span className="font-medium text-white/70">150–600 tokens</span>. Longer &ldquo;Comprehensive&rdquo; responses can use up to <span className="font-medium text-white/70">10,000 tokens</span> per reply.</p>
+            </div>
+            <div className="rounded-lg border border-emerald-500/10 bg-emerald-500/5 p-3">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-400">Recommended values</p>
+              <ul className="space-y-0.5 text-[11px] text-muted-foreground">
+                <li><span className="font-medium text-white/70">Trial:</span> 50K tokens · 20 msg/day</li>
+                <li><span className="font-medium text-white/70">Solo:</span> 500K tokens · 50 msg/day</li>
+                <li><span className="font-medium text-white/70">Team:</span> 2M tokens · 200 msg/day</li>
+                <li><span className="font-medium text-white/70">Enterprise:</span> 10M tokens · 1,000 msg/day</li>
+              </ul>
+            </div>
+            <div className="rounded-lg border border-[#FFBF00]/10 bg-[#FFBF00]/5 p-3">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#FFBF00]">Auto-degradation at 80%</p>
+              <p className="text-[11px] text-muted-foreground">When a user hits 80% of their token limit, response length is automatically halved (e.g. Standard: 6K → 3K tokens). This extends their quota rather than hard-blocking them.</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {/* Token Limits */}
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-white/80">Monthly Token Limits</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[
+                  { label: "Trial", value: tokenLimitTrial, setter: setTokenLimitTrial, hint: "~85–330 exchanges/mo" },
+                  { label: "Solo", value: tokenLimitSolo, setter: setTokenLimitSolo, hint: "~830–3,300 exchanges/mo" },
+                  { label: "Team", value: tokenLimitTeam, setter: setTokenLimitTeam, hint: "~3,300–13,000 exchanges/mo" },
+                  { label: "Enterprise", value: tokenLimitEnterprise, setter: setTokenLimitEnterprise, hint: "~16,000–66,000 exchanges/mo" },
+                ].map(item => (
+                  <div key={item.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                    <Label className="text-xs text-muted-foreground">{item.label}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={item.value}
+                      onChange={(e) => item.setter(parseInt(e.target.value, 10) || 0)}
+                      className="mt-1"
+                    />
+                    <p className="mt-1 text-[10px] text-muted-foreground">{(item.value || 0).toLocaleString()} tokens/mo</p>
+                    <p className="text-[10px] text-blue-400/60">{item.hint}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Message Limits */}
+            <div>
+              <div className="mb-2 flex items-baseline gap-2">
+                <h3 className="text-sm font-semibold text-white/80">Daily Message Limits</h3>
+                <span className="text-[10px] text-muted-foreground">Hard cap — resets at midnight. Independent of token quota.</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[
+                  { label: "Trial", value: messageLimitTrial, setter: setMessageLimitTrial, hint: "~600 msgs/mo at 20/day" },
+                  { label: "Solo", value: messageLimitSolo, setter: setMessageLimitSolo, hint: "~1,550 msgs/mo at 50/day" },
+                  { label: "Team", value: messageLimitTeam, setter: setMessageLimitTeam, hint: "~6,200 msgs/mo at 200/day" },
+                  { label: "Enterprise", value: messageLimitEnterprise, setter: setMessageLimitEnterprise, hint: "~31,000 msgs/mo at 1,000/day" },
+                ].map(item => (
+                  <div key={item.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                    <Label className="text-xs text-muted-foreground">{item.label}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={item.value}
+                      onChange={(e) => item.setter(parseInt(e.target.value, 10) || 0)}
+                      className="mt-1"
+                    />
+                    <p className="mt-1 text-[10px] text-muted-foreground">{item.value} messages/day</p>
+                    <p className="text-[10px] text-blue-400/60">{item.hint}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={handleSaveLimits}
+                disabled={savingLimits}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 disabled:opacity-50"
+              >
+                {savingLimits ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save Limits
+              </button>
+              <button
+                type="button"
+                onClick={handleToggleUsageBar}
+                disabled={savingUsageBarToggle}
+                className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 transition-colors hover:bg-white/[0.04] disabled:opacity-60"
+              >
+                <span className="text-xs text-muted-foreground">Show usage bar in chat</span>
+                {savingUsageBarToggle ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                ) : (
+                  <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 transition-colors ${
+                    showUsageBarSetting ? "border-emerald-500/60 bg-emerald-500/20" : "border-white/10 bg-white/5"
+                  }`}>
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full transition-transform ${
+                      showUsageBarSetting ? "translate-x-4 bg-emerald-400" : "translate-x-0.5 bg-white/30"
+                    }`} />
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Usage Monitor */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart2 className="h-4 w-4 text-emerald-400" />
+              <h2 className="text-sm font-semibold text-white/90">Usage Monitor</h2>
+              <span className="text-[10px] text-muted-foreground">per-user token &amp; message usage this billing period</span>
+            </div>
+            <button
+              onClick={loadUsageMonitor}
+              disabled={usageLoading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70 hover:bg-white/10 disabled:opacity-50"
+              title="Refresh now — also auto-refreshes every 30s"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", usageLoading && "animate-spin")} />
+              Refresh
+            </button>
+          </div>
+
+          {usageRows.length === 0 && usageLoading && (
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading usage data...
+            </div>
+          )}
+          {usageRows.length === 0 && !usageLoading && (
+            <p className="py-6 text-center text-xs text-muted-foreground">No subscription data found.</p>
+          )}
+
+          {usageRows.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-white/5 text-left text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <th className="pb-2 pr-4">User</th>
+                    <th className="pb-2 pr-4">Plan</th>
+                    <th className="pb-2 pr-4">Tokens</th>
+                    <th className="pb-2 pr-4">Messages today</th>
+                    <th className="pb-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {usageRows.map(row => {
+                    const isBlocked = row.tokenPct >= 100 || row.msgPct >= 100
+                    const isAtRisk = !isBlocked && row.tokenPct >= 80
+                    return (
+                      <tr key={row.userId} className="group">
+                        <td className="py-3 pr-4">
+                          <p className="font-medium text-white/90 truncate max-w-[140px]">{row.name || "—"}</p>
+                          <p className="text-muted-foreground truncate max-w-[140px]">{row.email}</p>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize border
+                            ${row.plan === "enterprise" ? "border-purple-500/30 bg-purple-500/10 text-purple-300" :
+                              row.plan === "team" ? "border-blue-500/30 bg-blue-500/10 text-blue-300" :
+                              row.plan === "solo" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" :
+                              row.plan === "trial" ? "border-[#FFBF00]/30 bg-[#FFBF00]/10 text-[#FFBF00]" :
+                              "border-white/10 bg-white/5 text-white/50"}`}>
+                            {row.plan}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4 min-w-[200px]">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-[11px] font-semibold tabular-nums ${isBlocked ? "text-red-400" : isAtRisk ? "text-[#FFBF00]" : "text-white/80"}`}>
+                              {row.tokenPct}%
+                            </span>
+                            {isBlocked && <span className="rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-400">Blocked</span>}
+                            {isAtRisk && <span className="rounded-full border border-[#FFBF00]/30 bg-[#FFBF00]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#FFBF00]">At risk</span>}
+                          </div>
+                          <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                            <div
+                              className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${
+                                isBlocked ? "bg-gradient-to-r from-red-600 to-red-400" :
+                                isAtRisk  ? "bg-gradient-to-r from-amber-500 to-[#FFBF00]" :
+                                            "bg-gradient-to-r from-emerald-600 to-emerald-400"
+                              }`}
+                              style={{ width: `${Math.min(100, row.tokenPct)}%` }}
+                            />
+                          </div>
+                          <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                            {row.tokensUsed.toLocaleString()} <span className="text-white/20">/</span> {row.tokenLimit.toLocaleString()}
+                          </p>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <span className={`font-medium ${row.msgPct >= 100 ? "text-red-400" : "text-white/70"}`}>
+                            {row.messagesUsedToday} / {row.messageLimit}
+                          </span>
+                        </td>
+                        <td className="py-3">
+                          <button
+                            onClick={() => setResetConfirm({ userId: row.userId, email: row.email, name: row.name })}
+                            disabled={resettingUserId === row.userId}
+                            className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] text-white/60 hover:bg-white/10 hover:text-white disabled:opacity-40"
+                            title="Reset billing period to now — zeroes their token counter"
+                          >
+                            {resettingUserId === row.userId ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                            Reset
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
         {/* Audit Trail */}
         <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-blue-400" />
               <h2 className="text-sm font-semibold text-white/90">Audit Trail</h2>
+              <span className="text-[10px] text-muted-foreground">auto-refreshes every 30s</span>
             </div>
             <button
               onClick={() => loadAuditLogs()}
@@ -2262,36 +2639,58 @@ export default function AdminPage() {
             <div className="relative space-y-3 pl-4">
               {/* Timeline line */}
               <div className="absolute left-[7px] top-2 bottom-2 w-px bg-white/10" />
-              {auditLogs.map(log => (
-                <div key={log.id} className="relative flex items-start gap-3">
-                  {/* Timeline dot */}
-                  <div className={cn(
-                    "relative z-10 mt-1 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-2 border-[#1a1f2b]",
-                    log.action === "set_trial_override" ? "bg-[#FFBF00]" : "bg-red-500"
-                  )} />
-                  <div className="min-w-0 flex-1 rounded-lg border border-white/5 bg-white/[0.02] px-4 py-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm text-white/90">
-                        <span className="font-medium text-blue-400">{log.admin_email}</span>
-                        {" "}
-                        {log.action === "set_trial_override" ? (
-                          <>set <span className="font-semibold text-[#FFBF00]">{log.new_value} days</span> trial for</>
-                        ) : (
-                          <>removed trial override for</>
-                        )}
-                        {" "}
-                        <span className="font-medium text-emerald-400">{log.target_email}</span>
+              {auditLogs.map(log => {
+                const dotColor =
+                  log.action === "set_trial_override" ? "bg-[#FFBF00]" :
+                  log.action === "remove_trial_override" ? "bg-white/40" :
+                  log.action === "reset_usage" ? "bg-red-400" :
+                  log.action === "set_role" ? "bg-purple-400" :
+                  log.action === "update_limits" ? "bg-emerald-400" :
+                  log.action === "update_settings" ? "bg-blue-400" :
+                  "bg-white/20"
+
+                const actionLabel = (() => {
+                  switch (log.action) {
+                    case "set_trial_override":
+                      return <><span className="text-white/60">set trial to</span> <span className="font-semibold text-[#FFBF00]">{log.new_value} days</span> <span className="text-white/60">for</span> <span className="font-medium text-emerald-400">{log.target_email}</span></>
+                    case "remove_trial_override":
+                      return <><span className="text-white/60">removed trial override for</span> <span className="font-medium text-emerald-400">{log.target_email}</span></>
+                    case "reset_usage":
+                      return <><span className="text-white/60">reset token usage for</span> <span className="font-medium text-emerald-400">{log.target_email}</span></>
+                    case "set_role": {
+                      const oldR = log.old_value ?? "user"
+                      const newR = log.new_value ?? "user"
+                      return <><span className="text-white/60">changed role for</span> <span className="font-medium text-emerald-400">{log.target_email}</span> <span className="text-white/40">from</span> <span className="font-semibold text-white/70">{oldR}</span> <span className="text-white/40">→</span> <span className="font-semibold text-purple-400">{newR}</span></>
+                    }
+                    case "update_limits":
+                      return <><span className="text-white/60">updated token &amp; message limits</span></>
+                    case "update_settings": {
+                      let keys = "settings"
+                      try { keys = Object.keys(JSON.parse(log.new_value ?? "{}")).join(", ") } catch {}
+                      return <><span className="text-white/60">changed app settings:</span> <span className="font-medium text-white/70">{keys}</span></>
+                    }
+                    default:
+                      return <><span className="text-white/60">{log.action}</span></>
+                  }
+                })()
+
+                return (
+                  <div key={log.id} className="relative flex items-start gap-3">
+                    <div className={cn("relative z-10 mt-1.5 h-3 w-3 shrink-0 rounded-full border-2 border-[#1a1f2b]", dotColor)} />
+                    <div className="min-w-0 flex-1 rounded-lg border border-white/5 bg-white/[0.02] px-4 py-2.5">
+                      <p className="text-sm">
+                        <span className="font-medium text-blue-400">{log.admin_email}</span>{" "}{actionLabel}
                       </p>
-                    </div>
-                    <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-                      {log.old_value && (
-                        <span className="rounded bg-white/5 px-1.5 py-0.5">was {log.old_value} days</span>
-                      )}
-                      <span className="ml-auto tabular-nums">{new Date(log.created_at).toLocaleString()}</span>
+                      <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                        {log.old_value && log.action === "set_trial_override" && (
+                          <span className="rounded bg-white/5 px-1.5 py-0.5">was {log.old_value} days</span>
+                        )}
+                        <span className="ml-auto tabular-nums">{new Date(log.created_at).toLocaleString()}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

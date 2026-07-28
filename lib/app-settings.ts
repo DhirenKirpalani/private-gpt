@@ -9,6 +9,15 @@ export type AppSettings = {
   announcement_type: AnnouncementType
   announcement_link_url: string
   announcement_link_label: string
+  token_limit_trial: number
+  token_limit_solo: number
+  token_limit_team: number
+  token_limit_enterprise: number
+  message_limit_trial: number
+  message_limit_solo: number
+  message_limit_team: number
+  message_limit_enterprise: number
+  show_usage_bar: boolean
 }
 
 export async function getAppSettings(): Promise<AppSettings> {
@@ -30,6 +39,15 @@ export async function getAppSettings(): Promise<AppSettings> {
     announcement_type: (settings.announcement_type as AnnouncementType) || "info",
     announcement_link_url: settings.announcement_link_url ?? "",
     announcement_link_label: settings.announcement_link_label ?? "",
+    token_limit_trial: parseInt(settings.token_limit_trial || "50000", 10) || 50000,
+    token_limit_solo: parseInt(settings.token_limit_solo || "500000", 10) || 500000,
+    token_limit_team: parseInt(settings.token_limit_team || "2000000", 10) || 2000000,
+    token_limit_enterprise: parseInt(settings.token_limit_enterprise || "10000000", 10) || 10000000,
+    message_limit_trial: parseInt(settings.message_limit_trial || "20", 10) || 20,
+    message_limit_solo: parseInt(settings.message_limit_solo || "50", 10) || 50,
+    message_limit_team: parseInt(settings.message_limit_team || "200", 10) || 200,
+    message_limit_enterprise: parseInt(settings.message_limit_enterprise || "1000", 10) || 1000,
+    show_usage_bar: (settings.show_usage_bar ?? "true") !== "false",
   }
 }
 

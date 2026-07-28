@@ -40,12 +40,7 @@ export const metadata: Metadata = {
   publisher: "Exploro",
   manifest: "/manifest.json",
   alternates: {
-    canonical: "/",
-    languages: {
-      "en": "/",
-      "es": "/",
-      "x-default": "/",
-    },
+    canonical: baseUrl,
   },
   openGraph: {
     type: "website",
