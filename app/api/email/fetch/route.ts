@@ -55,6 +55,14 @@ const BUSINESS_KEYWORDS = [
   "consultation", "services", "partnership", "collaboration", "project",
   "pricing", "demo", "introduction", "follow up", "follow-up", "request",
   "question", "update", "report", "plan", "budget",
+  // Extended — common professional/B2B subjects
+  "platform", "solution", "service", "offer", "offering",
+  "intelligence", "compliance", "sustainability", "integration",
+  "onboarding", "implementation", "support", "subscription",
+  "renewal", "upgrade", "pilot", "trial", "evaluation",
+  "presentation", "webinar", "workshop", "training",
+  "invite", "invitation", "podcast", "speaker", "guest",
+  "re:", "fwd:", "fw:",
 ]
 
 const EXCLUDED_SENDERS = [
@@ -126,12 +134,33 @@ function sanitizeText(text: string | null | undefined): string {
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
 }
 
+async function getKnownContactEmails(userId: string): Promise<Set<string>> {
+  const { data } = await supabase
+    .from("contacts")
+    .select("email")
+    .eq("user_id", userId)
+    .not("email", "is", null)
+  const set = new Set<string>()
+  for (const c of data || []) {
+    if (c.email) set.add(c.email.toLowerCase().trim())
+  }
+  return set
+}
+
+function extractEmail(address: string): string {
+  const m = address.match(/<([^>]+)>/)
+  return (m ? m[1] : address).toLowerCase().trim()
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { userId, providerId, pageToken } = await req.json()
     if (!userId || !providerId) {
       return NextResponse.json({ error: "Missing userId or providerId" }, { status: 400 })
     }
+
+    // Pre-load known CRM contacts so their emails always pass the keyword filter
+    const knownContactEmails = await getKnownContactEmails(userId)
 
     // Fetch the email connection
     const { data: conn, error } = await supabase
@@ -263,13 +292,16 @@ export async function POST(req: NextRequest) {
             console.log(`[EMAIL FILTER] DROPPED (newsletter): from="${fromAddress}" subject="${subject}"`)
             continue
           }
-          // Only keep emails whose subject contains a business keyword
+          // Always import emails from known CRM contacts
+          const senderEmail = extractEmail(fromAddress)
+          const isKnownContact = knownContactEmails.has(senderEmail)
+          // Otherwise require a business keyword in the subject
           const matchedKeywords = getMatchedKeywords(subject)
-          if (matchedKeywords.length === 0) {
+          if (!isKnownContact && matchedKeywords.length === 0) {
             console.log(`[EMAIL FILTER] DROPPED (no keyword match): subject="${subject}"`)
             continue
           }
-          console.log(`[EMAIL FILTER] KEPT: subject="${subject}" matchedKeywords=[${matchedKeywords.join(", ")}]`)
+          console.log(`[EMAIL FILTER] KEPT: subject="${subject}" knownContact=${isKnownContact} matchedKeywords=[${matchedKeywords.join(", ")}]`)
 
           payloads.push({
             user_id: userId,
@@ -400,8 +432,8 @@ export async function POST(req: NextRequest) {
         const folderData = await folderRes.json()
         console.log(`[EMAIL FETCH] Folders: ${folderData.value?.map((f: any) => `${f.displayName}(${f.totalItemCount})`).join(", ") || "none"}`)
 
-        // Fetch via Microsoft Graph with pagination + 15-day window (keyword filter applied client-side below)
-        const baseUrl = `https://graph.microsoft.com/v1.0/me/messages?$top=50&$filter=receivedDateTime ge ${cutoffISO}`
+        // Fetch via Microsoft Graph — Inbox folder only, excludes junk/deleted at the API level
+        const baseUrl = `https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages?$top=50&$filter=receivedDateTime ge ${cutoffISO}&$orderby=receivedDateTime desc`
         const url = pageToken || baseUrl
         console.log(`[EMAIL FETCH] Microsoft Graph URL: ${url}`)
         const listRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
@@ -465,13 +497,15 @@ export async function POST(req: NextRequest) {
             console.log(`[EMAIL FILTER] DROPPED (newsletter): from="${fromAddr}" subject="${msgSubject}"`)
             continue
           }
-          // Only keep emails whose subject contains a business keyword
+          // Always import emails from known CRM contacts
+          const senderEmail = extractEmail(fromAddr)
+          const isKnownContact = knownContactEmails.has(senderEmail)
           const matchedKeywords = getMatchedKeywords(msgSubject)
-          if (matchedKeywords.length === 0) {
+          if (!isKnownContact && matchedKeywords.length === 0) {
             console.log(`[EMAIL FILTER] DROPPED (no keyword match): subject="${msgSubject}"`)
             continue
           }
-          console.log(`[EMAIL FILTER] KEPT: subject="${msgSubject}" matchedKeywords=[${matchedKeywords.join(", ")}]`)
+          console.log(`[EMAIL FILTER] KEPT: subject="${msgSubject}" knownContact=${isKnownContact} matchedKeywords=[${matchedKeywords.join(", ")}]`)
           payloads.push({
             user_id: userId,
             connection_id: conn.id,
