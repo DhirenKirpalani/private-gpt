@@ -5,7 +5,7 @@ import Link from "next/link"
 import {
   Plus, MessageSquare, Search, Send, BookOpen, Globe, Radio,
   Bot, Copy, RefreshCw, Share2, Sparkles,
-  PanelLeftClose, X, User, Paperclip, File, CheckCircle2, ChevronDown,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, User, Paperclip, File, CheckCircle2, ChevronDown,
   Mail, Phone, CalendarDays, Check, Loader2, Menu, Edit2, AlertCircle,
   HardDrive, Video, Eye, Lock, Zap,
 } from "lucide-react"
@@ -1565,12 +1565,6 @@ export default function ChatPage() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <button
-            onClick={toggleSidebar}
-            className="hidden md:block rounded-md p-1.5 text-muted-foreground hover:bg-muted transition-colors"
-          >
-            <PanelLeftClose className="h-5 w-5" />
-          </button>
           <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
             <img
               src="/assets/images/exploro-logo.png"
@@ -1709,6 +1703,22 @@ export default function ChatPage() {
           <div className="absolute inset-0 z-10 bg-black/50 md:hidden" onClick={() => setSidebarOpen(false)} />
         )}
 
+        {/* ── SIDEBAR EXPAND TAB (shown when sidebar is collapsed) ── */}
+        {!sidebarOpen && (
+          <div className="hidden md:flex relative h-full w-6 shrink-0">
+            <div className="absolute inset-y-0 right-0 w-px bg-white/5" />
+            <button
+              onClick={toggleSidebar}
+              title="Expand sidebar"
+              className="flex h-full w-full flex-col items-center justify-center bg-transparent text-muted-foreground/50 transition-all duration-200 hover:text-emerald-400 group"
+            >
+              <span className="flex h-10 w-5 items-center justify-center rounded-r-lg border border-l-0 border-white/8 bg-white/3 transition-all duration-200 group-hover:border-emerald-500/30 group-hover:bg-emerald-500/8 group-hover:shadow-[2px_0_12px_rgba(16,185,129,0.12)]">
+                <ChevronsRight className="h-3 w-3 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* ── LEFT SIDEBAR ── */}
         {sidebarOpen && (
           <aside
@@ -1718,12 +1728,19 @@ export default function ChatPage() {
               backdropFilter: `blur(${theme.ui.glassBlur}px)`,
             }}
           >
-            <div className="p-3 pb-2">
+            <div className="flex items-center gap-2 p-3 pb-2">
               <button
                 onClick={handleNewConversation}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300"
               >
                 <Plus className="h-4 w-4" /> {t("chatNewConversation")}
+              </button>
+              <button
+                onClick={toggleSidebar}
+                title="Collapse sidebar"
+                className="hidden md:flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/8 text-emerald-500/70 transition-all duration-200 hover:border-emerald-500/50 hover:bg-emerald-500/15 hover:text-emerald-400 hover:shadow-[0_0_10px_rgba(16,185,129,0.15)] group"
+              >
+                <ChevronsLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-3 pb-4">

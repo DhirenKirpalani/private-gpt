@@ -1280,6 +1280,24 @@ export async function uploadSupportScreenshot(userId: string, file: File) {
 
 // ─── Notifications ───
 
+export async function createNotification(
+  userId: string,
+  type: string,
+  title: string,
+  body?: string,
+  data?: Record<string, any>
+): Promise<void> {
+  const { error } = await supabase.from("notifications").insert({
+    user_id: userId,
+    type,
+    title,
+    body: body ?? null,
+    data: data ?? {},
+    read: false,
+  })
+  if (error) console.error("[createNotification]", error.message)
+}
+
 export type Notification = {
   id: string
   user_id: string

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { Bell, Check, CheckCheck, Users, Loader2, Sparkles, ArrowRight } from "lucide-react"
+import { Bell, Check, CheckCheck, Users, Loader2, Sparkles, ArrowRight, Mail, UserPlus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { useRouter } from "next/navigation"
@@ -183,9 +183,17 @@ export function NotificationBell() {
                       <div className="flex items-start gap-3">
                         {/* Icon */}
                         <div className="mt-0.5 shrink-0">
-                          {isInvite ? (
+                          {n.type === "workspace_invite" ? (
                             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/15 to-emerald-600/5 border border-emerald-500/10">
                               <Users className="h-4 w-4 text-emerald-400" />
+                            </div>
+                          ) : n.type === "email_sync" ? (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/15 to-sky-600/5 border border-sky-500/10">
+                              <Mail className="h-4 w-4 text-sky-400" />
+                            </div>
+                          ) : n.type === "contact_import" ? (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/15 to-violet-600/5 border border-violet-500/10">
+                              <UserPlus className="h-4 w-4 text-violet-400" />
                             </div>
                           ) : (
                             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/15 to-blue-600/5 border border-blue-500/10">
