@@ -21,7 +21,7 @@ import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
-import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols } from "@/lib/supabase"
+import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols, createNotification } from "@/lib/supabase"
 
 /* ─── real data ─── */
 const stages = [
@@ -106,6 +106,8 @@ export default function CRMPage() {
   const [nextPageToken, setNextPageToken] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [fetchStep, setFetchStep] = useState<"scanning" | "filtering" | "importing" | "done" | null>(null)
+  const [fetchedCount, setFetchedCount] = useState(0)
   const [emailView, setEmailView] = useState<"kanban" | "table">("kanban")
   const [messagesView, setMessagesView] = useState<"kanban" | "table">("kanban")
   const [calendarView, setCalendarView] = useState<"kanban" | "table">("kanban")
@@ -117,7 +119,21 @@ export default function CRMPage() {
   const [contactEmailFilter, setContactEmailFilter] = useState<string | null>(null)
   const [keywordFilter, setKeywordFilter] = useState<string | null>(null)
   const [keywordFilterOpen, setKeywordFilterOpen] = useState(false)
-  const EMAIL_KEYWORDS = ["proposal", "invoice", "contract", "quote", "purchase order", "payment", "receipt", "agreement", "deal", "billing", "estimate", "refund", "opportunity", "sow", "rfp", "nda", "msa", "scope of work"]
+  const EMAIL_KEYWORDS = [
+    "proposal", "invoice", "contract", "quote", "purchase order",
+    "payment", "receipt", "agreement", "deal", "billing", "estimate",
+    "refund", "opportunity", "sow", "rfp", "nda", "msa", "scope of work",
+    "inquiry", "campaign", "marketing", "strategy", "meeting", "schedule",
+    "consultation", "services", "partnership", "collaboration", "project",
+    "pricing", "demo", "introduction", "follow up", "follow-up", "request",
+    "question", "update", "report", "plan", "budget",
+    "platform", "solution", "service", "offer", "offering",
+    "intelligence", "compliance", "sustainability", "integration",
+    "onboarding", "implementation", "support", "subscription",
+    "renewal", "upgrade", "pilot", "trial", "evaluation",
+    "presentation", "webinar", "workshop", "training",
+    "invite", "invitation", "podcast", "speaker", "guest",
+  ]
 
   // Email kanban state
   const [emailKanbanCols, setEmailKanbanCols] = useState<KanbanCol[]>([
@@ -268,8 +284,17 @@ export default function CRMPage() {
 
   const contact = contacts.find((c: Contact) => c.id === selectedId)
 
-  // Unread email count (received emails with read=false)
-  const unreadCount = inboxMessages.filter((m: any) => !m.read).length
+  // Thread-deduped counts — match kanban column display
+  const { unreadCount, totalThreadCount } = useMemo(() => {
+    const deduped = inboxMessages.filter((m: any, i: number, arr: any[]) =>
+      arr.findIndex((x: any) => x.message_id === m.message_id) === i
+    )
+    const threadIds = new Set(deduped.map((m: any) => m.thread_id || m.id))
+    const unreadThreadIds = new Set(
+      deduped.filter((m: any) => !m.read).map((m: any) => m.thread_id || m.id)
+    )
+    return { unreadCount: unreadThreadIds.size, totalThreadCount: threadIds.size }
+  }, [inboxMessages])
 
   // Upcoming calendar events count (events that haven't ended yet)
   const upcomingEventsCount = calendarEvents.filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).length
@@ -607,7 +632,7 @@ export default function CRMPage() {
 
     const isLoadMore = !!pageToken
     if (isLoadMore) setLoadingMore(true)
-    else setInboxLoading(true)
+    else { setInboxLoading(true); setFetchStep("scanning") }
     setFetchError(null)
 
     try {
@@ -616,6 +641,7 @@ export default function CRMPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, providerId, pageToken }),
       })
+      if (!isLoadMore) setFetchStep("filtering")
       const data = await res.json()
       if (!res.ok) {
         setFetchError(data.error || "Failed to fetch emails")
@@ -625,6 +651,7 @@ export default function CRMPage() {
 
       // Merge API-returned messages directly into state (no extra DB reload)
       const fetched = data.messages || []
+      setFetchedCount(fetched.length)
       const merge = (prev: any[]) => {
         const map = new Map(prev.map(m => [m.id, m]))
         for (const m of fetched) map.set(m.id, m)
@@ -639,6 +666,8 @@ export default function CRMPage() {
       setInboxFetched(true)
 
       // Fire contact import in background — don't block UI
+      if (!isLoadMore) setFetchStep("importing")
+      const prevContactCount = contacts.length
       Promise.allSettled([
         importContactsFromEmails(user.id),
         importContactsFromWhatsApp(user.id),
@@ -651,9 +680,35 @@ export default function CRMPage() {
           lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
           dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
         })))
-      }).catch(() => {})
+        if (!isLoadMore) {
+          setFetchStep("done")
+          setTimeout(() => setFetchStep(null), 2500)
+          // Notify: new emails synced
+          if (fetched.length > 0) {
+            createNotification(
+              user.id,
+              "email_sync",
+              `Inbox synced — ${fetched.length} new email${fetched.length === 1 ? "" : "s"}`,
+              `Latest: "${fetched[0]?.subject || "(no subject)"}"`,
+              { count: fetched.length }
+            ).catch(() => {})
+          }
+          // Notify: new contacts imported
+          const newContacts = contactList.length - prevContactCount
+          if (newContacts > 0) {
+            createNotification(
+              user.id,
+              "contact_import",
+              `${newContacts} new contact${newContacts === 1 ? "" : "s"} imported`,
+              "Contacts have been auto-imported from your emails.",
+              { count: newContacts }
+            ).catch(() => {})
+          }
+        }
+      }).catch(() => { if (!isLoadMore) setFetchStep(null) })
     } catch (e: any) {
       setFetchError(e?.message || "Network error fetching emails")
+      setFetchStep(null)
     } finally {
       if (isLoadMore) setLoadingMore(false)
       else setInboxLoading(false)
@@ -1076,8 +1131,8 @@ export default function CRMPage() {
                     {[
                       {
                         label: "crmInbox",
-                        value: inboxMessages.length,
-                        sub: `${inboxMessages.filter((m: any) => !m.read).length} ${t("crmUnread")}`,
+                        value: totalThreadCount,
+                        sub: `${unreadCount} ${t("crmUnread")}`,
                         icon: Mail,
                         color: "text-blue-400",
                         bg: "bg-blue-500/10",
@@ -1149,7 +1204,7 @@ export default function CRMPage() {
                                 }
                               </div>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {conn ? `${inboxMessages.filter((m: any) => !m.read).length} ${t("crmUnread")} · ${inboxMessages.length} ${t("crmTotal")}` : t("crmGoToChannels")}
+                                {conn ? `${unreadCount} ${t("crmUnread")} · ${totalThreadCount} ${t("crmTotal")}` : t("crmGoToChannels")}
                               </p>
                             </div>
                           </button>
@@ -1532,11 +1587,35 @@ export default function CRMPage() {
                     <button
                       onClick={() => fetchInbox()}
                       disabled={inboxLoading}
-                      className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
+                      className={cn(
+                        "relative overflow-hidden flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-300 disabled:cursor-not-allowed",
+                        fetchStep === "done"
+                          ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-300"
+                          : inboxLoading
+                          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:text-emerald-300"
+                      )}
                     >
-                      {inboxLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-                      <span className="hidden sm:inline">{inboxLoading ? t("crmFetching") : t("crmFetchEmails")}</span>
-                      <span className="sm:hidden">{inboxLoading ? "..." : t("crmFetchShort")}</span>
+                      {/* animated shimmer bar while loading */}
+                      {inboxLoading && (
+                        <span className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-[shimmer_1.2s_ease-in-out_infinite]" />
+                      )}
+                      {fetchStep === "done" ? (
+                        <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none">
+                          <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : inboxLoading ? (
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                      ) : (
+                        <Mail className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      <span className="whitespace-nowrap">
+                        {fetchStep === "scanning" && "Scanning inbox..."}
+                        {fetchStep === "filtering" && "Filtering emails..."}
+                        {fetchStep === "importing" && "Importing contacts..."}
+                        {fetchStep === "done" && `Done · ${fetchedCount} new`}
+                        {!fetchStep && t("crmFetchEmails")}
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -1576,6 +1655,10 @@ export default function CRMPage() {
                             return db - da
                           })
                           return { threadId: tid, msgs, latest: msgs[0] }
+                        }).sort((a: any, b: any) => {
+                          const da = a.latest?.received_at ? new Date(a.latest.received_at).getTime() : a.latest?.sent_at ? new Date(a.latest.sent_at).getTime() : 0
+                          const db = b.latest?.received_at ? new Date(b.latest.received_at).getTime() : b.latest?.sent_at ? new Date(b.latest.sent_at).getTime() : 0
+                          return db - da
                         })
                         const items = threadItems.filter(t => getThreadColId(t.msgs) === col.id)
                         return (

@@ -91,6 +91,9 @@ const NEWSLETTER_INDICATORS = [
   "job alert", "new job alert", "application confirmation",
   "we have received your application", "thank you for your application",
   "thank you for your interest", "welcome to",
+  "you have been invited to join", "you've been invited to join",
+  "verify your email", "confirm your email", "verification code",
+  "your account has been", "sign in to your account",
   "diskon", "promo", "kepada yth",
 ]
 
