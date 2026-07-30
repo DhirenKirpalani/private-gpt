@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
   const botUserId = tokenData.bot_user_id
   const teamId = tokenData.team?.id
   const teamName = tokenData.team?.name
+  const userAccessToken = tokenData.authed_user?.access_token || null
 
   if (!botAccessToken || !teamId) {
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/channels?slack_error=incomplete_token`)
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
     team_name: teamName || "",
     bot_user_id: botUserId || "",
     bot_access_token: botAccessToken,
+    user_access_token: userAccessToken,
     status: "connected",
   })
 

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
+import { createPortal } from "react-dom"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -78,16 +79,26 @@ export default function CRMPage() {
   const [avatarUrl, setAvatarUrl] = useState("")
   const [userName, setUserName] = useState("")
 
-  // Real data states
-  const [contacts, setContacts] = useState<Contact[]>([])
-  const [emailMessages, setEmailMessages] = useState<any[]>([])
+  // ── sessionStorage helpers (defined early so useState can lazily restore) ──
+  const storageKey = (k: string) => `crm_${user?.id || "guest"}_${k}`
+  const loadStored = <T,>(key: string, fallback: T): T => {
+    if (typeof window === "undefined") return fallback
+    try {
+      const raw = sessionStorage.getItem(storageKey(key))
+      return raw ? JSON.parse(raw) as T : fallback
+    } catch { return fallback }
+  }
+
+  // Real data states — lazily restored from sessionStorage to avoid flash of empty data on remount
+  const [contacts, setContacts] = useState<Contact[]>(() => loadStored("contacts", []))
+  const [emailMessages, setEmailMessages] = useState<any[]>(() => loadStored("emailMessages", []))
   const [emailConnections, setEmailConnections] = useState<any[]>([])
   const [channelsLoading, setChannelsLoading] = useState(true)
 
   // Inbox state
-  const [inboxMessages, setInboxMessages] = useState<any[]>([])
+  const [inboxMessages, setInboxMessages] = useState<any[]>(() => loadStored("inboxMessages", []))
   const [inboxLoading, setInboxLoading] = useState(false)
-  const [inboxFetched, setInboxFetched] = useState(false)
+  const [inboxFetched, setInboxFetched] = useState(() => loadStored("inboxFetched", false))
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set())
 
   // Email composer state
@@ -181,36 +192,37 @@ export default function CRMPage() {
 
   // Calendar state
   const [calendarConnections, setCalendarConnections] = useState<any[]>([])
-  const [calendarEvents, setCalendarEvents] = useState<any[]>([])
+  const [calendarEvents, setCalendarEvents] = useState<any[]>(() => loadStored("calendarEvents", []))
   const [calendarLoading, setCalendarLoading] = useState(false)
-  const [calendarFetched, setCalendarFetched] = useState(false)
+  const [calendarFetched, setCalendarFetched] = useState(() => loadStored("calendarFetched", false))
 
   // WhatsApp state
   const [whatsappConnections, setWhatsAppConnections] = useState<any[]>([])
-  const [whatsappMessages, setWhatsAppMessages] = useState<any[]>([])
+  const [whatsappMessages, setWhatsAppMessages] = useState<any[]>(() => loadStored("whatsappMessages", []))
   const [whatsappLoading, setWhatsAppLoading] = useState(false)
-  const [whatsappFetched, setWhatsAppFetched] = useState(false)
+  const [whatsappFetched, setWhatsAppFetched] = useState(() => loadStored("whatsappFetched", false))
   const [waReplyBody, setWaReplyBody] = useState("")
   const [waReplyTo, setWaReplyTo] = useState<string | null>(null)
   const [sendingWaReply, setSendingWaReply] = useState(false)
   const [replySource, setReplySource] = useState<"whatsapp" | "telegram" | "slack">("whatsapp")
+  const [activeThread, setActiveThread] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
 
   // Telegram state
   const [telegramConnections, setTelegramConnections] = useState<any[]>([])
-  const [telegramMessages, setTelegramMessages] = useState<any[]>([])
+  const [telegramMessages, setTelegramMessages] = useState<any[]>(() => loadStored("telegramMessages", []))
   const [telegramLoading, setTelegramLoading] = useState(false)
-  const [telegramFetched, setTelegramFetched] = useState(false)
+  const [telegramFetched, setTelegramFetched] = useState(() => loadStored("telegramFetched", false))
 
   // Slack state
   const [slackConnections, setSlackConnections] = useState<any[]>([])
-  const [slackMessages, setSlackMessages] = useState<any[]>([])
+  const [slackMessages, setSlackMessages] = useState<any[]>(() => loadStored("slackMessages", []))
   const [slackLoading, setSlackLoading] = useState(false)
-  const [slackFetched, setSlackFetched] = useState(false)
-
-  // ── Persist CRM data to sessionStorage so it survives page navigation ──
-  const storageKey = (k: string) => `crm_${user?.id || "guest"}_${k}`
+  const [slackFetched, setSlackFetched] = useState(() => loadStored("slackFetched", false))
 
   // Restore on mount
+  useEffect(() => { setMounted(true) }, [])
+
   useEffect(() => {
     if (typeof window === "undefined" || !user) return
     try {
@@ -358,6 +370,24 @@ export default function CRMPage() {
     return msg.from_number
   }
 
+  // Helper: thread ID for grouping messages by conversation
+  const msgThreadId = (msg: any) => {
+    if (msg._source === "slack") return `slack_${msg.channel_id}`
+    if (msg._source === "telegram") return `tg_${msg.chat_id}`
+    return `wa_${msg.direction === "sent" ? msg.to_number : msg.from_number}`
+  }
+
+  // Helper: format timestamp for display
+  const msgTimeStr = (msg: any) => {
+    if (!msg.timestamp) return ""
+    const d = new Date(msg.timestamp)
+    const now = new Date()
+    if (d.toDateString() === now.toDateString()) {
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    }
+    return d.toLocaleDateString([], { month: "short", day: "numeric" })
+  }
+
   // Helper: icon for message source
   const msgSourceIcon = (msg: any) => {
     if (msg._source === "telegram") return <Send className="h-3 w-3 text-sky-400" />
@@ -367,6 +397,17 @@ export default function CRMPage() {
 
   const [msgFilter, setMsgFilter] = useState<"whatsapp" | "telegram" | "slack">("whatsapp")
   const [msgFilterOpen, setMsgFilterOpen] = useState(false)
+
+  // Auto-set msgFilter to first connected messaging channel
+  useEffect(() => {
+    const msgChannels = channels.filter(c => c.type === "whatsapp" || c.type === "telegram" || c.type === "slack")
+    if (msgChannels.length > 0) {
+      const currentConnected = msgChannels.find(c => c.type === msgFilter)
+      if (!currentConnected) {
+        setMsgFilter(msgChannels[0].type as any)
+      }
+    }
+  }, [channels, msgFilter])
 
   // Combined WhatsApp + Telegram messages for the Messages tab
   const combinedMessages = useMemo(() => {
@@ -384,6 +425,28 @@ export default function CRMPage() {
   const filteredCombinedMessages = useMemo(() => {
     return combinedMessages.filter(m => m._source === msgFilter)
   }, [combinedMessages, msgFilter])
+
+  // Group messages by thread (conversation)
+  const threadedMessages = useMemo(() => {
+    const threads = new Map<string, any[]>()
+    for (const msg of filteredCombinedMessages) {
+      const tid = msgThreadId(msg)
+      if (!threads.has(tid)) threads.set(tid, [])
+      threads.get(tid)!.push(msg)
+    }
+    for (const [, msgs] of Array.from(threads.entries())) {
+      msgs.sort((a: any, b: any) => {
+        const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
+        const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
+        return ta - tb
+      })
+    }
+    return Array.from(threads.entries()).sort((a, b) => {
+      const ta = a[1][a[1].length - 1]?.timestamp ? new Date(a[1][a[1].length - 1].timestamp).getTime() : 0
+      const tb = b[1][b[1].length - 1]?.timestamp ? new Date(b[1][b[1].length - 1].timestamp).getTime() : 0
+      return tb - ta
+    })
+  }, [filteredCombinedMessages])
 
   // Upcoming calendar events count (events that haven't ended yet)
   const upcomingEventsCount = calendarEvents.filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).length
@@ -464,6 +527,11 @@ export default function CRMPage() {
       // Core metadata loaded — show CRM
       setChannelsLoading(false)
 
+      // Set loading states for message channels so the refresh button shows a spinner
+      if (waConnsRes.status === "fulfilled" && waConnsRes.value.length > 0) setWhatsAppLoading(true)
+      if (tgConnsRes.status === "fulfilled" && tgConnsRes.value.length > 0) setTelegramLoading(true)
+      if (slConnsRes.status === "fulfilled" && slConnsRes.value.length > 0) setSlackLoading(true)
+
       // Then fetch heavy message/event data in parallel (non-blocking)
       await Promise.allSettled([
         emailConnsRes.status === "fulfilled" && emailConnsRes.value.length > 0
@@ -493,18 +561,29 @@ export default function CRMPage() {
             }).catch(() => {})
           : (() => { setWhatsAppMessages([]); setWhatsAppFetched(false); return Promise.resolve() })(),
         tgConnsRes.status === "fulfilled" && tgConnsRes.value.length > 0
-          ? getTelegramMessages(user.id).then((msgs: any[]) => {
+          ? fetch("/api/telegram/fetch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: user.id }),
+            }).then(() => getTelegramMessages(user.id)).then((msgs: any[]) => {
               setTelegramMessages(msgs)
-              if (msgs.length > 0) setTelegramFetched(true)
+              setTelegramFetched(true)
             }).catch(() => {})
           : (() => { setTelegramMessages([]); setTelegramFetched(false); return Promise.resolve() })(),
         slConnsRes.status === "fulfilled" && slConnsRes.value.length > 0
-          ? getSlackMessages(user.id).then((msgs: any[]) => {
+          ? fetch("/api/slack/fetch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: user.id }),
+            }).then(() => getSlackMessages(user.id)).then((msgs: any[]) => {
               setSlackMessages(msgs)
-              if (msgs.length > 0) setSlackFetched(true)
+              setSlackFetched(true)
             }).catch(() => {})
           : (() => { setSlackMessages([]); setSlackFetched(false); return Promise.resolve() })(),
       ])
+      setWhatsAppLoading(false)
+      setTelegramLoading(false)
+      setSlackLoading(false)
     }
     load()
   }, [user, pathname])
@@ -2350,7 +2429,11 @@ export default function CRMPage() {
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ userId: user.id }),
                           }).then(r => r.json()).then(() => getTelegramMessages(user.id)),
-                          getSlackMessages(user.id),
+                          fetch("/api/slack/fetch", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ userId: user.id }),
+                          }).then(r => r.json()).then(() => getSlackMessages(user.id)),
                         ])
                         if (waMsgs.status === "fulfilled") {
                           setWhatsAppMessages(waMsgs.value)
@@ -2381,7 +2464,8 @@ export default function CRMPage() {
                     <div className="flex h-full gap-5 p-6">
                       {msgKanbanCols.map(col => {
                         const getColId = (m: any) => msgCardCols[m.id] || (m.direction === "sent" ? "sent" : m.read ? "read" : "unread")
-                        const items = filteredCombinedMessages.filter(m => getColId(m) === col.id)
+                        const colThreadIds = new Set(filteredCombinedMessages.filter(m => getColId(m) === col.id).map(m => msgThreadId(m)))
+                        const items = threadedMessages.filter(([tid, msgs]) => colThreadIds.has(tid))
                         return (
                           <div
                             key={col.id}
@@ -2407,20 +2491,27 @@ export default function CRMPage() {
                             <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1 pb-4">
                               {items.length === 0 ? (
                                 <div className="rounded-xl border border-dashed py-8 text-center"><p className="text-xs text-muted-foreground">{t("crmDropMessages")}</p></div>
-                              ) : items.map((msg: any) => (
-                                <div key={msg.id} draggable
-                                  onDragStart={e => { dragMsgId.current = msg.id; e.dataTransfer.effectAllowed = "move" }}
-                                  onClick={() => { setWaReplyTo(msgReplyTarget(msg)); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
-                                  className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-grab active:cursor-grabbing active:opacity-60 active:scale-95"
+                              ) : items.map(([tid, msgs]: [string, any[]]) => {
+                                const lastMsg = msgs[msgs.length - 1]
+                                const firstMsg = msgs[0]
+                                return (
+                                <div key={tid} draggable
+                                  onDragStart={e => { dragMsgId.current = firstMsg.id; e.dataTransfer.effectAllowed = "move" }}
+                                  onClick={() => { setActiveThread(tid); setWaReplyTo(msgReplyTarget(lastMsg)); setReplySource(lastMsg._source); setWaReplyBody(""); setSendingWaReply(false) }}
+                                  className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-pointer active:cursor-grabbing active:opacity-60 active:scale-95"
                                 >
-                                  <p className="text-sm font-semibold mb-1 truncate">{msgDisplayName(msg)}</p>
-                                  <p className="text-xs text-muted-foreground truncate mt-1">{msg.body || ""}</p>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-sm font-semibold truncate">{msgDisplayName(firstMsg)}</p>
+                                    {msgs.length > 1 && <span className="ml-1 shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">{msgs.length}</span>}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground truncate mt-1">{lastMsg.body || ""}</p>
                                   <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
-                                    {msgSourceIcon(msg)}
-                                    <span>{msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}</span>
+                                    {msgSourceIcon(lastMsg)}
+                                    <span>{msgTimeStr(lastMsg)}</span>
                                   </div>
                                 </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           </div>
                         )
@@ -2451,68 +2542,32 @@ export default function CRMPage() {
                       <thead>
                         <tr className="border-b bg-muted/50">
                           <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">From / To</th>
-                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Message</th>
-                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-32">Status</th>
-                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-28">Date</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Last Message</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-20">Msgs</th>
+                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-28">Last Activity</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {[...filteredCombinedMessages].sort((a: any, b: any) => {
-                          const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
-                          const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
-                          return tb - ta
-                        }).map((msg: any) => {
-                          const colId = msgCardCols[msg.id] || (msg.direction === "sent" ? "sent" : msg.read ? "read" : "unread")
-                          const col = msgKanbanCols.find(c => c.id === colId) || msgKanbanCols[0]
+                        {threadedMessages.map(([tid, msgs]: [string, any[]]) => {
+                          const lastMsg = msgs[msgs.length - 1]
+                          const firstMsg = msgs[0]
                           return (
                           <tr
-                            key={msg.id}
-                            onClick={() => { setWaReplyTo(msgReplyTarget(msg)); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
-                            className={cn("border-b last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors", msg.direction === "received" && !msg.read && "bg-emerald-500/5")}
+                            key={tid}
+                            onClick={() => { setActiveThread(tid); setWaReplyTo(msgReplyTarget(lastMsg)); setReplySource(lastMsg._source); setWaReplyBody(""); setSendingWaReply(false) }}
+                            className={cn("border-b last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors", lastMsg.direction === "received" && !lastMsg.read && "bg-emerald-500/5")}
                           >
-                            <td className="px-4 py-2.5 font-medium">{msgDisplayName(msg)}</td>
-                            <td className="px-4 py-2.5 truncate max-w-[360px] text-muted-foreground">{msg.body || ""}</td>
-                            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                              <div className="relative">
-                                <button
-                                  onClick={e => { e.stopPropagation(); setMsgStatusOpen(msgStatusOpen === msg.id ? null : msg.id) }}
-                                  className={cn("w-full rounded-lg px-3 py-1.5 text-[11px] font-semibold flex items-center justify-between gap-1.5 border transition-all hover:brightness-110", col?.color)}
-                                >
-                                  <span>{col?.label}</span>
-                                  <ChevronDown className={cn("h-3 w-3 transition-transform", msgStatusOpen === msg.id && "rotate-180")} />
-                                </button>
-                                {msgStatusOpen === msg.id && (
-                                  <div className="absolute left-0 top-full z-30 mt-1 w-full min-w-[160px] rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
-                                    <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Move to / Rename</p>
-                                    {msgKanbanCols.map(c => (
-                                      <div key={c.id} className={cn("flex items-center gap-1 px-2 py-1 hover:bg-white/5 transition-colors", c.id === colId && "bg-white/5")}>
-                                        {editingMsgLabel === c.id ? (
-                                          <input autoFocus defaultValue={c.label}
-                                            className={cn("flex-1 rounded-md border px-2 py-1 text-xs bg-transparent focus:outline-none", c.color)}
-                                            onClick={e => e.stopPropagation()}
-                                            onBlur={e => { const v = e.target.value.trim(); if (v) setMsgKanbanCols(prev => prev.map(col => col.id === c.id ? { ...col, label: v } : col)); setEditingMsgLabel(null) }}
-                                            onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingMsgLabel(null) }}
-                                          />
-                                        ) : (
-                                          <button onClick={e => { e.stopPropagation(); setMsgCardCols(prev => ({ ...prev, [msg.id]: c.id })); setMsgStatusOpen(null) }}
-                                            className="flex flex-1 items-center gap-2 py-1 text-left text-xs">
-                                            <span className="flex-1">{c.label}</span>
-                                            {c.id === colId && <Check className="h-3 w-3 text-emerald-400 shrink-0" />}
-                                          </button>
-                                        )}
-                                        {editingMsgLabel !== c.id && (
-                                          <button onClick={e => { e.stopPropagation(); setEditingMsgLabel(c.id) }}
-                                            className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-white transition-colors shrink-0">
-                                            <Pencil className="h-3 w-3" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                            <td className="px-4 py-2.5 font-medium">
+                              <div className="flex items-center gap-1.5">
+                                {msgSourceIcon(lastMsg)}
+                                <span className="truncate">{msgDisplayName(firstMsg)}</span>
                               </div>
                             </td>
-                            <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}</td>
+                            <td className="px-4 py-2.5 truncate max-w-[360px] text-muted-foreground">{lastMsg.body || ""}</td>
+                            <td className="px-4 py-2.5 text-muted-foreground">
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold">{msgs.length}</span>
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{msgTimeStr(lastMsg)}</td>
                           </tr>
                           )
                         })}
@@ -2521,90 +2576,184 @@ export default function CRMPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {[...filteredCombinedMessages].sort((a: any, b: any) => {
-                      const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
-                      const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
-                      return tb - ta
-                    }).map((msg: any) => (
+                    {threadedMessages.map(([tid, msgs]: [string, any[]]) => {
+                      const lastMsg = msgs[msgs.length - 1]
+                      const firstMsg = msgs[0]
+                      return (
                       <div
-                        key={msg.id}
-                        onClick={() => { setWaReplyTo(msgReplyTarget(msg)); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
-                        className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-emerald-500/30 cursor-pointer", msg.direction === "received" && !msg.read && "border-l-2 border-l-emerald-500")}
+                        key={tid}
+                        onClick={() => { setActiveThread(tid); setWaReplyTo(msgReplyTarget(lastMsg)); setReplySource(lastMsg._source); setWaReplyBody(""); setSendingWaReply(false) }}
+                        className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-emerald-500/30 cursor-pointer", lastMsg.direction === "received" && !lastMsg.read && "border-l-2 border-l-emerald-500")}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-medium truncate max-w-[60%]">
-                            {msgDisplayName(msg)}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            {msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {msgSourceIcon(lastMsg)}
+                            <span className="text-xs font-medium truncate max-w-[50%]">
+                              {msgDisplayName(firstMsg)}
+                            </span>
+                            {msgs.length > 1 && <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground shrink-0">{msgs.length}</span>}
+                          </div>
+                          <span className="text-[10px] text-muted-foreground shrink-0 ml-2">
+                            {msgTimeStr(lastMsg)}
                           </span>
                         </div>
-                        <p className="text-sm truncate">{msg.body || ""}</p>
+                        <p className="text-sm truncate">{lastMsg.body || ""}</p>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
 
-                {/* Reply */}
-                {waReplyTo && (
-                  <div className="mt-4 rounded-lg border bg-card p-3">
-                    <p className="text-xs text-muted-foreground mb-2">Reply to {waReplyTo} {replySource === "telegram" && "via Telegram"}{replySource === "slack" && "via Slack"}</p>
-                    <textarea
-                      value={waReplyBody}
-                      onChange={e => setWaReplyBody(e.target.value)}
-                      placeholder="Type your message..."
-                      className="w-full rounded-lg border bg-transparent p-2 text-sm resize-none focus:outline-none focus:border-emerald-500/50"
-                      rows={3}
-                    />
-                    <div className="flex justify-end mt-2">
-                      <button
-                        onClick={async () => {
-                          if (!user || !waReplyBody.trim() || !waReplyTo) return
-                          setSendingWaReply(true)
-                          try {
-                            const endpoint = replySource === "telegram" ? "/api/telegram/send" : replySource === "slack" ? "/api/slack/send" : "/api/whatsapp/send"
-                            const payload = replySource === "telegram"
-                              ? { userId: user.id, chatId: waReplyTo, body: waReplyBody }
-                              : replySource === "slack"
-                              ? { userId: user.id, channelId: waReplyTo, text: waReplyBody }
-                              : { userId: user.id, to: waReplyTo, body: waReplyBody }
-                            const res = await fetch(endpoint, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify(payload),
-                            })
-                            const data = await res.json()
-                            if (!res.ok) throw new Error(data.error || "Failed to send")
-                            if (replySource === "telegram") {
-                              const tgMsgs = await getTelegramMessages(user.id)
-                              setTelegramMessages(tgMsgs)
-                            } else if (replySource === "slack") {
-                              const slMsgs = await getSlackMessages(user.id)
-                              setSlackMessages(slMsgs)
-                            } else {
-                              const msgs = await getWhatsAppMessages(user.id)
-                              setWhatsAppMessages(msgs)
-                            }
-                            setWaReplyTo(null)
-                            setWaReplyBody("")
-                          } catch (e: any) {
-                            toast({ title: "Error", description: e?.message || "Failed to send message", variant: "error" })
-                          } finally {
-                            setSendingWaReply(false)
-                          }
-                        }}
-                        disabled={sendingWaReply || !waReplyBody.trim()}
-                        className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
-                      >
-                        {sendingWaReply ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                        {sendingWaReply ? "Sending..." : "Send"}
-                      </button>
+                </div>
+                </div>
+                )}
+
+                {/* Thread detail modal overlay */}
+                {mounted && activeThread && (() => {
+                  const threadMsgs = threadedMessages.find(([tid]) => tid === activeThread)?.[1] || []
+                  const firstMsg = threadMsgs[0]
+                  const threadId = activeThread
+                  const isExpanded = expandedThreads.has(threadId)
+                  const visibleMessages = isExpanded ? threadMsgs : threadMsgs.slice(-3)
+                  const hiddenCount = threadMsgs.length - visibleMessages.length
+                  const sourceLabel = replySource === "telegram" ? "Telegram" : replySource === "slack" ? "Slack" : "WhatsApp"
+                  const sourceColor = replySource === "telegram" ? "text-sky-400 bg-sky-500/15" : replySource === "slack" ? "text-purple-400 bg-purple-500/15" : "text-emerald-400 bg-emerald-500/15"
+                  const SourceIcon = replySource === "telegram" ? Send : replySource === "slack" ? MessageSquare : Phone
+                  const displayName = firstMsg ? msgDisplayName(firstMsg) : "Unknown"
+                  const initials = getInitials(displayName.replace(/^To:\s*/i, ""))
+                  const close = () => { setActiveThread(null); setWaReplyTo(null); setWaReplyBody("") }
+                  return createPortal(
+                  <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in" onClick={close}>
+                    <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-white/10 bg-[#1a1f2e] shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+                      {/* Header */}
+                      <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 text-sm font-bold text-emerald-300 ring-1 ring-emerald-500/20">
+                            {initials || "?"}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-base font-semibold text-white truncate">{displayName}</h3>
+                            <div className="mt-0.5 flex items-center gap-2">
+                              <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold", sourceColor)}>
+                                <SourceIcon className="h-2.5 w-2.5" />
+                                {sourceLabel}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">{threadMsgs.length} message{threadMsgs.length > 1 ? "s" : ""}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <button onClick={close} className="rounded-lg p-2 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors shrink-0">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {/* Thread messages — scrollable area */}
+                      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+                        <div className="space-y-3">
+                          {hiddenCount > 0 && (
+                            <button
+                              onClick={() => setExpandedThreads(prev => { const next = new Set(prev); next.add(threadId); return next })}
+                              className="w-full flex items-center justify-center gap-2 py-2 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                            >
+                              <ChevronDown className="h-3.5 w-3.5" />
+                              Show {hiddenCount} previous message{hiddenCount > 1 ? "s" : ""}
+                            </button>
+                          )}
+                          {isExpanded && threadMsgs.length > 3 && (
+                            <button
+                              onClick={() => setExpandedThreads(prev => { const next = new Set(prev); next.delete(threadId); return next })}
+                              className="w-full flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground hover:text-white/70 transition-colors"
+                            >
+                              <ChevronUp className="h-3.5 w-3.5" />
+                              Hide previous messages
+                            </button>
+                          )}
+                          {visibleMessages.map((m: any) => {
+                            const isSent = m.direction === "sent"
+                            const senderName = msgDisplayName(m)
+                            return (
+                            <div key={m.id} className={cn("flex", isSent ? "justify-end" : "justify-start")}>
+                              <div className={cn("max-w-[75%] min-w-0")}>
+                                <div className={cn(
+                                  "rounded-2xl px-3.5 py-2.5 text-sm",
+                                  isSent
+                                    ? "bg-emerald-600/20 text-emerald-50 rounded-tr-sm border border-emerald-500/15"
+                                    : "bg-white/[0.04] text-white/90 rounded-tl-sm border border-white/5"
+                                )}>
+                                  <p className="whitespace-pre-wrap break-words">{m.body || ""}</p>
+                                </div>
+                                <p className={cn("mt-1 text-[10px] text-muted-foreground", isSent ? "text-right" : "text-left")}>
+                                  {isSent ? "You" : senderName} · {msgTimeStr(m)}
+                                </p>
+                              </div>
+                            </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Reply section — sticky bottom */}
+                      <div className="border-t border-white/5 px-6 py-4">
+                        <div className="flex items-end gap-2">
+                          <textarea
+                            value={waReplyBody}
+                            onChange={e => setWaReplyBody(e.target.value)}
+                            placeholder="Type your message..."
+                            className="flex-1 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30 transition-all"
+                            rows={2}
+                            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); (e.currentTarget.parentElement?.querySelector("button") as HTMLButtonElement)?.click() } }}
+                          />
+                          <button
+                            onClick={async () => {
+                              if (!user || !waReplyBody.trim() || !waReplyTo) return
+                              setSendingWaReply(true)
+                              try {
+                                const endpoint = replySource === "telegram" ? "/api/telegram/send" : replySource === "slack" ? "/api/slack/send" : "/api/whatsapp/send"
+                                const payload = replySource === "telegram"
+                                  ? { userId: user.id, chatId: waReplyTo, body: waReplyBody }
+                                  : replySource === "slack"
+                                  ? { userId: user.id, channelId: waReplyTo, text: waReplyBody }
+                                  : { userId: user.id, to: waReplyTo, body: waReplyBody }
+                                const res = await fetch(endpoint, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify(payload),
+                                })
+                                const data = await res.json()
+                                if (!res.ok) throw new Error(data.error || "Failed to send")
+                                if (replySource === "telegram") {
+                                  const tgMsgs = await getTelegramMessages(user.id)
+                                  setTelegramMessages(tgMsgs)
+                                } else if (replySource === "slack") {
+                                  const slMsgs = await getSlackMessages(user.id)
+                                  setSlackMessages(slMsgs)
+                                } else {
+                                  const msgs = await getWhatsAppMessages(user.id)
+                                  setWhatsAppMessages(msgs)
+                                }
+                                setWaReplyBody("")
+                              } catch (e: any) {
+                                toast({ title: "Error", description: e?.message || "Failed to send message", variant: "error" })
+                              } finally {
+                                setSendingWaReply(false)
+                              }
+                            }}
+                            disabled={sendingWaReply || !waReplyBody.trim()}
+                            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                          >
+                            {sendingWaReply ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                            {sendingWaReply ? "Sending..." : "Send"}
+                          </button>
+                        </div>
+                        {!waReplyTo && (
+                          <p className="mt-1.5 text-[10px] text-amber-400/70">No reply target available for this message.</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-                </div>
-                </div>
-                )}
+                  </div>,
+                  document.body
+                  )
+                })()}
               </div>
             )}
 

@@ -160,9 +160,10 @@ async function _POST(req: NextRequest) {
     }
 
     // Append Calendly scheduling URL to calendar context
-    if (calendlyConn?.scheduling_url) {
-      const urlLine = `\nYour Calendly booking link: ${calendlyConn.scheduling_url}\nINSTRUCTION: When the user asks to schedule a meeting or send a meeting invite, always include this Calendly link — never ask the user to provide it.`
-      calendarContext = calendarContext ? calendarContext + urlLine : urlLine.trim()
+    const calendlyUrl = calendlyConn?.scheduling_url || ""
+    let calendlyContext = ""
+    if (calendlyUrl) {
+      calendlyContext = `Your Calendly booking link: ${calendlyUrl}\n\nINSTRUCTION: When the user asks to schedule a meeting, send a meeting invite, or mentions a demo/call/booking, you MUST include this exact Calendly link in the message. NEVER use a placeholder like [Insertar enlace de Calendly] or ask the user to provide the link. The link is provided above — use it directly.`
     }
 
     return NextResponse.json({
@@ -171,8 +172,10 @@ async function _POST(req: NextRequest) {
       waMessages: waMsgs || [],
       slackMessages: slackMsgs || [],
       telegramMessages: tgMsgs || [],
+      calendlyUrl,
       emailContext,
       calendarContext,
+      calendlyContext,
       whatsappContext,
       slackContext,
       telegramContext,
