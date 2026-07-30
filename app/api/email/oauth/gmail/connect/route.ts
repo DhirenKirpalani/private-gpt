@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/email/oauth/callback`
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const userId = searchParams.get("userId")
@@ -40,3 +41,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "OAuth init failed" }, { status: 500 })
   }
 }
+
+export const GET = withApiLogging(_GET, "/api/email/oauth/gmail/connect")

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import nodemailer from "nodemailer"
 import { createClient } from "@supabase/supabase-js"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { userId, providerId } = await req.json()
     console.log(`[SMTP TEST] Starting test for provider=${providerId} userId=${userId}`)
@@ -81,3 +82,5 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/email/test")

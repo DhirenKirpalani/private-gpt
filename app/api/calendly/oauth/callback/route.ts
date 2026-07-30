@@ -67,6 +67,7 @@ export async function GET(req: NextRequest) {
     })
     const userData = await userRes.json()
     const email = userData.resource?.email || ""
+    const schedulingUrl = userData.resource?.scheduling_url || ""
 
     // Upsert calendly connection in calendar_connections
     const { data: existing } = await supabase
@@ -82,6 +83,7 @@ export async function GET(req: NextRequest) {
         refresh_token: refreshToken || undefined,
         token_expires_at: expiresAt,
         calendar_email: email,
+        scheduling_url: schedulingUrl || undefined,
         status: "connected",
         updated_at: new Date().toISOString(),
       }).eq("id", existing.id)
@@ -94,6 +96,7 @@ export async function GET(req: NextRequest) {
         refresh_token: refreshToken,
         token_expires_at: expiresAt,
         calendar_email: email,
+        scheduling_url: schedulingUrl,
       })
     }
 

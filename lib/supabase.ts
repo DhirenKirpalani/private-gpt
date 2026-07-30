@@ -1164,6 +1164,154 @@ export async function deleteWhatsAppConnection(userId: string, connectionId: str
   if (error) throw error
 }
 
+// ─── Telegram ───
+export interface TelegramConnection {
+  id: string
+  user_id: string
+  bot_token: string
+  bot_username?: string
+  bot_first_name?: string
+  status: string
+  webhook_verified?: boolean
+  created_at: string
+}
+
+export interface TelegramMessage {
+  id: string
+  user_id: string
+  connection_id: string
+  direction: string
+  chat_id?: string
+  chat_type?: string
+  chat_title?: string
+  from_id?: string
+  from_first_name?: string
+  from_last_name?: string
+  from_username?: string
+  tg_message_id?: number
+  body?: string
+  timestamp?: string
+  read?: boolean
+  created_at: string
+}
+
+export async function getTelegramConnections(userId: string): Promise<TelegramConnection[]> {
+  const { data, error } = await supabase
+    .from("telegram_connections")
+    .select("*")
+    .eq("user_id", userId)
+  if (error) throw error
+  return (data ?? []) as TelegramConnection[]
+}
+
+export async function getTelegramMessages(userId: string): Promise<TelegramMessage[]> {
+  const { data, error } = await supabase
+    .from("telegram_messages")
+    .select("*")
+    .eq("user_id", userId)
+    .order("timestamp", { ascending: false })
+  if (error) throw error
+  return (data ?? []) as TelegramMessage[]
+}
+
+export async function saveTelegramConnection(
+  userId: string,
+  botToken: string,
+  botUsername?: string,
+  botFirstName?: string
+) {
+  const { error } = await supabase.from("telegram_connections").insert({
+    user_id: userId,
+    bot_token: botToken,
+    bot_username: botUsername,
+    bot_first_name: botFirstName,
+    status: "connected",
+  })
+  if (error) throw error
+}
+
+export async function deleteTelegramConnection(userId: string, connectionId: string) {
+  const { error: msgError } = await supabase
+    .from("telegram_messages")
+    .delete()
+    .eq("user_id", userId)
+    .eq("connection_id", connectionId)
+  if (msgError) console.error("[deleteTelegramConnection] Failed to delete messages:", msgError.message)
+
+  const { error: contactError } = await supabase
+    .from("contacts")
+    .delete()
+    .eq("user_id", userId)
+    .eq("source", "telegram_import")
+  if (contactError) console.error("[deleteTelegramConnection] Failed to delete contacts:", contactError.message)
+
+  const { error } = await supabase
+    .from("telegram_connections")
+    .delete()
+    .eq("id", connectionId)
+    .eq("user_id", userId)
+  if (error) throw error
+}
+
+// Import contacts from Telegram messages (extract unique senders)
+export async function importContactsFromTelegram(userId: string): Promise<number> {
+  const { data: messages, error } = await supabase
+    .from("telegram_messages")
+    .select("from_id, from_first_name, from_last_name, from_username, body, timestamp")
+    .eq("user_id", userId)
+    .eq("direction", "received")
+    .not("from_id", "is", null)
+
+  if (error || !messages || messages.length === 0) return 0
+
+  const uniqueSenders = new Map<string, { firstName?: string; lastName?: string; username?: string; lastContact?: string }>()
+  for (const msg of messages) {
+    if (!uniqueSenders.has(msg.from_id)) {
+      uniqueSenders.set(msg.from_id, {
+        firstName: msg.from_first_name,
+        lastName: msg.from_last_name,
+        username: msg.from_username,
+        lastContact: msg.timestamp,
+      })
+    }
+  }
+
+  const senderIds = Array.from(uniqueSenders.keys())
+  const { data: existing } = await supabase
+    .from("contacts")
+    .select("id, phone")
+    .eq("user_id", userId)
+    .in("phone", senderIds)
+
+  const existingPhones = new Set((existing ?? []).map((c: any) => c.phone))
+  const newSenders = senderIds.filter(id => !existingPhones.has(id))
+  if (newSenders.length === 0) return 0
+
+  const rows = newSenders.map(id => {
+    const info = uniqueSenders.get(id)!
+    const name = [info.firstName, info.lastName].filter(Boolean).join(" ") || info.username || id
+    return {
+      user_id: userId,
+      name,
+      email: null,
+      phone: id,
+      company: null,
+      role: null,
+      location: null,
+      tags: ["telegram"],
+      starred: false,
+      source: "telegram_import",
+      last_contact: info.lastContact,
+      deal_value: 0,
+      deal_stage: null,
+    }
+  })
+
+  const { error: insertError } = await supabase.from("contacts").insert(rows)
+  if (insertError) console.error("[TG IMPORT] Insert failed:", insertError.message)
+  return rows.length
+}
+
 // ─── Realtime Subscriptions ───
 export function subscribeToEmailMessages(
   userId: string,
@@ -1359,4 +1507,156 @@ export function subscribeToNotifications(
     .subscribe()
 
   return channel
+}
+
+// ─── Slack Helpers ───
+export interface SlackConnection {
+  id: string
+  user_id: string
+  team_id: string
+  team_name: string
+  bot_user_id: string
+  bot_access_token: string
+  status: string
+  created_at: string
+}
+
+export interface SlackMessage {
+  id: string
+  user_id: string
+  connection_id: string
+  direction: string
+  channel_id: string
+  channel_name: string | null
+  slack_user_id: string | null
+  slack_user_name: string | null
+  slack_ts: string
+  body: string
+  timestamp: string
+  read: boolean
+}
+
+export async function getSlackConnections(userId: string): Promise<SlackConnection[]> {
+  const { data, error } = await supabase
+    .from("slack_connections")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "connected")
+  if (error) throw error
+  return data as SlackConnection[]
+}
+
+export async function saveSlackConnection(conn: Omit<SlackConnection, "id" | "created_at">): Promise<SlackConnection> {
+  const { data: existing } = await supabase
+    .from("slack_connections")
+    .select("id")
+    .eq("user_id", conn.user_id)
+    .single()
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from("slack_connections")
+      .update({
+        team_id: conn.team_id,
+        team_name: conn.team_name,
+        bot_user_id: conn.bot_user_id,
+        bot_access_token: conn.bot_access_token,
+        status: "connected",
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single()
+    if (error) throw error
+    return data as SlackConnection
+  }
+
+  const { data, error } = await supabase
+    .from("slack_connections")
+    .insert(conn)
+    .select("*")
+    .single()
+  if (error) throw error
+  return data as SlackConnection
+}
+
+export async function deleteSlackConnection(userId: string): Promise<void> {
+  await supabase.from("slack_messages").delete().eq("user_id", userId)
+  await supabase.from("slack_connections").delete().eq("user_id", userId)
+}
+
+export async function getSlackMessages(userId: string): Promise<SlackMessage[]> {
+  const { data, error } = await supabase
+    .from("slack_messages")
+    .select("*")
+    .eq("user_id", userId)
+    .order("timestamp", { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return (data || []) as SlackMessage[]
+}
+
+export async function saveSlackMessage(msg: Omit<SlackMessage, "id">): Promise<void> {
+  const { data: existing } = await supabase
+    .from("slack_messages")
+    .select("id")
+    .eq("user_id", msg.user_id)
+    .eq("slack_ts", msg.slack_ts)
+    .single()
+  if (existing) return
+
+  const { error } = await supabase.from("slack_messages").insert(msg)
+  if (error) console.error("[SLACK] Save message failed:", error.message)
+}
+
+export async function importContactsFromSlack(userId: string): Promise<number> {
+  const { data: messages } = await supabase
+    .from("slack_messages")
+    .select("slack_user_id, slack_user_name, timestamp")
+    .eq("user_id", userId)
+    .eq("direction", "received")
+    .order("timestamp", { ascending: false })
+
+  if (!messages || messages.length === 0) return 0
+
+  const uniqueSenders = new Map<string, { name: string; lastContact: string }>()
+  for (const m of messages) {
+    if (!m.slack_user_id) continue
+    if (!uniqueSenders.has(m.slack_user_id)) {
+      uniqueSenders.set(m.slack_user_id, {
+        name: m.slack_user_name || m.slack_user_id,
+        lastContact: m.timestamp,
+      })
+    }
+  }
+
+  const { data: existingContacts } = await supabase
+    .from("contacts")
+    .select("phone")
+    .eq("user_id", userId)
+    .in("phone", Array.from(uniqueSenders.keys()))
+
+  const existingIds = new Set((existingContacts || []).map((c: any) => c.phone))
+  const newSenders = Array.from(uniqueSenders.entries()).filter(([id]) => !existingIds.has(id))
+
+  if (newSenders.length === 0) return 0
+
+  const rows = newSenders.map(([id, info]) => ({
+    user_id: userId,
+    name: info.name,
+    email: null,
+    phone: id,
+    company: null,
+    role: null,
+    location: null,
+    tags: ["slack"],
+    starred: false,
+    source: "slack_import",
+    last_contact: info.lastContact,
+    deal_value: 0,
+    deal_stage: null,
+  }))
+
+  const { error: insertError } = await supabase.from("contacts").insert(rows)
+  if (insertError) console.error("[SLACK IMPORT] Insert failed:", insertError.message)
+  return rows.length
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { PDFDocument } from "pdf-lib"
 import mammoth from "mammoth"
 import { getFileExt } from "@/lib/file-types"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 export const runtime = "nodejs"
 
@@ -11,7 +12,7 @@ function estimateDocxPages(text: string): number {
   return Math.max(1, Math.ceil(wordCount / 250))
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const file = formData.get("file") as File | null
@@ -45,3 +46,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ pageCount: 0 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/count-pages")

@@ -21,7 +21,8 @@ import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
-import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols, createNotification } from "@/lib/supabase"
+import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramConnections, getTelegramMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols, createNotification } from "@/lib/supabase"
+import { formatTelegramSender } from "@/lib/telegram"
 
 /* ─── real data ─── */
 const stages = [
@@ -192,6 +193,13 @@ export default function CRMPage() {
   const [waReplyBody, setWaReplyBody] = useState("")
   const [waReplyTo, setWaReplyTo] = useState<string | null>(null)
   const [sendingWaReply, setSendingWaReply] = useState(false)
+  const [replySource, setReplySource] = useState<"whatsapp" | "telegram">("whatsapp")
+
+  // Telegram state
+  const [telegramConnections, setTelegramConnections] = useState<any[]>([])
+  const [telegramMessages, setTelegramMessages] = useState<any[]>([])
+  const [telegramLoading, setTelegramLoading] = useState(false)
+  const [telegramFetched, setTelegramFetched] = useState(false)
 
   // ── Persist CRM data to sessionStorage so it survives page navigation ──
   const storageKey = (k: string) => `crm_${user?.id || "guest"}_${k}`
@@ -216,6 +224,10 @@ export default function CRMPage() {
       if (savedWa) setWhatsAppMessages(JSON.parse(savedWa))
       const savedWaFetched = sessionStorage.getItem(storageKey("whatsappFetched"))
       if (savedWaFetched) setWhatsAppFetched(JSON.parse(savedWaFetched))
+      const savedTg = sessionStorage.getItem(storageKey("telegramMessages"))
+      if (savedTg) setTelegramMessages(JSON.parse(savedTg))
+      const savedTgFetched = sessionStorage.getItem(storageKey("telegramFetched"))
+      if (savedTgFetched) setTelegramFetched(JSON.parse(savedTgFetched))
       const savedActiveChannel = sessionStorage.getItem(storageKey("activeChannel"))
       if (savedActiveChannel) setActiveChannel(savedActiveChannel)
       const savedActiveTab = sessionStorage.getItem(storageKey("activeTab"))
@@ -232,6 +244,8 @@ export default function CRMPage() {
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("calendarFetched"), JSON.stringify(calendarFetched)) } catch {} }, [calendarFetched, user])
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("whatsappMessages"), JSON.stringify(whatsappMessages)) } catch {} }, [whatsappMessages, user])
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("whatsappFetched"), JSON.stringify(whatsappFetched)) } catch {} }, [whatsappFetched, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("telegramMessages"), JSON.stringify(telegramMessages)) } catch {} }, [telegramMessages, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("telegramFetched"), JSON.stringify(telegramFetched)) } catch {} }, [telegramFetched, user])
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("activeChannel"), activeChannel) } catch {} }, [activeChannel, user])
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("activeTab"), activeTab) } catch {} }, [activeTab, user])
 
@@ -269,8 +283,17 @@ export default function CRMPage() {
         connected: true,
       })
     }
+    for (const conn of telegramConnections) {
+      list.push({
+        id: `tg_${conn.id}`,
+        label: conn.bot_username ? `@${conn.bot_username}` : "Telegram",
+        color: "bg-sky-500",
+        type: "telegram",
+        connected: true,
+      })
+    }
     return list
-  }, [emailConnections, calendarConnections, whatsappConnections])
+  }, [emailConnections, calendarConnections, whatsappConnections, telegramConnections])
 
   // Default active channel to first connected one
   const activeCh = channels.find((c) => c.id === activeChannel) || channels[0] || { id: "", label: "No channels", color: "bg-slate-500", type: "", connected: false }
@@ -295,6 +318,17 @@ export default function CRMPage() {
     )
     return { unreadCount: unreadThreadIds.size, totalThreadCount: threadIds.size }
   }, [inboxMessages])
+
+  // Combined WhatsApp + Telegram messages for the Messages tab
+  const combinedMessages = useMemo(() => {
+    const wa = whatsappMessages.map((m: any) => ({ ...m, _source: "whatsapp" as const }))
+    const tg = telegramMessages.map((m: any) => ({ ...m, _source: "telegram" as const }))
+    return [...wa, ...tg].sort((a: any, b: any) => {
+      const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
+      const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
+      return tb - ta
+    })
+  }, [whatsappMessages, telegramMessages])
 
   // Upcoming calendar events count (events that haven't ended yet)
   const upcomingEventsCount = calendarEvents.filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).length
@@ -337,16 +371,18 @@ export default function CRMPage() {
       }
 
       // Parallel fetch for core metadata (connections + contacts)
-      const [emailConnsRes, calConnsRes, waConnsRes, contactsRes] = await Promise.allSettled([
+      const [emailConnsRes, calConnsRes, waConnsRes, tgConnsRes, contactsRes] = await Promise.allSettled([
         getEmailConnections(user.id),
         getCalendarConnections(user.id),
         getWhatsAppConnections(user.id),
+        getTelegramConnections(user.id),
         getContacts(user.id),
       ])
 
       if (emailConnsRes.status === "fulfilled") setEmailConnections(emailConnsRes.value)
       if (calConnsRes.status === "fulfilled") setCalendarConnections(calConnsRes.value)
       if (waConnsRes.status === "fulfilled") setWhatsAppConnections(waConnsRes.value)
+      if (tgConnsRes.status === "fulfilled") setTelegramConnections(tgConnsRes.value)
       if (contactsRes.status === "fulfilled") {
         const list = contactsRes.value
         console.log("[DEBUG] Loaded contacts:", list.length)
@@ -399,6 +435,12 @@ export default function CRMPage() {
               if (msgs.length > 0) setWhatsAppFetched(true)
             }).catch(() => {})
           : (() => { setWhatsAppMessages([]); setWhatsAppFetched(false); return Promise.resolve() })(),
+        tgConnsRes.status === "fulfilled" && tgConnsRes.value.length > 0
+          ? getTelegramMessages(user.id).then((msgs: any[]) => {
+              setTelegramMessages(msgs)
+              if (msgs.length > 0) setTelegramFetched(true)
+            }).catch(() => {})
+          : (() => { setTelegramMessages([]); setTelegramFetched(false); return Promise.resolve() })(),
       ])
     }
     load()
@@ -421,10 +463,11 @@ export default function CRMPage() {
             return [msg, ...prev]
           })
           setInboxFetched(true)
-          // Auto-import contacts from email + WhatsApp
+          // Auto-import contacts from email + WhatsApp + Telegram
           Promise.allSettled([
             importContactsFromEmails(user.id),
             importContactsFromWhatsApp(user.id),
+            importContactsFromTelegram(user.id),
           ]).then(async () => {
             const contactList = await getContacts(user.id)
             setContacts(contactList.map((c: any) => ({
@@ -671,6 +714,7 @@ export default function CRMPage() {
       Promise.allSettled([
         importContactsFromEmails(user.id),
         importContactsFromWhatsApp(user.id),
+        importContactsFromTelegram(user.id),
       ]).then(async () => {
         const contactList = await getContacts(user.id)
         setContacts(contactList.map((c: any) => ({
@@ -1140,8 +1184,8 @@ export default function CRMPage() {
                       },
                       {
                         label: "crmMessages",
-                        value: whatsappMessages.length,
-                        sub: `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")}`,
+                        value: whatsappMessages.length + telegramMessages.length,
+                        sub: `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length + telegramMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")}`,
                         icon: Phone,
                         color: "text-emerald-400",
                         bg: "bg-emerald-500/10",
@@ -1229,6 +1273,30 @@ export default function CRMPage() {
                               </div>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
                                 {conn ? `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")} · ${whatsappMessages.length} ${t("crmTotal")}` : t("crmGoToChannels")}
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })()}
+                      {/* Telegram */}
+                      {(() => {
+                        const conn = telegramConnections.length > 0 ? telegramConnections[0] : null
+                        return (
+                          <button onClick={() => setActiveTab("Messages")}
+                            className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-sky-500/10">
+                              <Send className="h-4 w-4 sm:h-5 sm:w-5 text-sky-400" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold">Telegram</p>
+                                {conn
+                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
+                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{t("crmNotConnected")}</span>
+                                }
+                              </div>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {conn ? `${telegramMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")} · ${telegramMessages.length} ${t("crmTotal")}` : t("crmGoToChannels")}
                               </p>
                             </div>
                           </button>
@@ -2018,17 +2086,31 @@ export default function CRMPage() {
                     onClick={async () => {
                       if (!user) return
                       setWhatsAppLoading(true)
+                      setTelegramLoading(true)
                       try {
-                        const msgs = await getWhatsAppMessages(user.id)
-                        setWhatsAppMessages(msgs)
-                        setWhatsAppFetched(true)
+                        const [waMsgs, tgRes] = await Promise.allSettled([
+                          getWhatsAppMessages(user.id),
+                          fetch("/api/telegram/fetch", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ userId: user.id }),
+                          }).then(r => r.json()).then(() => getTelegramMessages(user.id)),
+                        ])
+                        if (waMsgs.status === "fulfilled") {
+                          setWhatsAppMessages(waMsgs.value)
+                          setWhatsAppFetched(true)
+                        }
+                        if (tgRes.status === "fulfilled") {
+                          setTelegramMessages(tgRes.value)
+                          setTelegramFetched(true)
+                        }
                       } catch (e) { console.error(e) }
-                      finally { setWhatsAppLoading(false) }
+                      finally { setWhatsAppLoading(false); setTelegramLoading(false) }
                     }}
-                    disabled={whatsappLoading || whatsappConnections.length === 0}
+                    disabled={whatsappLoading || telegramLoading || (whatsappConnections.length === 0 && telegramConnections.length === 0)}
                     className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
                   >
-                    {whatsappLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />}
+                    {whatsappLoading || telegramLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />}
                     <span className="hidden sm:inline">{whatsappLoading ? t("crmRefreshing") : t("crmRefresh")}</span>
                     <span className="sm:hidden">{whatsappLoading ? "..." : t("crmRefresh")}</span>
                   </button>
@@ -2039,7 +2121,7 @@ export default function CRMPage() {
                     <div className="flex h-full gap-5 p-6">
                       {msgKanbanCols.map(col => {
                         const getColId = (m: any) => msgCardCols[m.id] || (m.direction === "sent" ? "sent" : m.read ? "read" : "unread")
-                        const items = whatsappMessages.filter(m => getColId(m) === col.id)
+                        const items = combinedMessages.filter(m => getColId(m) === col.id)
                         return (
                           <div
                             key={col.id}
@@ -2068,12 +2150,15 @@ export default function CRMPage() {
                               ) : items.map((msg: any) => (
                                 <div key={msg.id} draggable
                                   onDragStart={e => { dragMsgId.current = msg.id; e.dataTransfer.effectAllowed = "move" }}
-                                  onClick={() => { setWaReplyTo(msg.from_number); setWaReplyBody(""); setSendingWaReply(false) }}
+                                  onClick={() => { setWaReplyTo(msg._source === "telegram" ? msg.chat_id : msg.from_number); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
                                   className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-grab active:cursor-grabbing active:opacity-60 active:scale-95"
                                 >
-                                  <p className="text-sm font-semibold mb-1 truncate">{msg.direction === "sent" ? `To: ${msg.to_number}` : msg.from_number}</p>
+                                  <p className="text-sm font-semibold mb-1 truncate">{msg.direction === "sent" ? `To: ${msg.to_number || msg.chat_title || msg.chat_id}` : (msg._source === "telegram" ? formatTelegramSender(msg) : msg.from_number)}</p>
                                   <p className="text-xs text-muted-foreground truncate mt-1">{msg.body || ""}</p>
-                                  <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground"><Phone className="h-3 w-3" /><span>{msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}</span></div>
+                                  <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
+                                    {msg._source === "telegram" ? <Send className="h-3 w-3 text-sky-400" /> : <Phone className="h-3 w-3" />}
+                                    <span>{msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}</span>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -2089,13 +2174,13 @@ export default function CRMPage() {
                 ) : (
                   <div className="flex-1 min-h-0 overflow-y-auto p-6">
                   <div className="mx-auto max-w-5xl">
-                {whatsappConnections.length === 0 ? (
+                {whatsappConnections.length === 0 && telegramConnections.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <Phone className="mb-2 h-6 w-6 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">{t("crmNoWhatsAppAccount")}</p>
                     <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">{t("crmGoToChannelsConnect")}</Link>
                   </div>
-                ) : whatsappMessages.length === 0 ? (
+                ) : combinedMessages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <Phone className="mb-2 h-6 w-6 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">{whatsappFetched ? t("crmNoMessages") : t("crmClickRefresh")}</p>
@@ -2112,7 +2197,7 @@ export default function CRMPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {[...whatsappMessages].sort((a: any, b: any) => {
+                        {[...combinedMessages].sort((a: any, b: any) => {
                           const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
                           const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
                           return tb - ta
@@ -2122,10 +2207,10 @@ export default function CRMPage() {
                           return (
                           <tr
                             key={msg.id}
-                            onClick={() => { setWaReplyTo(msg.from_number); setWaReplyBody(""); setSendingWaReply(false) }}
+                            onClick={() => { setWaReplyTo(msg._source === "telegram" ? msg.chat_id : msg.from_number); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
                             className={cn("border-b last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors", msg.direction === "received" && !msg.read && "bg-emerald-500/5")}
                           >
-                            <td className="px-4 py-2.5 font-medium">{msg.direction === "received" ? msg.from_number : `To: ${msg.to_number}`}</td>
+                            <td className="px-4 py-2.5 font-medium">{msg.direction === "received" ? (msg._source === "telegram" ? formatTelegramSender(msg) : msg.from_number) : `To: ${msg.to_number || msg.chat_title || msg.chat_id}`}</td>
                             <td className="px-4 py-2.5 truncate max-w-[360px] text-muted-foreground">{msg.body || ""}</td>
                             <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                               <div className="relative">
@@ -2176,19 +2261,19 @@ export default function CRMPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {[...whatsappMessages].sort((a: any, b: any) => {
+                    {[...combinedMessages].sort((a: any, b: any) => {
                       const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
                       const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
                       return tb - ta
                     }).map((msg: any) => (
                       <div
                         key={msg.id}
-                        onClick={() => { setWaReplyTo(msg.from_number); setWaReplyBody(""); setSendingWaReply(false) }}
+                        onClick={() => { setWaReplyTo(msg._source === "telegram" ? msg.chat_id : msg.from_number); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
                         className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-emerald-500/30 cursor-pointer", msg.direction === "received" && !msg.read && "border-l-2 border-l-emerald-500")}
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-medium truncate max-w-[60%]">
-                            {msg.direction === "received" ? msg.from_number : `To: ${msg.to_number}`}
+                            {msg.direction === "received" ? (msg._source === "telegram" ? formatTelegramSender(msg) : msg.from_number) : `To: ${msg.to_number || msg.chat_title || msg.chat_id}`}
                           </span>
                           <span className="text-[10px] text-muted-foreground">
                             {msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}
@@ -2200,10 +2285,10 @@ export default function CRMPage() {
                   </div>
                 )}
 
-                {/* WhatsApp Reply */}
+                {/* Reply */}
                 {waReplyTo && (
                   <div className="mt-4 rounded-lg border bg-card p-3">
-                    <p className="text-xs text-muted-foreground mb-2">Reply to {waReplyTo}</p>
+                    <p className="text-xs text-muted-foreground mb-2">Reply to {waReplyTo} {replySource === "telegram" && "via Telegram"}</p>
                     <textarea
                       value={waReplyBody}
                       onChange={e => setWaReplyBody(e.target.value)}
@@ -2217,19 +2302,28 @@ export default function CRMPage() {
                           if (!user || !waReplyBody.trim() || !waReplyTo) return
                           setSendingWaReply(true)
                           try {
-                            const res = await fetch("/api/whatsapp/send", {
+                            const endpoint = replySource === "telegram" ? "/api/telegram/send" : "/api/whatsapp/send"
+                            const payload = replySource === "telegram"
+                              ? { userId: user.id, chatId: waReplyTo, body: waReplyBody }
+                              : { userId: user.id, to: waReplyTo, body: waReplyBody }
+                            const res = await fetch(endpoint, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ userId: user.id, to: waReplyTo, body: waReplyBody }),
+                              body: JSON.stringify(payload),
                             })
                             const data = await res.json()
                             if (!res.ok) throw new Error(data.error || "Failed to send")
-                            const msgs = await getWhatsAppMessages(user.id)
-                            setWhatsAppMessages(msgs)
+                            if (replySource === "telegram") {
+                              const tgMsgs = await getTelegramMessages(user.id)
+                              setTelegramMessages(tgMsgs)
+                            } else {
+                              const msgs = await getWhatsAppMessages(user.id)
+                              setWhatsAppMessages(msgs)
+                            }
                             setWaReplyTo(null)
                             setWaReplyBody("")
                           } catch (e: any) {
-                            toast({ title: "Error", description: e?.message || "Failed to send WhatsApp message", variant: "error" })
+                            toast({ title: "Error", description: e?.message || "Failed to send message", variant: "error" })
                           } finally {
                             setSendingWaReply(false)
                           }

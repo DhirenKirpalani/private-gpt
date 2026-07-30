@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 const adminClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function GET(req: Request) {
+async function _GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const requestingUserId = searchParams.get("userId")
   if (!requestingUserId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
@@ -155,3 +156,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ companies })
 }
+
+export const GET = withApiLogging(_GET, "/api/admin/companies")

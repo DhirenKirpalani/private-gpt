@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase"
+import { withApiLogging } from "@/lib/with-api-logging"
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { requestingUserId, targetUserId } = await req.json()
 
@@ -51,3 +52,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/admin/reset-usage")

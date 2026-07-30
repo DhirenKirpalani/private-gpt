@@ -13,6 +13,7 @@ import { useAuth } from "@/app/auth-provider"
 import { signUp, signIn } from "@/lib/supabase"
 import { startTrial } from "@/lib/subscription"
 import { getWebmailUrl } from "@/lib/email-provider"
+import { PasswordStrength } from "@/components/password-strength"
 
 const perkKeys = [
   "signupPerk1",
@@ -180,6 +181,7 @@ function SignupForm() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              <PasswordStrength password={password} t={t} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirm-password">{t("confirmPassword")}</Label>

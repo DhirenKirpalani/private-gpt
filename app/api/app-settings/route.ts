@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
 import { unstable_noStore as noStore } from "next/cache"
 import { createAdminClient } from "@/lib/supabase"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+async function _GET() {
   noStore()
   try {
     const supabase = createAdminClient()
@@ -40,3 +41,5 @@ export async function GET() {
     return NextResponse.json({ error: err.message || "Failed" }, { status: 500 })
   }
 }
+
+export const GET = withApiLogging(_GET, "/api/app-settings")

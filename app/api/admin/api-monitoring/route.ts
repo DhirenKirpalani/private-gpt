@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase"
+import { withApiLogging } from "@/lib/with-api-logging"
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const requestingUserId = searchParams.get("userId")
   const range = searchParams.get("range") || "24h" // 24h, 7d, 30d
@@ -291,3 +292,5 @@ export async function GET(req: NextRequest) {
     successRateTrend,
   })
 }
+
+export const GET = withApiLogging(_GET, "/api/admin/api-monitoring")

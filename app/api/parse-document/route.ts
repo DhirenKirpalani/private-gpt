@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import mammoth from "mammoth"
 import { createClient } from "@supabase/supabase-js"
 import { getFileExt } from "@/lib/file-types"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 // Force Node.js runtime — pdf-parse/pdfjs-dist need Node.js APIs (not Edge)
 export const runtime = "nodejs"
@@ -80,7 +81,7 @@ function isTextFile(mimeType: string, ext: string): boolean {
   return textMimes.includes(mimeType) || textExts.includes(ext)
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const startTime = Date.now()
   console.log("[PARSE-DOC] ====== Request started ======")
 
@@ -246,3 +247,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/parse-document")

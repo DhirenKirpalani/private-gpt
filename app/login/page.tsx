@@ -246,7 +246,7 @@ function LoginContent() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10">
                   <Mail className="h-4 w-4 text-emerald-400" />
                 </div>
-                <h2 className="text-lg font-semibold">Reset Password</h2>
+                <h2 className="text-lg font-semibold">{t("resetPasswordTitle")}</h2>
               </div>
               <button
                 type="button"
@@ -286,11 +286,11 @@ function LoginContent() {
             ) : (
               <>
                 <p className="mb-4 text-sm text-muted-foreground">
-                  Enter your email and we&apos;ll send you a link to reset your password.
+                  {t("resetPasswordDesc")}
                 </p>
                 <form onSubmit={handleForgotPassword} className="space-y-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="forgot-email">Email</Label>
+                    <Label htmlFor="forgot-email">{t("email")}</Label>
                     <Input
                       id="forgot-email"
                       type="email"
@@ -306,7 +306,7 @@ function LoginContent() {
                     disabled={forgotLoading}
                     className="w-full bg-emerald-600 hover:bg-emerald-700 py-4 text-sm font-semibold disabled:opacity-50"
                   >
-                    {forgotLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send Reset Link"}
+                    {forgotLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : t("sendResetLink")}
                   </Button>
                 </form>
               </>

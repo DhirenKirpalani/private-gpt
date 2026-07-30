@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,7 +21,7 @@ async function fbGet(path: string, token: string) {
 
 export const dynamic = "force-dynamic"
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { userId, code, token: shortTokenInput } = await req.json()
     if (!userId || (!code && !shortTokenInput)) {
@@ -128,3 +129,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Embedded signup failed" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/whatsapp/embedded-signup")

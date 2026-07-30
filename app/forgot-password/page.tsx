@@ -29,7 +29,7 @@ function ForgotPasswordContent() {
     } catch (err: any) {
       const msg = err.message || ""
       if (msg.toLowerCase().includes("rate limit") || msg.toLowerCase().includes("too many")) {
-        setError("Too many requests. Please wait a minute before trying again.")
+        setError(t("tooManyRequests"))
       } else {
         setError(msg || "Something went wrong. Please try again.")
       }
@@ -58,9 +58,9 @@ function ForgotPasswordContent() {
               <Mail className="h-6 w-6 text-emerald-400" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Reset Password</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("resetPasswordTitle")}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Enter your email and we&apos;ll send you a link to reset your password.
+            {t("resetPasswordDesc")}
           </p>
         </div>
 
@@ -101,13 +101,13 @@ function ForgotPasswordContent() {
           )}
           <Button type="submit" disabled={loading}
             className="w-full bg-emerald-600 hover:bg-emerald-700 py-5 text-base font-semibold disabled:opacity-50">
-            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Send Reset Link"}
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : t("sendResetLink")}
           </Button>
         </form>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
-          Remember your password?{" "}
-          <Link href="/login" className="font-medium text-emerald-400 hover:underline">Sign in</Link>
+          {t("rememberPassword")}{" "}
+          <Link href="/login" className="font-medium text-emerald-400 hover:underline">{t("signInLink")}</Link>
         </p>
       </div>
     </div>

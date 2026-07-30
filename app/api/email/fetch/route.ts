@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -155,7 +156,7 @@ function extractEmail(address: string): string {
   return (m ? m[1] : address).toLowerCase().trim()
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { userId, providerId, pageToken } = await req.json()
     if (!userId || !providerId) {
@@ -727,3 +728,5 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/email/fetch")

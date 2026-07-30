@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Resend } from "resend"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { name, email, message, imageUrls, attachments, systemInfo } = await req.json()
 
@@ -105,3 +106,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || "Failed to send" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/support")

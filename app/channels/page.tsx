@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, Suspense } from "react"
+import { useState, useEffect, useCallback, useRef, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
-import { getProfile, getEmailConnections, saveEmailConnection, deleteEmailConnection, type EmailConnection, getCalendarConnections, deleteCalendarConnection, getWhatsAppConnections, saveWhatsAppConnection, deleteWhatsAppConnection } from "@/lib/supabase"
+import { getProfile, getEmailConnections, saveEmailConnection, deleteEmailConnection, type EmailConnection, getCalendarConnections, deleteCalendarConnection, getWhatsAppConnections, saveWhatsAppConnection, deleteWhatsAppConnection, getTelegramConnections, getSlackConnections } from "@/lib/supabase"
 import { toast, Toaster } from "@/components/ui/toast"
 
 type SmtpDefaults = { smtp_host: string; smtp_port: number; imap_host: string; imap_port: number; smtp_secure?: boolean }
@@ -33,10 +33,10 @@ const EMAIL_PROVIDERS: EmailProvider[] = [
 ]
 
 const MESSAGING_CHANNELS = [
-  { id: "whatsapp", name: "WhatsApp Business", icon: <FaWhatsapp className="h-6 w-6" style={{ color: "#25D366" }} />, descKey: "channelDescWhatsapp", connectable: true },
-  { id: "telegram", name: "Telegram", icon: <FaTelegram className="h-6 w-6" style={{ color: "#26A5E4" }} />, descKey: "channelDescTelegram", connectable: false },
+  { id: "whatsapp", name: "WhatsApp Business", icon: <FaWhatsapp className="h-6 w-6" style={{ color: "#25D366" }} />, descKey: "channelDescWhatsapp", connectable: false },
+  { id: "telegram", name: "Telegram", icon: <FaTelegram className="h-6 w-6" style={{ color: "#26A5E4" }} />, descKey: "channelDescTelegram", connectable: true },
   { id: "webchat", name: "Website Chat", icon: <MessageSquare className="h-5 w-5 text-emerald-400" />, descKey: "channelDescWebchat", connectable: false },
-  { id: "slack", name: "Slack", icon: <FaSlack className="h-6 w-6" style={{ color: "#4A154B" }} />, descKey: "channelDescSlack", connectable: false },
+  { id: "slack", name: "Slack", icon: <FaSlack className="h-6 w-6" style={{ color: "#4A154B" }} />, descKey: "channelDescSlack", connectable: true },
   { id: "teams", name: "Microsoft Teams", icon: <FaMicrosoft className="h-6 w-6" style={{ color: "#6264A7" }} />, descKey: "channelDescTeams", connectable: false },
   { id: "instagram", name: "Instagram DM", icon: <FaInstagram className="h-6 w-6" style={{ color: "#E4405F" }} />, descKey: "channelDescInstagram", connectable: false },
   { id: "messenger", name: "Facebook Messenger", icon: <FaFacebookMessenger className="h-6 w-6" style={{ color: "#0084FF" }} />, descKey: "channelDescMessenger", connectable: false },
@@ -99,6 +99,18 @@ function ChannelsPageContent() {
   const [waForm, setWaForm] = useState({ phoneNumberId: "", accessToken: "", phoneNumber: "" })
   const [waSaving, setWaSaving] = useState(false)
 
+  // Telegram connect modal
+  const [tgModalOpen, setTgModalOpen] = useState(false)
+  const [tgForm, setTgForm] = useState({ botToken: "" })
+  const [tgSaving, setTgSaving] = useState(false)
+  const [telegramConnections, setTelegramConnections] = useState<Record<string, any>>({})
+  const [tgStep, setTgStep] = useState<"create" | "forward" | "paste">("create")
+  const [tgPolling, setTgPolling] = useState(false)
+  const tgPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Slack
+  const [slackConnections, setSlackConnections] = useState<Record<string, any>>({})
+
   const loadConnections = useCallback(async () => {
     if (!user) return
     try {
@@ -118,6 +130,18 @@ function ChannelsPageContent() {
       const waMap: Record<string, any> = {}
       waConns.forEach(c => { waMap[c.phone_number_id] = c })
       setWhatsAppConnections(waMap)
+    } catch { /* ignore */ }
+    try {
+      const tgConns = await getTelegramConnections(user.id)
+      const tgMap: Record<string, any> = {}
+      tgConns.forEach(c => { tgMap[c.id] = c })
+      setTelegramConnections(tgMap)
+    } catch { /* ignore */ }
+    try {
+      const slConns = await getSlackConnections(user.id)
+      const slMap: Record<string, any> = {}
+      slConns.forEach(c => { slMap[c.id] = c })
+      setSlackConnections(slMap)
     } catch { /* ignore */ }
   }, [user])
 
@@ -145,6 +169,8 @@ function ChannelsPageContent() {
     const drive = searchParams.get("drive")
     const meet = searchParams.get("meet")
     const whatsapp = searchParams.get("whatsapp")
+    const slackConnected = searchParams.get("slack_connected")
+    const slackError = searchParams.get("slack_error")
     const showToast = (title: string, description: string, variant: "success" | "error" = "success") => {
       setTimeout(() => toast({ title, description, variant }), 100)
     }
@@ -182,6 +208,13 @@ function ChannelsPageContent() {
     } else if (whatsapp === "1") {
       showToast("Connected", "WhatsApp Business has been connected.", "success")
       loadConnections()
+      window.history.replaceState({}, "", window.location.pathname)
+    } else if (slackConnected === "true") {
+      showToast("Connected", "Slack has been connected.", "success")
+      loadConnections()
+      window.history.replaceState({}, "", window.location.pathname)
+    } else if (slackError) {
+      showToast("Connection Error", `Slack connection failed: ${slackError}`, "error")
       window.history.replaceState({}, "", window.location.pathname)
     } else if (error) {
       if (error.includes("No WhatsApp phone number")) {
@@ -353,6 +386,108 @@ function ChannelsPageContent() {
     window.addEventListener("message", handler)
     return () => window.removeEventListener("message", handler)
   }, [loadConnections])
+
+  const handleConnectTelegram = async (botToken: string) => {
+    if (!user) return
+    setTgSaving(true)
+    try {
+      const res = await fetch("/api/telegram/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, botToken }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to connect Telegram bot")
+      toast({ title: "Connected", description: `Telegram bot @${data.botUsername || "bot"} connected successfully.`, variant: "success" })
+      await loadConnections()
+      setTgModalOpen(false)
+      setTgForm({ botToken: "" })
+      setTgStep("create")
+    } catch (e: any) {
+      toast({ title: "Connection Error", description: e?.message || "Telegram connection failed", variant: "error" })
+    } finally {
+      setTgSaving(false)
+    }
+  }
+
+  // Gateway bot username from env — used for deep-link "forward to" instructions
+  const gatewayBotUsername = process.env.NEXT_PUBLIC_TELEGRAM_GATEWAY_BOT_USERNAME || "ConnectBot"
+
+  // Start polling for a forwarded token
+  const startTgPolling = () => {
+    if (tgPollRef.current) clearInterval(tgPollRef.current)
+    setTgPolling(true)
+    tgPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch("/api/telegram/poll-token")
+        const data = await res.json()
+        if (data.found && data.botToken) {
+          if (tgPollRef.current) clearInterval(tgPollRef.current)
+          setTgPolling(false)
+          await handleConnectTelegram(data.botToken)
+        }
+      } catch { /* keep polling */ }
+    }, 3000)
+  }
+
+  // Cleanup polling on unmount or modal close
+  useEffect(() => {
+    if (!tgModalOpen && tgPollRef.current) {
+      clearInterval(tgPollRef.current)
+      tgPollRef.current = null
+      setTgPolling(false)
+    }
+  }, [tgModalOpen])
+
+  useEffect(() => {
+    return () => { if (tgPollRef.current) clearInterval(tgPollRef.current) }
+  }, [])
+
+  const handleDisconnectTelegram = async (connectionId: string) => {
+    if (!user) return
+    try {
+      const res = await fetch("/api/telegram/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      })
+      if (!res.ok) throw new Error("Failed to disconnect")
+      setTelegramConnections(prev => { const next = { ...prev }; delete next[connectionId]; return next })
+      toast({ title: "Disconnected", description: "Telegram has been disconnected.", variant: "success" })
+    } catch {
+      toast({ title: "Error", description: "Failed to disconnect Telegram.", variant: "error" })
+    }
+  }
+
+  // Slack handlers
+  const handleConnectSlack = () => {
+    if (!user) return
+    const clientId = process.env.NEXT_PUBLIC_SLACK_CLIENT_ID
+    if (!clientId) {
+      toast({ title: "Error", description: "Slack is not configured.", variant: "error" })
+      return
+    }
+    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/slack/oauth/callback`
+    const scopes = "chat:write,im:history,im:read,im:write,users:read"
+    const url = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${user.id}`
+    window.location.href = url
+  }
+
+  const handleDisconnectSlack = async (connectionId: string) => {
+    if (!user) return
+    try {
+      const res = await fetch("/api/slack/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      })
+      if (!res.ok) throw new Error("Failed to disconnect")
+      setSlackConnections(prev => { const next = { ...prev }; delete next[connectionId]; return next })
+      toast({ title: "Disconnected", description: "Slack has been disconnected.", variant: "success" })
+    } catch {
+      toast({ title: "Error", description: "Failed to disconnect Slack.", variant: "error" })
+    }
+  }
 
   const handleDisconnectWhatsApp = async (phoneNumberId: string) => {
     if (!user) return
@@ -588,15 +723,22 @@ function ChannelsPageContent() {
               <div className="space-y-3">
                 {MESSAGING_CHANNELS.map(ch => {
                   const isWhatsApp = ch.id === "whatsapp"
+                  const isTelegram = ch.id === "telegram"
+                  const isSlack = ch.id === "slack"
                   const waConnected = isWhatsApp && Object.keys(whatsappConnections).length > 0
                   const waConn = waConnected ? Object.values(whatsappConnections)[0] : null
+                  const tgConnected = isTelegram && Object.keys(telegramConnections).length > 0
+                  const tgConn = tgConnected ? Object.values(telegramConnections)[0] : null
+                  const slConnected = isSlack && Object.keys(slackConnections).length > 0
+                  const slConn = slConnected ? Object.values(slackConnections)[0] : null
+                  const isConn = waConn || tgConn || slConn
                   return (
-                    <div key={ch.id} className={cn("flex flex-col gap-3 rounded-xl border p-3 shadow-sm transition-all duration-200 sm:flex-row sm:items-center sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5 hover:sm:-translate-y-0.5", waConn ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
+                    <div key={ch.id} className={cn("flex flex-col gap-3 rounded-xl border p-3 shadow-sm transition-all duration-200 sm:flex-row sm:items-center sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5 hover:sm:-translate-y-0.5", isConn ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold">{ch.name}</p>
-                          {waConn && (
+                          {isConn && (
                             <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
                               <Check className="h-3 w-3" /> {t("channelsConnected")}
                             </span>
@@ -606,8 +748,14 @@ function ChannelsPageContent() {
                         {waConn && (
                           <p className="mt-0.5 text-[10px] text-emerald-400">{waConn.phone_number || waConn.phone_number_id}</p>
                         )}
+                        {tgConn && (
+                          <p className="mt-0.5 text-[10px] text-emerald-400">@{tgConn.bot_username || "bot"}</p>
+                        )}
+                        {slConn && (
+                          <p className="mt-0.5 text-[10px] text-emerald-400">{slConn.team_name || slConn.team_id}</p>
+                        )}
                       </div>
-                      {isWhatsApp ? (
+                      {isWhatsApp && ch.connectable ? (
                         waConn ? (
                           <button
                             onClick={() => handleDisconnectWhatsApp(waConn.phone_number_id)}
@@ -621,6 +769,38 @@ function ChannelsPageContent() {
                               if (!user) return
                               handleWhatsAppConnect()
                             }}
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
+                          >
+                            Connect
+                          </button>
+                        )
+                      ) : isTelegram && ch.connectable ? (
+                        tgConn ? (
+                          <button
+                            onClick={() => handleDisconnectTelegram(tgConn.id)}
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                          >
+                            Disconnect
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setTgModalOpen(true)}
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
+                          >
+                            Connect
+                          </button>
+                        )
+                      ) : isSlack ? (
+                        slConn ? (
+                          <button
+                            onClick={() => handleDisconnectSlack(slConn.id)}
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                          >
+                            Disconnect
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleConnectSlack}
                             className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
                           >
                             Connect
@@ -1159,6 +1339,104 @@ function ChannelsPageContent() {
           </div>
         </div>
       )}
+      {/* Telegram Connect Wizard */}
+      {tgModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1a1f2e] p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <FaTelegram className="h-6 w-6" style={{ color: "#26A5E4" }} />
+                <h2 className="font-semibold text-white">Connect Telegram</h2>
+              </div>
+              <button onClick={() => { setTgModalOpen(false); setTgStep("create") }} className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Step 1: Create bot */}
+            {tgStep === "create" && (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-4">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500/20 text-xs font-bold text-sky-400">1</span>
+                  <p className="text-sm text-muted-foreground">Create a bot with <span className="text-white font-medium">@BotFather</span></p>
+                </div>
+                <a
+                  href="https://t.me/BotFather?start=/newbot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500/20 border border-sky-500/30 px-4 py-2.5 text-sm font-semibold text-sky-400 transition-colors hover:bg-sky-500/30"
+                >
+                  <FaTelegram className="h-4 w-4" />
+                  Open @BotFather
+                </a>
+                <button onClick={() => setTgStep("forward")} className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700">
+                  Next
+                </button>
+                <button onClick={() => setTgStep("paste")} className="w-full text-center text-xs text-muted-foreground hover:text-white transition-colors">
+                  Paste token manually
+                </button>
+              </div>
+            )}
+
+            {/* Step 2: Forward token */}
+            {tgStep === "forward" && (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-4">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500/20 text-xs font-bold text-sky-400">2</span>
+                  <p className="text-sm text-muted-foreground">Forward the token message from @BotFather to <a href={`https://t.me/${gatewayBotUsername}`} target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline font-medium">@{gatewayBotUsername}</a></p>
+                </div>
+                <a
+                  href={`https://t.me/${gatewayBotUsername}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500/20 border border-sky-500/30 px-4 py-2.5 text-sm font-semibold text-sky-400 transition-colors hover:bg-sky-500/30"
+                >
+                  <FaTelegram className="h-4 w-4" />
+                  Open @{gatewayBotUsername}
+                </a>
+                {tgPolling ? (
+                  <div className="flex items-center justify-center gap-2 py-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                    <span className="text-xs text-emerald-400">Listening…</span>
+                  </div>
+                ) : (
+                  <button onClick={startTgPolling} className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700">
+                    Start listening
+                  </button>
+                )}
+                <button onClick={() => setTgStep("create")} className="w-full text-center text-xs text-muted-foreground hover:text-white transition-colors">
+                  ← Back
+                </button>
+              </div>
+            )}
+
+            {/* Step 3: Paste token (manual) */}
+            {tgStep === "paste" && (
+              <div className="space-y-4">
+                <input
+                  type="password"
+                  value={tgForm.botToken}
+                  onChange={e => setTgForm({ botToken: e.target.value })}
+                  placeholder="123456789:ABCdef…"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:border-emerald-500/50 focus:outline-none"
+                />
+                <button
+                  onClick={async () => { if (tgForm.botToken) await handleConnectTelegram(tgForm.botToken) }}
+                  disabled={tgSaving || !tgForm.botToken}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-40"
+                >
+                  {tgSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Connect
+                </button>
+                <button onClick={() => setTgStep("create")} className="w-full text-center text-xs text-muted-foreground hover:text-white transition-colors">
+                  ← Back
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <Toaster />
     </div>
   )
