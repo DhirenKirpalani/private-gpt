@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase"
 import { syncStripeSeats } from "@/lib/stripe-seats"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 async function _POST(req: NextRequest) {
   try {
     const { token, userId } = await req.json()

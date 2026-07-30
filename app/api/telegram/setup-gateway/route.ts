@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 // GET — Quick setup endpoint to register the gateway bot webhook
 // Call this once after deploying: GET /api/telegram/setup-gateway
 async function _GET() {
