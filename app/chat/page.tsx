@@ -26,6 +26,7 @@ import {
   deleteConversation, getMessages, saveMessage, updateMessageContent, deleteMessagesAfter, type ChatConversation,
   fetchDocumentContents, uploadDocument, updateDocumentText,
   getEmailConnections, getCalendarConnections, getWhatsAppConnections,
+  getSlackConnections, getTelegramConnections,
 } from "@/lib/supabase"
 import { useI18n } from "@/lib/i18n"
 import { ACCEPTED_MIME_TYPES, isAcceptedFile, isCountableDocument } from "@/lib/file-types"
@@ -558,9 +559,9 @@ export default function ChatPage() {
         p?.clarification_prompt ? `# Clarification Protocol\n${p.clarification_prompt}` : "",
         ``,
         kbContext ? `# Knowledge Base\n${kbContext}` : "",
-        channelsEnabled ? `# Active Channel Context\nChannel integrations are active (email, WhatsApp, etc.). Consider business communication channels in responses.` : "",
-        `# Email, Calendar & WhatsApp Assistant Capabilities`,
-        `You have access to the user's connected Gmail, Google Calendar, and WhatsApp Business accounts. When the user asks about their emails, inbox, meetings, schedule, calendar, or WhatsApp messages, you will receive live context from these accounts in your prompt.`,
+        channelsEnabled ? `# Active Channel Context\nChannel integrations are active (email, WhatsApp, Slack, Telegram, calendar, Calendly, etc.). Consider business communication channels in responses.` : "",
+        `# Email, Calendar & Messaging Assistant Capabilities`,
+        `You have access to the user's connected Gmail, Google Calendar, WhatsApp Business, Slack, Telegram, and Calendly accounts. When the user asks about their emails, inbox, meetings, schedule, calendar, WhatsApp, Slack, or Telegram messages, you will receive live context from these accounts in your prompt.`,
         ``,
         `Email capabilities:`,
         `- Summarize recent emails from the inbox`,
@@ -587,6 +588,23 @@ export default function ChatPage() {
         `- Find messages from specific contacts or phone numbers`,
         `- Draft and send WhatsApp replies (ask for recipient phone number and message)`,
         `- Suggest follow-up actions for unread WhatsApp messages`,
+        ``,
+        `Slack capabilities:`,
+        `- Summarize recent Slack DM conversations`,
+        `- Find messages from specific Slack users or channels`,
+        `- Draft and send Slack replies (ask for recipient and message)`,
+        `- Suggest follow-up actions for unread Slack messages`,
+        ``,
+        `Telegram capabilities:`,
+        `- Summarize recent Telegram conversations`,
+        `- Find messages from specific Telegram contacts`,
+        `- Draft and send Telegram replies (ask for recipient and message)`,
+        `- Suggest follow-up actions for unread Telegram messages`,
+        ``,
+        `Calendly capabilities:`,
+        `- When the user asks to schedule a meeting, always include the Calendly booking link from the context`,
+        `- Never ask the user for their Calendly link — it is provided in the context`,
+        `- Suggest sharing the Calendly link in emails or messages when scheduling`,
         ``,
         `# Web Search Capability`,
         `When Web Search is enabled, you receive live web search results in your prompt. You CAN and SHOULD use these results to answer questions about websites, products, companies, or any topic the user asks about. Never say "I cannot browse the internet" or "I do not have the ability to access websites" when web search results are provided to you — use them directly.`,
@@ -636,7 +654,17 @@ export default function ChatPage() {
         `Similarly, you CANNOT send WhatsApp messages yourself. When the user asks to send a WhatsApp, draft it and append:`,
         `<!--ACTION:{"type":"send_whatsapp","to":"+1234567890","body":"Hi, just following up on our meeting"}-->`,
         ``,
-        `When NO channel context is provided in the prompt, you do NOT have access to the user's inbox, calendar, or WhatsApp. In that case, tell them to ask about their emails, calendar, or WhatsApp to activate the context.`,
+        `When NO channel context is provided in the prompt, you do NOT have access to the user's inbox, calendar, WhatsApp, Slack, Telegram, or Calendly. In that case, tell them to ask about their emails, calendar, or messages to activate the context.`,
+        ``,
+        `# CRITICAL: CONVERSATION MEMORY & CONTACT RESOLUTION`,
+        `You MUST remember and use information from earlier in the conversation. The full conversation history is available to you.`,
+        `- If the user previously mentioned an email address, phone number, Slack channel, or Telegram chat, and later refers to that person by name or nickname, RESOLVE it from the conversation history.`,
+        `- Example: If the user said "send an email to dhirenkirpalani2308@gmail.com" and later says "send the same email to dhiren again", you MUST use dhirenkirpalani2308@gmail.com.`,
+        `- Example: If the user said "send a WhatsApp to +1234567890" and later says "message John", and John was previously associated with +1234567890, use that number.`,
+        `- Example: If the user shared a Calendly link or contact details earlier, reference them when asked again.`,
+        `- NEVER ask the user to repeat information they already provided in the same conversation. Always look back through the conversation history first.`,
+        `- When resolving a name, check ALL previous messages (both user and assistant) for email addresses, phone numbers, Slack channels, Telegram chats, or other contact details associated with that name.`,
+        `- If you cannot find the contact in the conversation history, then ask the user to clarify.`,
         ``,
         websiteContent ? `# Website Content (fetched from ${p?.website})\n${websiteContent}` : "",
         ``,
@@ -741,8 +769,14 @@ export default function ChatPage() {
             if (ctxData.whatsappContext) {
               parts.push(`# Recent WhatsApp Messages\n${ctxData.whatsappContext}`)
             }
+            if (ctxData.slackContext) {
+              parts.push(`# Recent Slack Messages\n${ctxData.slackContext}`)
+            }
+            if (ctxData.telegramContext) {
+              parts.push(`# Recent Telegram Messages\n${ctxData.telegramContext}`)
+            }
             if (parts.length > 0) {
-              emailCalendarContext = `\n# Email, Calendar & WhatsApp Context\nThe following data was retrieved from the user's connected accounts:\n\n${parts.join("\n\n")}\n\nINSTRUCTION: Use this context to answer the user's question about their emails, calendar, or WhatsApp messages. Be concise and helpful.`
+              emailCalendarContext = `\n# Email, Calendar & Messaging Context\nThe following data was retrieved from the user's connected accounts:\n\n${parts.join("\n\n")}\n\nINSTRUCTION: Use this context to answer the user's question about their emails, calendar, WhatsApp, Slack, or Telegram messages. Be concise and helpful.`
             }
           }
         } catch (err) {
@@ -1451,10 +1485,12 @@ export default function ChatPage() {
     if (!user) return
     setChannelsLoading(true)
     try {
-      const [emailConns, calConns, waConns] = await Promise.all([
+      const [emailConns, calConns, waConns, slackConns, tgConns] = await Promise.all([
         getEmailConnections(user.id),
         getCalendarConnections(user.id),
         getWhatsAppConnections(user.id),
+        getSlackConnections(user.id),
+        getTelegramConnections(user.id),
       ])
       const channels: typeof connectedChannels = []
       const connectedEmail = emailConns.find((c: any) => c.status === "connected")
@@ -1468,7 +1504,7 @@ export default function ChatPage() {
         connected: !!connectedEmail,
         detail: connectedEmail ? (connectedEmail.email_address || "Connected") : "Not connected",
       })
-      const calendarConn = calConns.find((c: any) => c.provider === "google")
+      const calendarConn = calConns.find((c: any) => c.provider === "google" && c.status === "connected")
       channels.push({
         id: "calendar",
         name: "Google Calendar",
@@ -1476,7 +1512,7 @@ export default function ChatPage() {
         connected: !!calendarConn,
         detail: calendarConn ? (calendarConn.calendar_email || "Connected") : "Not connected",
       })
-      const meetConn = calConns.find((c: any) => c.provider === "googlemeet")
+      const meetConn = calConns.find((c: any) => c.provider === "googlemeet" && c.status === "connected")
       channels.push({
         id: "googlemeet",
         name: "Google Meet",
@@ -1484,13 +1520,21 @@ export default function ChatPage() {
         connected: !!meetConn,
         detail: meetConn ? (meetConn.calendar_email || "Connected") : "Not connected",
       })
-      const driveConn = calConns.find((c: any) => c.provider === "googledrive")
+      const driveConn = calConns.find((c: any) => c.provider === "googledrive" && c.status === "connected")
       channels.push({
         id: "googledrive",
         name: "Google Drive",
         icon: <HardDrive className="h-3.5 w-3.5" />,
         connected: !!driveConn,
         detail: driveConn ? (driveConn.calendar_email || "Connected") : "Not connected",
+      })
+      const calendlyConn = calConns.find((c: any) => c.provider === "calendly" && c.status === "connected")
+      channels.push({
+        id: "calendly",
+        name: "Calendly",
+        icon: <CalendarDays className="h-3.5 w-3.5" />,
+        connected: !!calendlyConn,
+        detail: calendlyConn ? (calendlyConn.calendar_email || "Connected") : "Not connected",
       })
       const waConnected = waConns.length > 0
       channels.push({
@@ -1499,6 +1543,22 @@ export default function ChatPage() {
         icon: <Phone className="h-3.5 w-3.5" />,
         connected: waConnected,
         detail: waConnected ? (waConns[0]?.phone_number || waConns[0]?.phone_number_id || "Connected") : "Not connected",
+      })
+      const tgConnected = tgConns.length > 0
+      channels.push({
+        id: "telegram",
+        name: "Telegram",
+        icon: <Send className="h-3.5 w-3.5" />,
+        connected: tgConnected,
+        detail: tgConnected ? (tgConns[0]?.bot_username ? `@${tgConns[0].bot_username}` : "Connected") : "Not connected",
+      })
+      const slackConnected = slackConns.length > 0
+      channels.push({
+        id: "slack",
+        name: "Slack",
+        icon: <MessageSquare className="h-3.5 w-3.5" />,
+        connected: slackConnected,
+        detail: slackConnected ? (slackConns[0]?.team_name || "Connected") : "Not connected",
       })
       setConnectedChannels(channels)
     } catch { /* silent */ } finally {
