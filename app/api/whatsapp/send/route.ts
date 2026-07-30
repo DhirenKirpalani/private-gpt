@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { userId, to, body } = await req.json()
     if (!userId || !to || !body) {
@@ -69,3 +70,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Failed to send" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/whatsapp/send")

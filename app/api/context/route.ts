@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
+import { withApiLogging } from "@/lib/with-api-logging"
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { url } = await req.json()
     if (!url || typeof url !== "string") return NextResponse.json({ content: "" })
@@ -30,3 +31,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ content: "" })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/context")

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase"
+import { withApiLogging } from "@/lib/with-api-logging"
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { userId } = await req.json()
     if (!userId) {
@@ -44,3 +45,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Failed" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/chat/cleanup")

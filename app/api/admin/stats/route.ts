@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -13,7 +14,7 @@ const PLAN_PRICE: Record<string, number> = {
 const DEEPSEEK_PROMPT_PRICE = 0.14 // $/1M tokens
 const DEEPSEEK_COMPLETION_PRICE = 0.28 // $/1M tokens
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const requestingUserId = searchParams.get("userId")
 
@@ -440,3 +441,5 @@ export async function GET(req: NextRequest) {
     grossMargin,
   })
 }
+
+export const GET = withApiLogging(_GET, "/api/admin/stats")

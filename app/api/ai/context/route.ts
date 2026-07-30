@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { userId } = await req.json()
     if (!userId) {
@@ -83,6 +84,15 @@ export async function POST(req: NextRequest) {
 
     if (waErr) console.error("[AI CONTEXT] WhatsApp fetch error:", waErr.message)
 
+    // Fetch Calendly scheduling URL
+    const { data: calendlyConn } = await supabase
+      .from("calendar_connections")
+      .select("scheduling_url, calendar_email")
+      .eq("user_id", userId)
+      .eq("provider", "calendly")
+      .eq("status", "connected")
+      .maybeSingle()
+
     // Format calendar context
     let calendarContext = ""
     if (events && events.length > 0) {
@@ -105,6 +115,12 @@ export async function POST(req: NextRequest) {
       }).join("\n\n")
     }
 
+    // Append Calendly scheduling URL to calendar context
+    if (calendlyConn?.scheduling_url) {
+      const urlLine = `\nYour Calendly booking link: ${calendlyConn.scheduling_url}\nINSTRUCTION: When the user asks to schedule a meeting or send a meeting invite, always include this Calendly link — never ask the user to provide it.`
+      calendarContext = calendarContext ? calendarContext + urlLine : urlLine.trim()
+    }
+
     return NextResponse.json({
       emails: emails || [],
       events: events || [],
@@ -118,3 +134,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Failed to fetch context" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/ai/context")

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase"
+import { withApiLogging } from "@/lib/with-api-logging"
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   try {
     const requestingUserId = new URL(req.url).searchParams.get("requestingUserId")
     const limit = parseInt(new URL(req.url).searchParams.get("limit") || "20", 10)
+    const offset = parseInt(new URL(req.url).searchParams.get("offset") || "0", 10)
 
     if (!requestingUserId) {
       return NextResponse.json({ error: "Missing requestingUserId" }, { status: 400 })
@@ -23,16 +25,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const { data: logs, error } = await supabase
+    const { data: logs, count, error } = await supabase
       .from("admin_audit_log")
-      .select("*")
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
-      .limit(limit)
+      .range(offset, offset + limit - 1)
 
     if (error) throw error
 
-    return NextResponse.json({ logs: logs ?? [] })
+    return NextResponse.json({ logs: logs ?? [], total: count ?? 0 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 })
   }
 }
+
+export const GET = withApiLogging(_GET, "/api/admin/audit-log")

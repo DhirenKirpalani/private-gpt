@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase"
 import { Resend } from "resend"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -20,7 +21,7 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   super_admin: "You have complete platform control including all companies and settings.",
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { requestingUserId, targetEmail, role } = await req.json()
 
@@ -129,3 +130,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/admin/set-role")

@@ -114,6 +114,10 @@ export default function AdminPage() {
   const [customTrialsLoading, setCustomTrialsLoading] = useState(false)
   const [auditLogs, setAuditLogs] = useState<{ id: string; admin_email: string; action: string; target_email: string; old_value: string | null; new_value: string | null; created_at: string }[]>([])
   const [auditLoading, setAuditLoading] = useState(false)
+  const [auditPageLoading, setAuditPageLoading] = useState(false)
+  const [auditPage, setAuditPage] = useState(0)
+  const [auditTotal, setAuditTotal] = useState(0)
+  const AUDIT_PAGE_SIZE = 10
 
   // Token & message limits
   const [tokenLimitTrial, setTokenLimitTrial] = useState(50000)
@@ -173,17 +177,25 @@ export default function AdminPage() {
     }
   }
 
-  async function loadAuditLogs() {
+  async function loadAuditLogs(page?: number) {
     if (!user) return
-    setAuditLoading(true)
+    const p = page !== undefined ? page : auditPage
+    const isPageChange = page !== undefined && auditLogs.length > 0
+    if (isPageChange) setAuditPageLoading(true)
+    else setAuditLoading(true)
     try {
-      const res = await fetch(`/api/admin/audit-log?requestingUserId=${user.id}&limit=20`)
+      const offset = p * AUDIT_PAGE_SIZE
+      const res = await fetch(`/api/admin/audit-log?requestingUserId=${user.id}&limit=${AUDIT_PAGE_SIZE}&offset=${offset}`)
       const data = await res.json()
-      if (res.ok) setAuditLogs(data.logs ?? [])
+      if (res.ok) {
+        setAuditLogs(data.logs ?? [])
+        setAuditTotal(data.total ?? 0)
+      }
     } catch {
       console.error("[ADMIN] Failed to load audit logs")
     } finally {
       setAuditLoading(false)
+      setAuditPageLoading(false)
     }
   }
 
@@ -221,8 +233,8 @@ export default function AdminPage() {
   const [companySearch, setCompanySearch] = useState("")
   const [companyFilterStatus, setCompanyFilterStatus] = useState<string>("all")
   const [companyFilterPlan, setCompanyFilterPlan] = useState<string>("all")
-  const [savedViews, setSavedViews] = useState<{ name: string; search: string; status: string; plan: string }[]>([])
-  const [savedViewName, setSavedViewName] = useState("")
+  const [companyPage, setCompanyPage] = useState(0)
+  const COMPANY_PAGE_SIZE = 10
 
   useEffect(() => {
     if (loading) return
@@ -301,17 +313,17 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    if (user && role === "super_admin") loadApiMonitor(apiMonitorRange)
+    if (user && role === "super_admin") loadApiMonitor(apiMonitorRange, filterUserId)
   }, [apiMonitorRange, filterUserId])
 
   // Auto-refresh API monitoring every 30 seconds
   useEffect(() => {
     if (!user || role !== "super_admin") return
     const interval = setInterval(() => {
-      loadApiMonitor(apiMonitorRange)
+      loadApiMonitor(apiMonitorRange, filterUserId)
     }, 30000)
     return () => clearInterval(interval)
-  }, [user, role, apiMonitorRange])
+  }, [user, role, apiMonitorRange, filterUserId])
 
   // Auto-refresh companies & workspaces every 30 seconds
   useEffect(() => {
@@ -322,38 +334,6 @@ export default function AdminPage() {
     return () => clearInterval(interval)
   }, [user, role])
 
-  // Load saved views from localStorage
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("admin_saved_views")
-      if (stored) setSavedViews(JSON.parse(stored))
-    } catch {}
-  }, [])
-
-  // Save view handler
-  const saveView = () => {
-    if (!savedViewName.trim()) return
-    const newView = { name: savedViewName.trim(), search: companySearch, status: companyFilterStatus, plan: companyFilterPlan }
-    const updated = [...savedViews.filter(v => v.name !== newView.name), newView]
-    setSavedViews(updated)
-    localStorage.setItem("admin_saved_views", JSON.stringify(updated))
-    setSavedViewName("")
-    toast({ title: "View saved", description: `"${newView.name}" saved to filters.` })
-  }
-
-  // Apply saved view
-  const applyView = (view: { name: string; search: string; status: string; plan: string }) => {
-    setCompanySearch(view.search)
-    setCompanyFilterStatus(view.status)
-    setCompanyFilterPlan(view.plan)
-  }
-
-  // Delete saved view
-  const deleteView = (name: string) => {
-    const updated = savedViews.filter(v => v.name !== name)
-    setSavedViews(updated)
-    localStorage.setItem("admin_saved_views", JSON.stringify(updated))
-  }
 
   // Filtered companies
   const filteredCompanies = companies.filter(c => {
@@ -1914,12 +1894,12 @@ export default function AdminPage() {
                 type="text"
                 placeholder="Search by name, company, or email…"
                 value={companySearch}
-                onChange={(e) => setCompanySearch(e.target.value)}
+                onChange={(e) => { setCompanySearch(e.target.value); setCompanyPage(0) }}
                 className="flex-1 min-w-[200px] rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white placeholder:text-muted-foreground focus:border-emerald-500/40 focus:outline-none"
               />
               <select
                 value={companyFilterStatus}
-                onChange={(e) => setCompanyFilterStatus(e.target.value)}
+                onChange={(e) => { setCompanyFilterStatus(e.target.value); setCompanyPage(0) }}
                 className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white focus:border-emerald-500/40 focus:outline-none"
               >
                 <option value="all">All Status</option>
@@ -1929,7 +1909,7 @@ export default function AdminPage() {
               </select>
               <select
                 value={companyFilterPlan}
-                onChange={(e) => setCompanyFilterPlan(e.target.value)}
+                onChange={(e) => { setCompanyFilterPlan(e.target.value); setCompanyPage(0) }}
                 className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white focus:border-emerald-500/40 focus:outline-none"
               >
                 <option value="all">All Plans</option>
@@ -1939,59 +1919,18 @@ export default function AdminPage() {
               </select>
             </div>
 
-            {/* Saved views */}
-            <div className="flex flex-wrap items-center gap-2">
-              {savedViews.length > 0 && (
-                <>
-                  <span className="text-[10px] text-muted-foreground">Saved:</span>
-                  {savedViews.map(v => (
-                    <div key={v.name} className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
-                      <button
-                        onClick={() => applyView(v)}
-                        className="text-[10px] font-medium text-white/80 hover:text-white"
-                      >
-                        {v.name}
-                      </button>
-                      <button
-                        onClick={() => deleteView(v.name)}
-                        className="text-muted-foreground hover:text-red-400"
-                      >
-                        <XCircle className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </>
-              )}
-              <div className="flex items-center gap-1">
-                <input
-                  type="text"
-                  placeholder="View name…"
-                  value={savedViewName}
-                  onChange={(e) => setSavedViewName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && saveView()}
-                  className="w-24 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] text-white placeholder:text-muted-foreground focus:border-emerald-500/40 focus:outline-none"
-                />
+            {(companySearch || companyFilterStatus !== "all" || companyFilterPlan !== "all") && (
                 <button
-                  onClick={saveView}
-                  disabled={!savedViewName.trim()}
-                  className="rounded-lg bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-400 hover:bg-emerald-500/15 disabled:opacity-50"
-                >
-                  Save View
-                </button>
-              </div>
-              {(companySearch || companyFilterStatus !== "all" || companyFilterPlan !== "all") && (
-                <button
-                  onClick={() => { setCompanySearch(""); setCompanyFilterStatus("all"); setCompanyFilterPlan("all") }}
+                  onClick={() => { setCompanySearch(""); setCompanyFilterStatus("all"); setCompanyFilterPlan("all"); setCompanyPage(0) }}
                   className="text-[10px] text-muted-foreground hover:text-white"
                 >
                   Clear filters
                 </button>
               )}
-            </div>
 
             {/* Result count */}
             <p className="text-[10px] text-muted-foreground">
-              Showing {filteredCompanies.length} of {companies.length} {companies.length === 1 ? "company" : "companies"}
+              Showing {Math.min(companyPage * COMPANY_PAGE_SIZE + 1, filteredCompanies.length)}-{Math.min((companyPage + 1) * COMPANY_PAGE_SIZE, filteredCompanies.length)} of {filteredCompanies.length} {filteredCompanies.length === 1 ? "company" : "companies"}
             </p>
           </div>
 
@@ -2002,8 +1941,8 @@ export default function AdminPage() {
           ) : filteredCompanies.length === 0 ? (
             <p className="text-sm text-muted-foreground">{companies.length === 0 ? t("adminNoCompanies") : "No companies match your filters."}</p>
           ) : (
-            <div className="space-y-2">
-              {filteredCompanies.map(c => {
+            <div className={cn("space-y-2 transition-opacity", companyPage > 0 && filteredCompanies.length > COMPANY_PAGE_SIZE && "")}>
+              {filteredCompanies.slice(companyPage * COMPANY_PAGE_SIZE, (companyPage + 1) * COMPANY_PAGE_SIZE).map(c => {
                 const displayName = c.companyName || c.fullName || c.email
                 const initials = displayName.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
                 const isTrial = c.subStatus === "trialing"
@@ -2152,6 +2091,28 @@ export default function AdminPage() {
                 </div>
                 )
               })}
+            </div>
+          )}
+          {/* Companies Pagination */}
+          {filteredCompanies.length > COMPANY_PAGE_SIZE && (
+            <div className="flex items-center justify-center gap-3 mt-4">
+              <button
+                onClick={() => setCompanyPage(p => Math.max(0, p - 1))}
+                disabled={companyPage === 0}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-white/5 disabled:opacity-30 transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                {companyPage + 1} / {Math.ceil(filteredCompanies.length / COMPANY_PAGE_SIZE)}
+              </span>
+              <button
+                onClick={() => setCompanyPage(p => Math.min(Math.ceil(filteredCompanies.length / COMPANY_PAGE_SIZE) - 1, p + 1))}
+                disabled={companyPage >= Math.ceil(filteredCompanies.length / COMPANY_PAGE_SIZE) - 1}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-white/5 disabled:opacity-30 transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
           )}
         </div>
@@ -2636,7 +2597,7 @@ export default function AdminPage() {
               <p className="text-sm text-muted-foreground">No audit entries yet</p>
             </div>
           ) : (
-            <div className="relative space-y-3 pl-4">
+            <div className={cn("relative space-y-3 pl-4 transition-opacity", auditPageLoading && "opacity-40 pointer-events-none")}>
               {/* Timeline line */}
               <div className="absolute left-[7px] top-2 bottom-2 w-px bg-white/10" />
               {auditLogs.map(log => {
@@ -2691,6 +2652,28 @@ export default function AdminPage() {
                   </div>
                 )
               })}
+            </div>
+          )}
+          {/* Audit Trail Pagination */}
+          {auditTotal > AUDIT_PAGE_SIZE && (
+            <div className="flex items-center justify-center gap-3 mt-4">
+              <button
+                onClick={() => { const p = Math.max(0, auditPage - 1); setAuditPage(p); loadAuditLogs(p) }}
+                disabled={auditPage === 0 || auditLoading}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-white/5 disabled:opacity-30 transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                {auditPage + 1} / {Math.ceil(auditTotal / AUDIT_PAGE_SIZE)}
+              </span>
+              <button
+                onClick={() => { const p = Math.min(Math.ceil(auditTotal / AUDIT_PAGE_SIZE) - 1, auditPage + 1); setAuditPage(p); loadAuditLogs(p) }}
+                disabled={auditPage >= Math.ceil(auditTotal / AUDIT_PAGE_SIZE) - 1 || auditLoading}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-white/5 disabled:opacity-30 transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
           )}
         </div>

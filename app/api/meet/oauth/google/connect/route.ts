@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -11,7 +12,7 @@ const SCOPES = [
 
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/meet/oauth/callback`
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get("userId")
   if (!userId) {
     return NextResponse.json({ error: "Missing userId" }, { status: 400 })
@@ -30,3 +31,5 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.redirect(url.toString())
 }
+
+export const GET = withApiLogging(_GET, "/api/meet/oauth/google/connect")

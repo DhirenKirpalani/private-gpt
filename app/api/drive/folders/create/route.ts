@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -35,7 +36,7 @@ async function refreshIfNeeded(conn: any): Promise<string> {
   return newAccess
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { userId, name, parentId } = await req.json()
 
@@ -89,3 +90,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Folder creation failed" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/drive/folders/create")

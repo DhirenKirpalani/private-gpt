@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -8,7 +9,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const userId = searchParams.get("userId")
@@ -38,3 +39,5 @@ export async function GET(req: NextRequest) {
     )
   }
 }
+
+export const GET = withApiLogging(_GET, "/api/email/messages")

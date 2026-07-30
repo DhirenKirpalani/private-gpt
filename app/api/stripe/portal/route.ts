@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { stripe } from "@/lib/stripe"
 import { supabase } from "@/lib/supabase"
+import { withApiLogging } from "@/lib/with-api-logging"
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { userId } = (await req.json()) as { userId?: string }
     if (!userId) {
@@ -30,3 +31,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/stripe/portal")

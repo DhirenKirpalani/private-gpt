@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { unstable_noStore as noStore } from "next/cache"
 import { createAdminClient } from "@/lib/supabase"
 import { getTokenLimits } from "@/lib/token-limits"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -20,7 +21,7 @@ function getBillingPeriodStart(sub: any): Date {
   return new Date(now.getFullYear(), now.getMonth(), 1)
 }
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   noStore()
   try {
     const { searchParams } = new URL(req.url)
@@ -132,3 +133,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 })
   }
 }
+
+export const GET = withApiLogging(_GET, "/api/admin/user-usage")

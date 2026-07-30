@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -35,7 +36,7 @@ async function refreshIfNeeded(conn: any): Promise<string> {
   return newAccess
 }
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   try {
     const userId = req.nextUrl.searchParams.get("userId")
     if (!userId) {
@@ -61,3 +62,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Failed to get Drive token" }, { status: 500 })
   }
 }
+
+export const GET = withApiLogging(_GET, "/api/drive/token")

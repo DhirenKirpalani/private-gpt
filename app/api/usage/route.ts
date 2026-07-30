@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { getUsageSummary } from "@/lib/token-limits"
+import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -9,7 +10,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const { userId } = await req.json()
     if (!userId) {
@@ -29,3 +30,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Failed to fetch usage" }, { status: 500 })
   }
 }
+
+export const POST = withApiLogging(_POST, "/api/usage")
