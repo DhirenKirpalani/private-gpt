@@ -117,6 +117,48 @@ async function _POST(req: NextRequest) {
       }).join("\n\n")
     }
 
+    // Fetch recent Slack messages (last 10)
+    const { data: slackMsgs, error: slackErr } = await supabase
+      .from("slack_messages")
+      .select("slack_user_name, channel_name, body, direction, timestamp")
+      .eq("user_id", userId)
+      .order("timestamp", { ascending: false })
+      .limit(10)
+
+    if (slackErr) console.error("[AI CONTEXT] Slack fetch error:", slackErr.message)
+
+    // Fetch recent Telegram messages (last 10)
+    const { data: tgMsgs, error: tgErr } = await supabase
+      .from("telegram_messages")
+      .select("from_first_name, from_username, chat_title, chat_id, body, direction, timestamp")
+      .eq("user_id", userId)
+      .order("timestamp", { ascending: false })
+      .limit(10)
+
+    if (tgErr) console.error("[AI CONTEXT] Telegram fetch error:", tgErr.message)
+
+    // Format Slack context
+    let slackContext = ""
+    if (slackMsgs && slackMsgs.length > 0) {
+      slackContext = slackMsgs.map((m, i) => {
+        const date = m.timestamp ? new Date(m.timestamp).toLocaleString() : ""
+        const dir = m.direction === "sent" ? "→" : "←"
+        const name = m.direction === "sent" ? (m.channel_name || "Slack") : (m.slack_user_name || "Unknown")
+        return `${i + 1}. ${dir} ${name}\n   Time: ${date}\n   Message: ${m.body || ""}`
+      }).join("\n\n")
+    }
+
+    // Format Telegram context
+    let telegramContext = ""
+    if (tgMsgs && tgMsgs.length > 0) {
+      telegramContext = tgMsgs.map((m, i) => {
+        const date = m.timestamp ? new Date(m.timestamp).toLocaleString() : ""
+        const dir = m.direction === "sent" ? "→" : "←"
+        const name = m.direction === "sent" ? (m.chat_title || m.chat_id || "Telegram") : (m.from_first_name || m.from_username || "Unknown")
+        return `${i + 1}. ${dir} ${name}\n   Time: ${date}\n   Message: ${m.body || ""}`
+      }).join("\n\n")
+    }
+
     // Append Calendly scheduling URL to calendar context
     if (calendlyConn?.scheduling_url) {
       const urlLine = `\nYour Calendly booking link: ${calendlyConn.scheduling_url}\nINSTRUCTION: When the user asks to schedule a meeting or send a meeting invite, always include this Calendly link — never ask the user to provide it.`
@@ -127,9 +169,13 @@ async function _POST(req: NextRequest) {
       emails: emails || [],
       events: events || [],
       waMessages: waMsgs || [],
+      slackMessages: slackMsgs || [],
+      telegramMessages: tgMsgs || [],
       emailContext,
       calendarContext,
       whatsappContext,
+      slackContext,
+      telegramContext,
     })
   } catch (err: any) {
     console.error("[AI CONTEXT] Error:", err)

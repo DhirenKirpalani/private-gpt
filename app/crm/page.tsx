@@ -21,7 +21,7 @@ import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
-import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramConnections, getTelegramMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, unsubscribeChannel, getKanbanCols, upsertKanbanCols, createNotification } from "@/lib/supabase"
+import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramConnections, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, createNotification } from "@/lib/supabase"
 import { formatTelegramSender } from "@/lib/telegram"
 
 /* ─── real data ─── */
@@ -193,13 +193,19 @@ export default function CRMPage() {
   const [waReplyBody, setWaReplyBody] = useState("")
   const [waReplyTo, setWaReplyTo] = useState<string | null>(null)
   const [sendingWaReply, setSendingWaReply] = useState(false)
-  const [replySource, setReplySource] = useState<"whatsapp" | "telegram">("whatsapp")
+  const [replySource, setReplySource] = useState<"whatsapp" | "telegram" | "slack">("whatsapp")
 
   // Telegram state
   const [telegramConnections, setTelegramConnections] = useState<any[]>([])
   const [telegramMessages, setTelegramMessages] = useState<any[]>([])
   const [telegramLoading, setTelegramLoading] = useState(false)
   const [telegramFetched, setTelegramFetched] = useState(false)
+
+  // Slack state
+  const [slackConnections, setSlackConnections] = useState<any[]>([])
+  const [slackMessages, setSlackMessages] = useState<any[]>([])
+  const [slackLoading, setSlackLoading] = useState(false)
+  const [slackFetched, setSlackFetched] = useState(false)
 
   // ── Persist CRM data to sessionStorage so it survives page navigation ──
   const storageKey = (k: string) => `crm_${user?.id || "guest"}_${k}`
@@ -228,6 +234,10 @@ export default function CRMPage() {
       if (savedTg) setTelegramMessages(JSON.parse(savedTg))
       const savedTgFetched = sessionStorage.getItem(storageKey("telegramFetched"))
       if (savedTgFetched) setTelegramFetched(JSON.parse(savedTgFetched))
+      const savedSlack = sessionStorage.getItem(storageKey("slackMessages"))
+      if (savedSlack) setSlackMessages(JSON.parse(savedSlack))
+      const savedSlackFetched = sessionStorage.getItem(storageKey("slackFetched"))
+      if (savedSlackFetched) setSlackFetched(JSON.parse(savedSlackFetched))
       const savedActiveChannel = sessionStorage.getItem(storageKey("activeChannel"))
       if (savedActiveChannel) setActiveChannel(savedActiveChannel)
       const savedActiveTab = sessionStorage.getItem(storageKey("activeTab"))
@@ -246,6 +256,8 @@ export default function CRMPage() {
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("whatsappFetched"), JSON.stringify(whatsappFetched)) } catch {} }, [whatsappFetched, user])
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("telegramMessages"), JSON.stringify(telegramMessages)) } catch {} }, [telegramMessages, user])
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("telegramFetched"), JSON.stringify(telegramFetched)) } catch {} }, [telegramFetched, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("slackMessages"), JSON.stringify(slackMessages)) } catch {} }, [slackMessages, user])
+  useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("slackFetched"), JSON.stringify(slackFetched)) } catch {} }, [slackFetched, user])
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("activeChannel"), activeChannel) } catch {} }, [activeChannel, user])
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("activeTab"), activeTab) } catch {} }, [activeTab, user])
 
@@ -277,7 +289,7 @@ export default function CRMPage() {
     for (const conn of whatsappConnections) {
       list.push({
         id: conn.phone_number_id,
-        label: conn.display_name || conn.phone_number || "WhatsApp",
+        label: "WhatsApp",
         color: "bg-green-500",
         type: "whatsapp",
         connected: true,
@@ -286,14 +298,23 @@ export default function CRMPage() {
     for (const conn of telegramConnections) {
       list.push({
         id: `tg_${conn.id}`,
-        label: conn.bot_username ? `@${conn.bot_username}` : "Telegram",
+        label: "Telegram",
         color: "bg-sky-500",
         type: "telegram",
         connected: true,
       })
     }
+    for (const conn of slackConnections) {
+      list.push({
+        id: `slack_${conn.id}`,
+        label: "Slack",
+        color: "bg-purple-500",
+        type: "slack",
+        connected: true,
+      })
+    }
     return list
-  }, [emailConnections, calendarConnections, whatsappConnections, telegramConnections])
+  }, [emailConnections, calendarConnections, whatsappConnections, telegramConnections, slackConnections])
 
   // Default active channel to first connected one
   const activeCh = channels.find((c) => c.id === activeChannel) || channels[0] || { id: "", label: "No channels", color: "bg-slate-500", type: "", connected: false }
@@ -319,16 +340,50 @@ export default function CRMPage() {
     return { unreadCount: unreadThreadIds.size, totalThreadCount: threadIds.size }
   }, [inboxMessages])
 
+  // Helper: display name for a message based on source
+  const msgDisplayName = (msg: any) => {
+    if (msg.direction === "sent") {
+      if (msg._source === "slack") return `To: ${msg.channel_name || msg.channel_id}`
+      return `To: ${msg.to_number || msg.chat_title || msg.chat_id}`
+    }
+    if (msg._source === "slack") return msg.slack_user_name || msg.slack_user_id || "Slack user"
+    if (msg._source === "telegram") return formatTelegramSender(msg)
+    return msg.from_number
+  }
+
+  // Helper: reply target for a message
+  const msgReplyTarget = (msg: any) => {
+    if (msg._source === "slack") return msg.channel_id
+    if (msg._source === "telegram") return msg.chat_id
+    return msg.from_number
+  }
+
+  // Helper: icon for message source
+  const msgSourceIcon = (msg: any) => {
+    if (msg._source === "telegram") return <Send className="h-3 w-3 text-sky-400" />
+    if (msg._source === "slack") return <MessageSquare className="h-3 w-3 text-purple-400" />
+    return <Phone className="h-3 w-3" />
+  }
+
+  const [msgFilter, setMsgFilter] = useState<"whatsapp" | "telegram" | "slack">("whatsapp")
+  const [msgFilterOpen, setMsgFilterOpen] = useState(false)
+
   // Combined WhatsApp + Telegram messages for the Messages tab
   const combinedMessages = useMemo(() => {
     const wa = whatsappMessages.map((m: any) => ({ ...m, _source: "whatsapp" as const }))
     const tg = telegramMessages.map((m: any) => ({ ...m, _source: "telegram" as const }))
-    return [...wa, ...tg].sort((a: any, b: any) => {
+    const sl = slackMessages.map((m: any) => ({ ...m, _source: "slack" as const }))
+    return [...wa, ...tg, ...sl].sort((a: any, b: any) => {
       const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
       const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
       return tb - ta
     })
-  }, [whatsappMessages, telegramMessages])
+  }, [whatsappMessages, telegramMessages, slackMessages])
+
+  // Filtered messages based on source filter
+  const filteredCombinedMessages = useMemo(() => {
+    return combinedMessages.filter(m => m._source === msgFilter)
+  }, [combinedMessages, msgFilter])
 
   // Upcoming calendar events count (events that haven't ended yet)
   const upcomingEventsCount = calendarEvents.filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).length
@@ -371,11 +426,12 @@ export default function CRMPage() {
       }
 
       // Parallel fetch for core metadata (connections + contacts)
-      const [emailConnsRes, calConnsRes, waConnsRes, tgConnsRes, contactsRes] = await Promise.allSettled([
+      const [emailConnsRes, calConnsRes, waConnsRes, tgConnsRes, slConnsRes, contactsRes] = await Promise.allSettled([
         getEmailConnections(user.id),
         getCalendarConnections(user.id),
         getWhatsAppConnections(user.id),
         getTelegramConnections(user.id),
+        getSlackConnections(user.id),
         getContacts(user.id),
       ])
 
@@ -383,6 +439,7 @@ export default function CRMPage() {
       if (calConnsRes.status === "fulfilled") setCalendarConnections(calConnsRes.value)
       if (waConnsRes.status === "fulfilled") setWhatsAppConnections(waConnsRes.value)
       if (tgConnsRes.status === "fulfilled") setTelegramConnections(tgConnsRes.value)
+      if (slConnsRes.status === "fulfilled") setSlackConnections(slConnsRes.value)
       if (contactsRes.status === "fulfilled") {
         const list = contactsRes.value
         console.log("[DEBUG] Loaded contacts:", list.length)
@@ -441,6 +498,12 @@ export default function CRMPage() {
               if (msgs.length > 0) setTelegramFetched(true)
             }).catch(() => {})
           : (() => { setTelegramMessages([]); setTelegramFetched(false); return Promise.resolve() })(),
+        slConnsRes.status === "fulfilled" && slConnsRes.value.length > 0
+          ? getSlackMessages(user.id).then((msgs: any[]) => {
+              setSlackMessages(msgs)
+              if (msgs.length > 0) setSlackFetched(true)
+            }).catch(() => {})
+          : (() => { setSlackMessages([]); setSlackFetched(false); return Promise.resolve() })(),
       ])
     }
     load()
@@ -560,10 +623,100 @@ export default function CRMPage() {
       }
     })
 
+    const slackChannel = subscribeToSlackMessages(user.id, (payload) => {
+      if (payload.eventType === "INSERT") {
+        const msg = payload.new
+        setSlackMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev
+          return [msg, ...prev]
+        })
+        setSlackFetched(true)
+        if (msg.direction === "received") {
+          importContactsFromSlack(user.id).then(async () => {
+            const contactList = await getContacts(user.id)
+            setContacts(contactList.map((c: any) => ({
+              id: c.id, name: c.name, company: c.company || "", role: c.role || "",
+              email: c.email || "", phone: c.phone || "", location: c.location || "",
+              tags: c.tags || [], starred: c.starred,
+              lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+              dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
+            })))
+          }).catch(() => {})
+        }
+      } else if (payload.eventType === "UPDATE") {
+        const msg = payload.new
+        setSlackMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)))
+      } else if (payload.eventType === "DELETE") {
+        const id = payload.old.id
+        setSlackMessages((prev) => prev.filter((m) => m.id !== id))
+      }
+    })
+
+    const whatsappChannel = subscribeToWhatsAppMessages(user.id, (payload) => {
+      if (payload.eventType === "INSERT") {
+        const msg = payload.new
+        setWhatsAppMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev
+          return [msg, ...prev]
+        })
+        setWhatsAppFetched(true)
+        if (msg.direction === "received") {
+          importContactsFromWhatsApp(user.id).then(async () => {
+            const contactList = await getContacts(user.id)
+            setContacts(contactList.map((c: any) => ({
+              id: c.id, name: c.name, company: c.company || "", role: c.role || "",
+              email: c.email || "", phone: c.phone || "", location: c.location || "",
+              tags: c.tags || [], starred: c.starred,
+              lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+              dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
+            })))
+          }).catch(() => {})
+        }
+      } else if (payload.eventType === "UPDATE") {
+        const msg = payload.new
+        setWhatsAppMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)))
+      } else if (payload.eventType === "DELETE") {
+        const id = payload.old.id
+        setWhatsAppMessages((prev) => prev.filter((m) => m.id !== id))
+      }
+    })
+
+    const telegramChannel = subscribeToTelegramMessages(user.id, (payload) => {
+      if (payload.eventType === "INSERT") {
+        const msg = payload.new
+        setTelegramMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev
+          return [msg, ...prev]
+        })
+        setTelegramFetched(true)
+        if (msg.direction === "received") {
+          importContactsFromTelegram(user.id).then(async () => {
+            const contactList = await getContacts(user.id)
+            setContacts(contactList.map((c: any) => ({
+              id: c.id, name: c.name, company: c.company || "", role: c.role || "",
+              email: c.email || "", phone: c.phone || "", location: c.location || "",
+              tags: c.tags || [], starred: c.starred,
+              lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+              dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
+            })))
+          }).catch(() => {})
+        }
+      } else if (payload.eventType === "UPDATE") {
+        const msg = payload.new
+        setTelegramMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)))
+      } else if (payload.eventType === "DELETE") {
+        const id = payload.old.id
+        setTelegramMessages((prev) => prev.filter((m) => m.id !== id))
+      }
+    })
+
     return () => {
       unsubscribeChannel(emailChannel)
       unsubscribeChannel(calendarChannel)
       unsubscribeChannel(contactsChannel)
+      unsubscribeChannel(slackChannel)
+      unsubscribeChannel(whatsappChannel)
+      unsubscribeChannel(telegramChannel)
     }
   }, [user?.id])
 
@@ -590,7 +743,11 @@ export default function CRMPage() {
       getKanbanCols(user.id, "calendar"),
     ]).then(([eRes, mRes, cRes]) => {
       if (eRes.status === "fulfilled" && eRes.value.length > 0) setEmailKanbanCols(eRes.value)
-      if (mRes.status === "fulfilled" && mRes.value.length > 0) setMsgKanbanCols(mRes.value)
+      if (mRes.status === "fulfilled" && mRes.value.length > 0) {
+        const seen = new Set<string>()
+        const deduped = mRes.value.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true })
+        setMsgKanbanCols(deduped)
+      }
       if (cRes.status === "fulfilled" && cRes.value.length > 0) setCalKanbanCols(cRes.value)
     })
   }, [user])
@@ -1159,6 +1316,70 @@ export default function CRMPage() {
               </div>
             </div>
 
+            {/* No channels connected — show empty state with CTA */}
+            {!channelsLoading && channels.length === 0 && (activeTab === "Email" || activeTab === "Messages" || activeTab === "Calendar") && (
+              <div className="flex flex-1 items-center justify-center p-6">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 py-16 px-6 text-center max-w-md">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                    <MessageSquare className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <h2 className="text-lg font-bold">No channels connected</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Connect your email, messaging, and calendar channels to start managing your communications in one place.</p>
+                  <Link href="/channels" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors">
+                    Connect Channels
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* No email connected — show empty state with CTA */}
+            {!channelsLoading && channels.length > 0 && activeTab === "Email" && !emailConnections.find((c: any) => c.status === "connected") && (
+              <div className="flex flex-1 items-center justify-center p-6">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 py-16 px-6 text-center max-w-md">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                    <Mail className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <h2 className="text-lg font-bold">No email connected</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Connect your email account to start sending and receiving emails from the CRM.</p>
+                  <Link href="/channels" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors">
+                    Connect Email
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* No messaging channels connected — show empty state with CTA */}
+            {!channelsLoading && channels.length > 0 && activeTab === "Messages" && whatsappConnections.length === 0 && telegramConnections.length === 0 && slackConnections.length === 0 && (
+              <div className="flex flex-1 items-center justify-center p-6">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 py-16 px-6 text-center max-w-md">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                    <MessageSquare className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <h2 className="text-lg font-bold">No messaging channels connected</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Connect WhatsApp, Telegram, or Slack to start managing your messages in one place.</p>
+                  <Link href="/channels" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors">
+                    Connect Messaging
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* No calendar connected — show empty state with CTA */}
+            {!channelsLoading && channels.length > 0 && activeTab === "Calendar" && !calendarConnections.find((c: any) => c.status === "connected") && (
+              <div className="flex flex-1 items-center justify-center p-6">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 py-16 px-6 text-center max-w-md">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                    <Calendar className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <h2 className="text-lg font-bold">No calendar connected</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Connect your calendar to start managing events and meetings from the CRM.</p>
+                  <Link href="/channels" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors">
+                    Connect Calendar
+                  </Link>
+                </div>
+              </div>
+            )}
+
             {/* Empty state for overview when no contact selected */}
             {activeTab === "Overview" && !contact && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-6">
@@ -1184,8 +1405,8 @@ export default function CRMPage() {
                       },
                       {
                         label: "crmMessages",
-                        value: whatsappMessages.length + telegramMessages.length,
-                        sub: `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length + telegramMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")}`,
+                        value: whatsappMessages.length + telegramMessages.length + slackMessages.length,
+                        sub: `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length + telegramMessages.filter((m: any) => !m.read && m.direction === "received").length + slackMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")}`,
                         icon: Phone,
                         color: "text-emerald-400",
                         bg: "bg-emerald-500/10",
@@ -1229,11 +1450,17 @@ export default function CRMPage() {
                   {/* Connected Channels */}
                   <div>
                     <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider">{t("crmConnectedChannels")}</h2>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 min-w-0">
-                      {/* Email */}
-                      {(() => {
-                        const conn = emailConnections.find((c: any) => c.status === "connected")
-                        return (
+                    {channels.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 py-10 text-center">
+                        <p className="text-sm text-muted-foreground">No channels connected yet.</p>
+                        <Link href="/channels" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors">
+                          Connect Channels
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 min-w-0">
+                        {/* Email */}
+                        {emailConnections.find((c: any) => c.status === "connected") && (
                           <button onClick={() => setActiveTab("Email")}
                             className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
                             <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
@@ -1242,22 +1469,16 @@ export default function CRMPage() {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-semibold">Gmail</p>
-                                {conn
-                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
-                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{t("crmNotConnected")}</span>
-                                }
+                                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
                               </div>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {conn ? `${unreadCount} ${t("crmUnread")} · ${totalThreadCount} ${t("crmTotal")}` : t("crmGoToChannels")}
+                                {unreadCount} {t("crmUnread")} · {totalThreadCount} {t("crmTotal")}
                               </p>
                             </div>
                           </button>
-                        )
-                      })()}
-                      {/* WhatsApp */}
-                      {(() => {
-                        const conn = whatsappConnections.length > 0 ? whatsappConnections[0] : null
-                        return (
+                        )}
+                        {/* WhatsApp */}
+                        {whatsappConnections.length > 0 && (
                           <button onClick={() => setActiveTab("Messages")}
                             className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
                             <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
@@ -1266,22 +1487,16 @@ export default function CRMPage() {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-semibold">WhatsApp</p>
-                                {conn
-                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
-                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{t("crmNotConnected")}</span>
-                                }
+                                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
                               </div>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {conn ? `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")} · ${whatsappMessages.length} ${t("crmTotal")}` : t("crmGoToChannels")}
+                                {whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length} {t("crmUnread")} · {whatsappMessages.length} {t("crmTotal")}
                               </p>
                             </div>
                           </button>
-                        )
-                      })()}
-                      {/* Telegram */}
-                      {(() => {
-                        const conn = telegramConnections.length > 0 ? telegramConnections[0] : null
-                        return (
+                        )}
+                        {/* Telegram */}
+                        {telegramConnections.length > 0 && (
                           <button onClick={() => setActiveTab("Messages")}
                             className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
                             <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-sky-500/10">
@@ -1290,44 +1505,55 @@ export default function CRMPage() {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-semibold">Telegram</p>
-                                {conn
-                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
-                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{t("crmNotConnected")}</span>
-                                }
+                                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
                               </div>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {conn ? `${telegramMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")} · ${telegramMessages.length} ${t("crmTotal")}` : t("crmGoToChannels")}
+                                {telegramMessages.filter((m: any) => !m.read && m.direction === "received").length} {t("crmUnread")} · {telegramMessages.length} {t("crmTotal")}
                               </p>
                             </div>
                           </button>
-                        )
-                      })()}
-                      {/* Calendar */}
-                      {(() => {
-                        const conn = calendarConnections.find((c: any) => c.status === "connected")
-                        const nextEvent = [...calendarEvents].filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
-                        return (
-                          <button onClick={() => setActiveTab("Calendar")}
+                        )}
+                        {/* Slack */}
+                        {slackConnections.length > 0 && (
+                          <button onClick={() => setActiveTab("Messages")}
                             className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
-                            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
-                              <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400" />
+                            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-purple-500/10">
+                              <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-purple-400" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-semibold">Google Calendar</p>
-                                {conn
-                                  ? <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
-                                  : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{t("crmNotConnected")}</span>
-                                }
+                                <p className="text-sm font-semibold">Slack</p>
+                                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
                               </div>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {conn && nextEvent ? `${t("crmNext")} ${nextEvent.summary?.slice(0, 28) || "—"}` : conn ? `${calendarEvents.length} ${t("crmEventsCount")}` : t("crmGoToChannels")}
+                                {slackMessages.filter((m: any) => !m.read && m.direction === "received").length} {t("crmUnread")} · {slackMessages.length} {t("crmTotal")}
                               </p>
                             </div>
                           </button>
-                        )
-                      })()}
-                    </div>
+                        )}
+                        {/* Calendar */}
+                        {calendarConnections.find((c: any) => c.status === "connected") && (() => {
+                          const nextEvent = [...calendarEvents].filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
+                          return (
+                            <button onClick={() => setActiveTab("Calendar")}
+                              className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                              <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+                                <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-semibold">Google Calendar</p>
+                                  <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
+                                </div>
+                                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                  {nextEvent ? `${t("crmNext")} ${nextEvent.summary?.slice(0, 28) || "—"}` : `${calendarEvents.length} ${t("crmEventsCount")}`}
+                                </p>
+                              </div>
+                            </button>
+                          )
+                        })()}
+                      </div>
+                    )}
                   </div>
 
                   {/* Recent emails + upcoming events */}
@@ -1513,7 +1739,7 @@ export default function CRMPage() {
 
 
             {/* ── EMAIL ── */}
-            {activeTab === "Email" && (
+            {activeTab === "Email" && channels.length > 0 && emailConnections.find((c: any) => c.status === "connected") && (
               <div className="flex flex-1 flex-col min-h-0">
                 {/* Contact filter banner */}
                 {contactEmailFilter && (
@@ -2064,7 +2290,7 @@ export default function CRMPage() {
             )}
 
             {/* ── MESSAGES ── */}
-            {activeTab === "Messages" && (
+            {activeTab === "Messages" && channels.length > 0 && (whatsappConnections.length > 0 || telegramConnections.length > 0 || slackConnections.length > 0) && (
               <div className="flex flex-1 flex-col min-h-0">
                 {/* Messages Toolbar */}
                 <div className="flex flex-col gap-2 border-b bg-card/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
@@ -2074,12 +2300,40 @@ export default function CRMPage() {
                       <button onClick={() => setMessagesView("kanban")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", messagesView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{t("crmKanban")}</button>
                       <button onClick={() => setMessagesView("table")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", messagesView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{t("crmTable")}</button>
                     </div>
-                    {channels.filter(c => c.type === "whatsapp").map(ch => (
-                      <span key={ch.id} className="hidden sm:flex items-center gap-1.5 rounded-full border border-white/10 bg-muted/50 px-3 py-1.5 text-xs font-medium">
-                        <span className={cn("h-2 w-2 rounded-full", ch.color)} />
-                        {ch.label}
-                      </span>
-                    ))}
+                    {(() => {
+                      const msgChannels = channels.filter(c => c.type === "whatsapp" || c.type === "telegram" || c.type === "slack")
+                      if (msgChannels.length === 0) return null
+                      const active = msgChannels.find(c => c.type === msgFilter) || msgChannels[0]
+                      return (
+                        <div className="relative">
+                          <button
+                            onClick={() => setMsgFilterOpen(v => !v)}
+                            className="flex items-center gap-1.5 rounded-full border border-white/10 bg-muted/50 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                          >
+                            <span className={cn("h-2 w-2 rounded-full", active.color)} />
+                            <span className="text-foreground">{active.label}</span>
+                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                          </button>
+                          {msgFilterOpen && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setMsgFilterOpen(false)} />
+                              <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                                {msgChannels.map(ch => (
+                                  <button
+                                    key={ch.id}
+                                    onClick={() => { setMsgFilter(ch.type as any); setMsgFilterOpen(false) }}
+                                    className={cn("flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs hover:bg-emerald-600/10 transition-colors", msgFilter === ch.type && "text-emerald-400")}
+                                  >
+                                    <span className={cn("h-2 w-2 rounded-full", ch.color)} />
+                                    <span className="flex-1 truncate">{ch.label}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                   <div className="flex items-center justify-end gap-2 sm:gap-3">
                   <button
@@ -2087,14 +2341,16 @@ export default function CRMPage() {
                       if (!user) return
                       setWhatsAppLoading(true)
                       setTelegramLoading(true)
+                      setSlackLoading(true)
                       try {
-                        const [waMsgs, tgRes] = await Promise.allSettled([
+                        const [waMsgs, tgRes, slMsgs] = await Promise.allSettled([
                           getWhatsAppMessages(user.id),
                           fetch("/api/telegram/fetch", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ userId: user.id }),
                           }).then(r => r.json()).then(() => getTelegramMessages(user.id)),
+                          getSlackMessages(user.id),
                         ])
                         if (waMsgs.status === "fulfilled") {
                           setWhatsAppMessages(waMsgs.value)
@@ -2104,15 +2360,19 @@ export default function CRMPage() {
                           setTelegramMessages(tgRes.value)
                           setTelegramFetched(true)
                         }
+                        if (slMsgs.status === "fulfilled") {
+                          setSlackMessages(slMsgs.value)
+                          setSlackFetched(true)
+                        }
                       } catch (e) { console.error(e) }
-                      finally { setWhatsAppLoading(false); setTelegramLoading(false) }
+                      finally { setWhatsAppLoading(false); setTelegramLoading(false); setSlackLoading(false) }
                     }}
-                    disabled={whatsappLoading || telegramLoading || (whatsappConnections.length === 0 && telegramConnections.length === 0)}
+                    disabled={whatsappLoading || telegramLoading || slackLoading || (whatsappConnections.length === 0 && telegramConnections.length === 0 && slackConnections.length === 0)}
                     className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
                   >
-                    {whatsappLoading || telegramLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />}
-                    <span className="hidden sm:inline">{whatsappLoading ? t("crmRefreshing") : t("crmRefresh")}</span>
-                    <span className="sm:hidden">{whatsappLoading ? "..." : t("crmRefresh")}</span>
+                    {whatsappLoading || telegramLoading || slackLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />}
+                    <span className="hidden sm:inline">{whatsappLoading || telegramLoading || slackLoading ? t("crmRefreshing") : t("crmRefresh")}</span>
+                    <span className="sm:hidden">{whatsappLoading || telegramLoading || slackLoading ? "..." : t("crmRefresh")}</span>
                   </button>
                   </div>
                 </div>
@@ -2121,7 +2381,7 @@ export default function CRMPage() {
                     <div className="flex h-full gap-5 p-6">
                       {msgKanbanCols.map(col => {
                         const getColId = (m: any) => msgCardCols[m.id] || (m.direction === "sent" ? "sent" : m.read ? "read" : "unread")
-                        const items = combinedMessages.filter(m => getColId(m) === col.id)
+                        const items = filteredCombinedMessages.filter(m => getColId(m) === col.id)
                         return (
                           <div
                             key={col.id}
@@ -2150,13 +2410,13 @@ export default function CRMPage() {
                               ) : items.map((msg: any) => (
                                 <div key={msg.id} draggable
                                   onDragStart={e => { dragMsgId.current = msg.id; e.dataTransfer.effectAllowed = "move" }}
-                                  onClick={() => { setWaReplyTo(msg._source === "telegram" ? msg.chat_id : msg.from_number); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
+                                  onClick={() => { setWaReplyTo(msgReplyTarget(msg)); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
                                   className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-grab active:cursor-grabbing active:opacity-60 active:scale-95"
                                 >
-                                  <p className="text-sm font-semibold mb-1 truncate">{msg.direction === "sent" ? `To: ${msg.to_number || msg.chat_title || msg.chat_id}` : (msg._source === "telegram" ? formatTelegramSender(msg) : msg.from_number)}</p>
+                                  <p className="text-sm font-semibold mb-1 truncate">{msgDisplayName(msg)}</p>
                                   <p className="text-xs text-muted-foreground truncate mt-1">{msg.body || ""}</p>
                                   <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
-                                    {msg._source === "telegram" ? <Send className="h-3 w-3 text-sky-400" /> : <Phone className="h-3 w-3" />}
+                                    {msgSourceIcon(msg)}
                                     <span>{msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}</span>
                                   </div>
                                 </div>
@@ -2174,13 +2434,13 @@ export default function CRMPage() {
                 ) : (
                   <div className="flex-1 min-h-0 overflow-y-auto p-6">
                   <div className="mx-auto max-w-5xl">
-                {whatsappConnections.length === 0 && telegramConnections.length === 0 ? (
+                {whatsappConnections.length === 0 && telegramConnections.length === 0 && slackConnections.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <Phone className="mb-2 h-6 w-6 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">{t("crmNoWhatsAppAccount")}</p>
                     <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">{t("crmGoToChannelsConnect")}</Link>
                   </div>
-                ) : combinedMessages.length === 0 ? (
+                ) : filteredCombinedMessages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <Phone className="mb-2 h-6 w-6 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">{whatsappFetched ? t("crmNoMessages") : t("crmClickRefresh")}</p>
@@ -2197,7 +2457,7 @@ export default function CRMPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {[...combinedMessages].sort((a: any, b: any) => {
+                        {[...filteredCombinedMessages].sort((a: any, b: any) => {
                           const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
                           const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
                           return tb - ta
@@ -2207,10 +2467,10 @@ export default function CRMPage() {
                           return (
                           <tr
                             key={msg.id}
-                            onClick={() => { setWaReplyTo(msg._source === "telegram" ? msg.chat_id : msg.from_number); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
+                            onClick={() => { setWaReplyTo(msgReplyTarget(msg)); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
                             className={cn("border-b last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors", msg.direction === "received" && !msg.read && "bg-emerald-500/5")}
                           >
-                            <td className="px-4 py-2.5 font-medium">{msg.direction === "received" ? (msg._source === "telegram" ? formatTelegramSender(msg) : msg.from_number) : `To: ${msg.to_number || msg.chat_title || msg.chat_id}`}</td>
+                            <td className="px-4 py-2.5 font-medium">{msgDisplayName(msg)}</td>
                             <td className="px-4 py-2.5 truncate max-w-[360px] text-muted-foreground">{msg.body || ""}</td>
                             <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                               <div className="relative">
@@ -2261,19 +2521,19 @@ export default function CRMPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {[...combinedMessages].sort((a: any, b: any) => {
+                    {[...filteredCombinedMessages].sort((a: any, b: any) => {
                       const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
                       const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
                       return tb - ta
                     }).map((msg: any) => (
                       <div
                         key={msg.id}
-                        onClick={() => { setWaReplyTo(msg._source === "telegram" ? msg.chat_id : msg.from_number); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
+                        onClick={() => { setWaReplyTo(msgReplyTarget(msg)); setReplySource(msg._source); setWaReplyBody(""); setSendingWaReply(false) }}
                         className={cn("w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-emerald-500/30 cursor-pointer", msg.direction === "received" && !msg.read && "border-l-2 border-l-emerald-500")}
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-medium truncate max-w-[60%]">
-                            {msg.direction === "received" ? (msg._source === "telegram" ? formatTelegramSender(msg) : msg.from_number) : `To: ${msg.to_number || msg.chat_title || msg.chat_id}`}
+                            {msgDisplayName(msg)}
                           </span>
                           <span className="text-[10px] text-muted-foreground">
                             {msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() : ""}
@@ -2288,7 +2548,7 @@ export default function CRMPage() {
                 {/* Reply */}
                 {waReplyTo && (
                   <div className="mt-4 rounded-lg border bg-card p-3">
-                    <p className="text-xs text-muted-foreground mb-2">Reply to {waReplyTo} {replySource === "telegram" && "via Telegram"}</p>
+                    <p className="text-xs text-muted-foreground mb-2">Reply to {waReplyTo} {replySource === "telegram" && "via Telegram"}{replySource === "slack" && "via Slack"}</p>
                     <textarea
                       value={waReplyBody}
                       onChange={e => setWaReplyBody(e.target.value)}
@@ -2302,9 +2562,11 @@ export default function CRMPage() {
                           if (!user || !waReplyBody.trim() || !waReplyTo) return
                           setSendingWaReply(true)
                           try {
-                            const endpoint = replySource === "telegram" ? "/api/telegram/send" : "/api/whatsapp/send"
+                            const endpoint = replySource === "telegram" ? "/api/telegram/send" : replySource === "slack" ? "/api/slack/send" : "/api/whatsapp/send"
                             const payload = replySource === "telegram"
                               ? { userId: user.id, chatId: waReplyTo, body: waReplyBody }
+                              : replySource === "slack"
+                              ? { userId: user.id, channelId: waReplyTo, text: waReplyBody }
                               : { userId: user.id, to: waReplyTo, body: waReplyBody }
                             const res = await fetch(endpoint, {
                               method: "POST",
@@ -2316,6 +2578,9 @@ export default function CRMPage() {
                             if (replySource === "telegram") {
                               const tgMsgs = await getTelegramMessages(user.id)
                               setTelegramMessages(tgMsgs)
+                            } else if (replySource === "slack") {
+                              const slMsgs = await getSlackMessages(user.id)
+                              setSlackMessages(slMsgs)
                             } else {
                               const msgs = await getWhatsAppMessages(user.id)
                               setWhatsAppMessages(msgs)
@@ -2344,7 +2609,7 @@ export default function CRMPage() {
             )}
 
             {/* ── CALENDAR ── */}
-            {activeTab === "Calendar" && (
+            {activeTab === "Calendar" && channels.length > 0 && calendarConnections.find((c: any) => c.status === "connected") && (
               <div className="flex flex-1 flex-col min-h-0">
                 {/* Calendar Toolbar */}
                 <div className="flex flex-col gap-2 border-b bg-card/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">

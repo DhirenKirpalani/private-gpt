@@ -1389,6 +1389,96 @@ export function unsubscribeChannel(channel: ReturnType<typeof subscribeToEmailMe
   supabase.removeChannel(channel)
 }
 
+export function subscribeToWhatsAppMessages(
+  userId: string,
+  callback: (payload: { eventType: string; new: any; old: any }) => void
+) {
+  const channel = supabase
+    .channel("whatsapp_messages")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "whatsapp_messages",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: any) => {
+        console.log("[REALTIME] whatsapp_messages event:", payload.eventType, payload)
+        callback(payload)
+      }
+    )
+    .subscribe((status: string, err?: any) => {
+      if (err) {
+        console.error("[REALTIME] whatsapp_messages subscription error:", err)
+      } else {
+        console.log("[REALTIME] whatsapp_messages subscription status:", status)
+      }
+    })
+
+  return channel
+}
+
+export function subscribeToTelegramMessages(
+  userId: string,
+  callback: (payload: { eventType: string; new: any; old: any }) => void
+) {
+  const channel = supabase
+    .channel("telegram_messages")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "telegram_messages",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: any) => {
+        console.log("[REALTIME] telegram_messages event:", payload.eventType, payload)
+        callback(payload)
+      }
+    )
+    .subscribe((status: string, err?: any) => {
+      if (err) {
+        console.error("[REALTIME] telegram_messages subscription error:", err)
+      } else {
+        console.log("[REALTIME] telegram_messages subscription status:", status)
+      }
+    })
+
+  return channel
+}
+
+export function subscribeToSlackMessages(
+  userId: string,
+  callback: (payload: { eventType: string; new: any; old: any }) => void
+) {
+  const channel = supabase
+    .channel("slack_messages")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "slack_messages",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: any) => {
+        console.log("[REALTIME] slack_messages event:", payload.eventType, payload)
+        callback(payload)
+      }
+    )
+    .subscribe((status: string, err?: any) => {
+      if (err) {
+        console.error("[REALTIME] slack_messages subscription error:", err)
+      } else {
+        console.log("[REALTIME] slack_messages subscription status:", status)
+      }
+    })
+
+  return channel
+}
+
 // ─── CRM Kanban column persistence ───────────────────────────────────────────
 
 export async function getKanbanCols(userId: string, board: "email" | "messages" | "calendar") {
