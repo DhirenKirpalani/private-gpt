@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 const SERPER_URL = process.env.SERPER_URL || "https://google.serper.dev/search"
 const DEEPSEEK_URL = process.env.DEEPSEEK_URL || "https://api.deepseek.com/v1/chat/completions"
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"

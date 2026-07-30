@@ -3,6 +3,8 @@ import { withApiLogging } from "@/lib/with-api-logging"
 import { createClient } from "@supabase/supabase-js"
 import { checkUsage, TOKEN_LIMITS } from "@/lib/token-limits"
 
+export const dynamic = "force-dynamic"
+
 const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 

@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase"
 import { Resend } from "resend"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 const VALID_ROLES = ["user", "manager", "admin", "super_admin"]

@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js"
 import { fetchAndStoreUpdates } from "@/lib/telegram"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!

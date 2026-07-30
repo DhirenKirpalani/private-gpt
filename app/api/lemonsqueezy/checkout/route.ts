@@ -3,6 +3,8 @@ import { createCheckoutSession, LS_STORE_ID, LS_VARIANTS } from "@/lib/lemonsque
 import { createAdminClient } from "@/lib/supabase"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 async function _POST(req: NextRequest) {
   try {
     const { plan, userId } = (await req.json()) as { plan?: "solo" | "team"; userId?: string }

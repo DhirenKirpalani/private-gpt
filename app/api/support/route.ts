@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { Resend } from "resend"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 async function _POST(req: NextRequest) {

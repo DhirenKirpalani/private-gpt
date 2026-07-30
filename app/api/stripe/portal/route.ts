@@ -3,6 +3,8 @@ import { stripe } from "@/lib/stripe"
 import { supabase } from "@/lib/supabase"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 async function _POST(req: NextRequest) {
   try {
     const { userId } = (await req.json()) as { userId?: string }

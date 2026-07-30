@@ -4,6 +4,8 @@ import mammoth from "mammoth"
 import { getFileExt } from "@/lib/file-types"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 export const runtime = "nodejs"
 
 function estimateDocxPages(text: string): number {

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 async function _GET(req: NextRequest) {
   try {
     const requestingUserId = new URL(req.url).searchParams.get("requestingUserId")

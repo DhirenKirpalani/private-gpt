@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 async function _POST(req: NextRequest) {
   try {
     const { url } = await req.json()

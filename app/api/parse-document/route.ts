@@ -4,6 +4,8 @@ import { createClient } from "@supabase/supabase-js"
 import { getFileExt } from "@/lib/file-types"
 import { withApiLogging } from "@/lib/with-api-logging"
 
+export const dynamic = "force-dynamic"
+
 // Force Node.js runtime — pdf-parse/pdfjs-dist need Node.js APIs (not Edge)
 export const runtime = "nodejs"
 
