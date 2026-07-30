@@ -26,10 +26,13 @@ async function _POST(req: NextRequest) {
 
     if (!conn) return NextResponse.json({ error: "No Slack connection" }, { status: 404 })
 
+    // Use user token if available (sends as the user), otherwise bot token
+    const token = conn.user_access_token || conn.bot_access_token
+
     const res = await fetch("https://slack.com/api/chat.postMessage", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${conn.bot_access_token}`,
+        "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -50,8 +53,8 @@ async function _POST(req: NextRequest) {
       direction: "sent",
       channel_id: channelId,
       channel_name: null,
-      slack_user_id: conn.bot_user_id,
-      slack_user_name: "Bot",
+      slack_user_id: conn.user_access_token ? (data.message?.user || null) : conn.bot_user_id,
+      slack_user_name: conn.user_access_token ? "You" : "Bot",
       slack_ts: data.ts || "",
       body: text,
       timestamp: new Date(parseFloat(data.ts || "0") * 1000).toISOString(),

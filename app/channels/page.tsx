@@ -103,6 +103,8 @@ function ChannelsPageContent() {
   const [tgModalOpen, setTgModalOpen] = useState(false)
   const [tgForm, setTgForm] = useState({ botToken: "" })
   const [tgSaving, setTgSaving] = useState(false)
+  const [disconnecting, setDisconnecting] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState<string | null>(null)
   const [telegramConnections, setTelegramConnections] = useState<Record<string, any>>({})
   const [tgStep, setTgStep] = useState<"create" | "forward" | "paste">("create")
   const [tgPolling, setTgPolling] = useState(false)
@@ -301,6 +303,7 @@ function ChannelsPageContent() {
 
   const handleDisconnect = async (providerId: string) => {
     if (!user) return
+    setDisconnecting(`email_${providerId}`)
     console.log(`[CHANNELS DISCONNECT] Disconnecting provider=${providerId}`)
     const channelName = providerId === "gmail" ? "Gmail" : providerId === "outlook" ? "Outlook" : providerId
     try {
@@ -320,11 +323,14 @@ function ChannelsPageContent() {
     } catch (e: any) {
       console.error(`[CHANNELS DISCONNECT] Error:`, e?.message)
       toast({ title: "Error", description: `Failed to disconnect ${channelName}.`, variant: "error" })
+    } finally {
+      setDisconnecting(null)
     }
   }
 
   const handleDisconnectCalendar = async (providerId: string) => {
     if (!user) return
+    setDisconnecting(`cal_${providerId}`)
     const channelName = providerId === "google" ? "Google Calendar" : providerId === "googlemeet" ? "Google Meet" : providerId === "googledrive" ? "Google Drive" : providerId
     try {
       const conn = calendarConnections[providerId]
@@ -335,6 +341,8 @@ function ChannelsPageContent() {
       }
     } catch {
       toast({ title: "Error", description: `Failed to disconnect ${channelName}.`, variant: "error" })
+    } finally {
+      setDisconnecting(null)
     }
   }
 
@@ -353,6 +361,7 @@ function ChannelsPageContent() {
 
   const handleWhatsAppConnect = () => {
     if (!user) return
+    setConnecting("whatsapp")
     const width = 600
     const height = 700
     const left = window.screenX + (window.outerWidth - width) / 2
@@ -445,6 +454,7 @@ function ChannelsPageContent() {
 
   const handleDisconnectTelegram = async (connectionId: string) => {
     if (!user) return
+    setDisconnecting(`tg_${connectionId}`)
     try {
       const res = await fetch("/api/telegram/disconnect", {
         method: "POST",
@@ -456,6 +466,8 @@ function ChannelsPageContent() {
       toast({ title: "Disconnected", description: "Telegram has been disconnected.", variant: "success" })
     } catch {
       toast({ title: "Error", description: "Failed to disconnect Telegram.", variant: "error" })
+    } finally {
+      setDisconnecting(null)
     }
   }
 
@@ -467,9 +479,11 @@ function ChannelsPageContent() {
       toast({ title: "Error", description: "Slack is not configured.", variant: "error" })
       return
     }
+    setConnecting("slack")
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/slack/oauth/callback`
     const scopes = "chat:write,im:history,im:read,im:write,users:read"
-    const url = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${user.id}`
+    const userScopes = "chat:write,im:history,im:read,im:write,users:read"
+    const url = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=${encodeURIComponent(scopes)}&user_scope=${encodeURIComponent(userScopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${user.id}`
     window.location.href = url
   }
 
@@ -486,11 +500,14 @@ function ChannelsPageContent() {
       toast({ title: "Disconnected", description: "Slack has been disconnected.", variant: "success" })
     } catch {
       toast({ title: "Error", description: "Failed to disconnect Slack.", variant: "error" })
+    } finally {
+      setDisconnecting(null)
     }
   }
 
   const handleDisconnectWhatsApp = async (phoneNumberId: string) => {
     if (!user) return
+    setDisconnecting(`wa_${phoneNumberId}`)
     try {
       const conn = whatsappConnections[phoneNumberId]
       if (conn) {
@@ -500,6 +517,8 @@ function ChannelsPageContent() {
       }
     } catch {
       toast({ title: "Error", description: "Failed to disconnect WhatsApp.", variant: "error" })
+    } finally {
+      setDisconnecting(null)
     }
   }
 
@@ -692,19 +711,22 @@ function ChannelsPageContent() {
                           <button
                             onClick={() => {
                               if (!user) return
+                              setConnecting(`email_${provider.id}`)
                               window.location.href = `/api/email/oauth/${provider.id}/connect?userId=${user.id}`
                             }}
-                            className="w-full sm:w-auto rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
+                            disabled={connecting === `email_${provider.id}`}
+                            className="w-full sm:w-auto rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                           >
-                            {t("signIn")}
+                            {connecting === `email_${provider.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : t("signIn")}
                           </button>
                         )}
                         {(!provider.isOAuth || connected) && (
                           <button
                             onClick={() => connected ? handleDisconnect(provider.id) : openModal(provider)}
-                            className={cn("w-full sm:w-auto rounded-lg px-4 py-2 text-sm font-semibold transition-colors", connected ? "border border-red-500/30 text-red-400 hover:bg-red-500/10" : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40")}
+                            disabled={connected && disconnecting === `email_${provider.id}`}
+                            className={cn("w-full sm:w-auto rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2", connected ? "border border-red-500/30 text-red-400 hover:bg-red-500/10" : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40")}
                           >
-                            {connected ? t("channelsDisconnect") : t("channelsConnect")}
+                            {connected && disconnecting === `email_${provider.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : connected ? t("channelsDisconnect") : t("channelsConnect")}
                           </button>
                         )}
                       </div>
@@ -759,9 +781,10 @@ function ChannelsPageContent() {
                         waConn ? (
                           <button
                             onClick={() => handleDisconnectWhatsApp(waConn.phone_number_id)}
-                            className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                            disabled={disconnecting === `wa_${waConn.phone_number_id}`}
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
                           >
-                            Disconnect
+                            {disconnecting === `wa_${waConn.phone_number_id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
                           </button>
                         ) : (
                           <button
@@ -769,18 +792,20 @@ function ChannelsPageContent() {
                               if (!user) return
                               handleWhatsAppConnect()
                             }}
-                            className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
+                            disabled={connecting === "whatsapp"}
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                           >
-                            Connect
+                            {connecting === "whatsapp" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
                           </button>
                         )
                       ) : isTelegram && ch.connectable ? (
                         tgConn ? (
                           <button
                             onClick={() => handleDisconnectTelegram(tgConn.id)}
-                            className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                            disabled={disconnecting === `tg_${tgConn.id}`}
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
                           >
-                            Disconnect
+                            {disconnecting === `tg_${tgConn.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
                           </button>
                         ) : (
                           <button
@@ -794,16 +819,18 @@ function ChannelsPageContent() {
                         slConn ? (
                           <button
                             onClick={() => handleDisconnectSlack(slConn.id)}
-                            className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                            disabled={disconnecting === `slack_${slConn.id}`}
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
                           >
-                            Disconnect
+                            {disconnecting === `slack_${slConn.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
                           </button>
                         ) : (
                           <button
                             onClick={handleConnectSlack}
-                            className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
+                            disabled={connecting === "slack"}
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                           >
-                            Connect
+                            {connecting === "slack" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
                           </button>
                         )
                       ) : (
@@ -844,19 +871,22 @@ function ChannelsPageContent() {
                       {calConnected ? (
                         <button
                           onClick={() => handleDisconnectCalendar(ch.provider)}
-                          className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                          disabled={disconnecting === `cal_${ch.provider}`}
+                          className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          Disconnect
+                          {disconnecting === `cal_${ch.provider}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
                         </button>
                       ) : (
                         <button
                           onClick={() => {
                             if (!user) return
+                            setConnecting(`cal_${ch.provider}`)
                             window.location.href = `${ch.oauthPath}?userId=${user.id}`
                           }}
-                          className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
+                          disabled={connecting === `cal_${ch.provider}`}
+                          className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          Connect
+                          {connecting === `cal_${ch.provider}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Connect"}
                         </button>
                       )}
                     </div>
@@ -894,19 +924,22 @@ function ChannelsPageContent() {
                       {meetConnected ? (
                         <button
                           onClick={() => handleDisconnectCalendar(ch.provider)}
-                          className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                          disabled={disconnecting === `cal_${ch.provider}`}
+                          className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          Disconnect
+                          {disconnecting === `cal_${ch.provider}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
                         </button>
                       ) : (
                         <button
                           onClick={() => {
                             if (!user) return
+                            setConnecting(`cal_${ch.provider}`)
                             window.location.href = `${ch.oauthPath}?userId=${user.id}`
                           }}
-                          className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
+                          disabled={connecting === `cal_${ch.provider}`}
+                          className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          Connect
+                          {connecting === `cal_${ch.provider}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Connect"}
                         </button>
                       )}
                     </div>
@@ -944,19 +977,22 @@ function ChannelsPageContent() {
                       {fileConnected ? (
                         <button
                           onClick={() => handleDisconnectCalendar(ch.provider)}
-                          className="shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10"
+                          disabled={disconnecting === `cal_${ch.provider}`}
+                          className="shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          Disconnect
+                          {disconnecting === `cal_${ch.provider}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
                         </button>
                       ) : (
                         <button
                           onClick={() => {
                             if (!user) return
+                            setConnecting(`cal_${ch.provider}`)
                             window.location.href = `${ch.oauthPath}?userId=${user.id}`
                           }}
-                          className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors"
+                          disabled={connecting === `cal_${ch.provider}`}
+                          className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          Connect
+                          {connecting === `cal_${ch.provider}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Connect"}
                         </button>
                       )}
                     </div>

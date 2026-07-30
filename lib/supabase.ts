@@ -1607,6 +1607,7 @@ export interface SlackConnection {
   team_name: string
   bot_user_id: string
   bot_access_token: string
+  user_access_token: string | null
   status: string
   created_at: string
 }
@@ -1651,6 +1652,7 @@ export async function saveSlackConnection(conn: Omit<SlackConnection, "id" | "cr
         team_name: conn.team_name,
         bot_user_id: conn.bot_user_id,
         bot_access_token: conn.bot_access_token,
+        user_access_token: conn.user_access_token || null,
         status: "connected",
       })
       .eq("id", existing.id)
@@ -1691,7 +1693,7 @@ export async function saveSlackMessage(msg: Omit<SlackMessage, "id">): Promise<v
     .select("id")
     .eq("user_id", msg.user_id)
     .eq("slack_ts", msg.slack_ts)
-    .single()
+    .maybeSingle()
   if (existing) return
 
   const { error } = await supabase.from("slack_messages").insert(msg)

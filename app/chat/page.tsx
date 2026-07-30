@@ -602,9 +602,10 @@ export default function ChatPage() {
         `- Suggest follow-up actions for unread Telegram messages`,
         ``,
         `Calendly capabilities:`,
-        `- When the user asks to schedule a meeting, always include the Calendly booking link from the context`,
-        `- Never ask the user for their Calendly link — it is provided in the context`,
-        `- Suggest sharing the Calendly link in emails or messages when scheduling`,
+        `- When the user asks to schedule a meeting, send a demo invitation, or mentions a call/booking, you MUST include the Calendly booking link from the context section titled "CALENDLY BOOKING LINK"`,
+        `- NEVER use placeholders like [Insertar enlace de Calendly], [Insert Calendly link], or [Calendly URL] — always use the actual link provided in the context`,
+        `- NEVER ask the user for their Calendly link — it is provided in the context. If you cannot find it, say so explicitly rather than using a placeholder`,
+        `- When drafting emails or messages that involve scheduling, always embed the Calendly link directly in the text`,
         ``,
         `# Web Search Capability`,
         `When Web Search is enabled, you receive live web search results in your prompt. You CAN and SHOULD use these results to answer questions about websites, products, companies, or any topic the user asks about. Never say "I cannot browse the internet" or "I do not have the ability to access websites" when web search results are provided to you — use them directly.`,
@@ -765,6 +766,9 @@ export default function ChatPage() {
             }
             if (ctxData.calendarContext) {
               parts.push(`# Upcoming Calendar Events (next 14 days)\n${ctxData.calendarContext}`)
+            }
+            if (ctxData.calendlyContext) {
+              parts.push(`# CALENDBLY BOOKING LINK — IMPORTANT\n${ctxData.calendlyContext}`)
             }
             if (ctxData.whatsappContext) {
               parts.push(`# Recent WhatsApp Messages\n${ctxData.whatsappContext}`)
