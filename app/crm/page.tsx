@@ -288,11 +288,11 @@ export default function CRMPage() {
       }
     }
     for (const conn of calendarConnections) {
-      if (conn.status === "connected" && conn.provider === "google") {
+      if (conn.status === "connected" && (conn.provider === "google" || conn.provider === "calendly")) {
         list.push({
           id: conn.provider || conn.id,
-          label: "Google Calendar",
-          color: "bg-blue-400",
+          label: conn.provider === "google" ? "Google Calendar" : "Calendly",
+          color: conn.provider === "google" ? "bg-blue-400" : "bg-indigo-500",
           type: "calendar",
           connected: true,
         })
@@ -549,10 +549,24 @@ export default function CRMPage() {
             }).catch((err) => { console.error("[LOAD] getEmailMessages failed:", err) })
           : (() => { setEmailMessages([]); setInboxMessages([]); setInboxFetched(false); return Promise.resolve() })(),
         calConnsRes.status === "fulfilled" && calConnsRes.value.length > 0
-          ? getCalendarEvents(user.id).then((events: any[]) => {
-              setCalendarEvents(events)
-              if (events.length > 0) setCalendarFetched(true)
-            }).catch(() => {})
+          ? (async () => {
+              setCalendarLoading(true)
+              try {
+                // Fetch fresh events from provider (Google or Calendly)
+                await fetch("/api/calendar/fetch", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ userId: user.id }),
+                })
+              } catch {}
+              // Then load from DB
+              try {
+                const events = await getCalendarEvents(user.id)
+                setCalendarEvents(events)
+                setCalendarFetched(true)
+              } catch {}
+              setCalendarLoading(false)
+            })()
           : (() => { setCalendarEvents([]); setCalendarFetched(false); return Promise.resolve() })(),
         waConnsRes.status === "fulfilled" && waConnsRes.value.length > 0
           ? getWhatsAppMessages(user.id).then((msgs: any[]) => {
@@ -1621,7 +1635,7 @@ export default function CRMPage() {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <p className="text-sm font-semibold">Google Calendar</p>
+                                  <p className="text-sm font-semibold">{calendarConnections.find((c: any) => c.status === "connected")?.provider === "calendly" ? "Calendly" : "Google Calendar"}</p>
                                   <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
                                 </div>
                                 <p className="mt-0.5 truncate text-xs text-muted-foreground">

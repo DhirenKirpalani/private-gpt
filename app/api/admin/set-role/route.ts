@@ -64,10 +64,11 @@ async function _POST(req: NextRequest) {
     // Fetch old role for audit log
     const { data: targetProfile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, full_name")
       .eq("user_id", targetUser.id)
       .single()
     const oldRole = targetProfile?.role ?? null
+    const targetName = targetProfile?.full_name ?? ""
 
     // Update role in profiles table
     const { error } = await supabase
@@ -98,11 +99,11 @@ async function _POST(req: NextRequest) {
         html: `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#0f1520;color:#e2e8f0;padding:32px;border-radius:12px;">
             <div style="text-align:center;margin-bottom:24px;">
-              <img src="${process.env.NEXT_PUBLIC_APP_URL || "https://exploro-os.com"}/assets/images/exploro-icon.svg" alt="Exploro" style="height:40px;" />
+              <img src="https://exploro-os.com/assets/images/exploro-logo.png" alt="Exploro" style="height:40px;" />
             </div>
             <h2 style="color:#34d399;margin:0 0 16px;">Your role has been updated</h2>
             <p style="font-size:14px;line-height:1.6;color:#cbd5e1;">
-              Hi ${targetEmail.split("@")[0]},
+              Hi ${targetName || targetEmail.split("@")[0]},
             </p>
             <p style="font-size:14px;line-height:1.6;color:#cbd5e1;">
               Your Exploro account role has been changed to <strong style="color:#34d399;">${ROLE_LABELS[role]}</strong>.

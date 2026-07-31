@@ -119,6 +119,11 @@ export default function AdminPage() {
   const [auditTotal, setAuditTotal] = useState(0)
   const AUDIT_PAGE_SIZE = 10
 
+  // Notification logs
+  type NotificationRow = { id: string; userId: string; email: string; fullName: string; type: string; stage: string | null; daysLeft: number | null; plan: string | null; sentAt: string }
+  const [notifications, setNotifications] = useState<NotificationRow[]>([])
+  const [notificationsLoading, setNotificationsLoading] = useState(false)
+
   // Token & message limits
   const [tokenLimitTrial, setTokenLimitTrial] = useState(50000)
   const [tokenLimitSolo, setTokenLimitSolo] = useState(500000)
@@ -199,6 +204,20 @@ export default function AdminPage() {
     }
   }
 
+  async function loadNotifications() {
+    if (!user) return
+    setNotificationsLoading(true)
+    try {
+      const res = await fetch(`/api/admin/notifications?userId=${user.id}`, { cache: "no-store" })
+      const data = await res.json()
+      if (res.ok) setNotifications(data.notifications ?? [])
+    } catch {
+      console.error("[ADMIN] Failed to load notifications")
+    } finally {
+      setNotificationsLoading(false)
+    }
+  }
+
   // API Monitoring
   type ApiLog = { id: string; method: string; endpoint: string; status_code: number; duration_ms: number | null; error: string | null; created_at: string; user_id: string | null; user_name: string; user_email: string }
   type ApiEndpointStat = { endpoint: string; total: number; success: number; errors: number; errorRate: number; avgDuration: number; p50: number; p95: number; p99: number; methods: { method: string; count: number }[]; lastCalled: string; peakHour: { hour: string; total: number } | null; hourlyTrend: { hour: string; total: number; errors: number; avgDuration: number }[] }
@@ -225,7 +244,8 @@ export default function AdminPage() {
   // Companies & workspaces
   type CompanyMember = { userId: string; email: string; fullName: string; role: string }
   type CompanyWorkspace = { id: string; name: string; icon: string; createdAt: string; members: CompanyMember[] }
-  type Company = { userId: string; email: string; fullName: string; jobTitle: string; companyName: string; platformRole: string; createdAt: string | null; lastSignIn: string | null; subStatus: string | null; subPlan: string | null; trialEnd: string | null; trialDaysRemaining: number | null; workspaces: CompanyWorkspace[] }
+  type ChannelInfo = { provider: string; label: string; status: string; detail: string; connectedAt: string | null }
+  type Company = { userId: string; email: string; fullName: string; jobTitle: string; companyName: string; platformRole: string; createdAt: string | null; lastSignIn: string | null; subStatus: string | null; subPlan: string | null; trialEnd: string | null; trialDaysRemaining: number | null; channels: ChannelInfo[]; workspaces: CompanyWorkspace[] }
   const [companies, setCompanies] = useState<Company[]>([])
   const [companiesLoading, setCompaniesLoading] = useState(true)
   const [expandedCompany, setExpandedCompany] = useState<string | null>(null)
@@ -235,6 +255,8 @@ export default function AdminPage() {
   const [companyFilterPlan, setCompanyFilterPlan] = useState<string>("all")
   const [companyPage, setCompanyPage] = useState(0)
   const COMPANY_PAGE_SIZE = 10
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
+  const [planDropdownOpen, setPlanDropdownOpen] = useState(false)
 
   useEffect(() => {
     if (loading) return
@@ -285,6 +307,7 @@ export default function AdminPage() {
     loadApiMonitor()
     loadCustomTrials()
     loadAuditLogs()
+    loadNotifications()
     loadUsageMonitor()
 
     // Auto-refresh every 30 seconds
@@ -293,6 +316,7 @@ export default function AdminPage() {
       intervals.push(setInterval(() => loadStats(), 30000))
     }
     intervals.push(setInterval(() => loadAuditLogs(), 30000))
+    intervals.push(setInterval(() => loadNotifications(), 30000))
     intervals.push(setInterval(() => loadUsageMonitor(), 30000))
     return () => intervals.forEach(clearInterval)
   }, [user, role, loading, router, autoRefresh])
@@ -1897,26 +1921,75 @@ export default function AdminPage() {
                 onChange={(e) => { setCompanySearch(e.target.value); setCompanyPage(0) }}
                 className="flex-1 min-w-[200px] rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white placeholder:text-muted-foreground focus:border-emerald-500/40 focus:outline-none"
               />
-              <select
-                value={companyFilterStatus}
-                onChange={(e) => { setCompanyFilterStatus(e.target.value); setCompanyPage(0) }}
-                className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white focus:border-emerald-500/40 focus:outline-none"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="trialing">Trialing</option>
-                <option value="canceled">Canceled</option>
-              </select>
-              <select
-                value={companyFilterPlan}
-                onChange={(e) => { setCompanyFilterPlan(e.target.value); setCompanyPage(0) }}
-                className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white focus:border-emerald-500/40 focus:outline-none"
-              >
-                <option value="all">All Plans</option>
-                <option value="solo">Solo</option>
-                <option value="team">Team</option>
-                <option value="enterprise">Enterprise</option>
-              </select>
+              {/* Status Filter Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => { setStatusDropdownOpen(!statusDropdownOpen); setPlanDropdownOpen(false) }}
+                  className="flex h-9 items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white transition-colors hover:border-emerald-500/30 focus:outline-none min-w-[120px]"
+                >
+                  <span>{companyFilterStatus === "all" ? "All Status" : companyFilterStatus === "active" ? "Active" : companyFilterStatus === "trialing" ? "Trialing" : "Canceled"}</span>
+                  <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", statusDropdownOpen && "rotate-180")} />
+                </button>
+                {statusDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[140px] rounded-lg border border-emerald-500/30 bg-[#1e2533] p-1 shadow-2xl shadow-black/40">
+                    {[
+                      { value: "all", label: "All Status" },
+                      { value: "active", label: "Active" },
+                      { value: "trialing", label: "Trialing" },
+                      { value: "canceled", label: "Canceled" },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => { setCompanyFilterStatus(opt.value); setCompanyPage(0); setStatusDropdownOpen(false) }}
+                        className={cn(
+                          "flex w-full items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-emerald-600/10 rounded-md",
+                          companyFilterStatus === opt.value ? "text-emerald-400" : "text-white"
+                        )}
+                      >
+                        {opt.label}
+                        {companyFilterStatus === opt.value && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Plan Filter Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => { setPlanDropdownOpen(!planDropdownOpen); setStatusDropdownOpen(false) }}
+                  className="flex h-9 items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white transition-colors hover:border-emerald-500/30 focus:outline-none min-w-[120px]"
+                >
+                  <span>{companyFilterPlan === "all" ? "All Plans" : companyFilterPlan === "solo" ? "Solo" : companyFilterPlan === "team" ? "Team" : "Enterprise"}</span>
+                  <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", planDropdownOpen && "rotate-180")} />
+                </button>
+                {planDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-1.5 z-50 min-w-[140px] rounded-lg border border-emerald-500/30 bg-[#1e2533] p-1 shadow-2xl shadow-black/40">
+                    {[
+                      { value: "all", label: "All Plans" },
+                      { value: "solo", label: "Solo" },
+                      { value: "team", label: "Team" },
+                      { value: "enterprise", label: "Enterprise" },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => { setCompanyFilterPlan(opt.value); setCompanyPage(0); setPlanDropdownOpen(false) }}
+                        className={cn(
+                          "flex w-full items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-emerald-600/10 rounded-md",
+                          companyFilterPlan === opt.value ? "text-emerald-400" : "text-white"
+                        )}
+                      >
+                        {opt.label}
+                        {companyFilterPlan === opt.value && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {(companySearch || companyFilterStatus !== "all" || companyFilterPlan !== "all") && (
@@ -1978,6 +2051,11 @@ export default function AdminPage() {
                             {c.workspaces.length} ws
                           </span>
                         )}
+                        {c.channels.length > 0 && (
+                          <span className="shrink-0 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
+                            {c.channels.length} ch
+                          </span>
+                        )}
                       </div>
                       <p className="truncate text-xs text-muted-foreground mt-0.5">
                         {c.fullName && c.fullName !== displayName && c.fullName}{c.jobTitle && (c.fullName && c.fullName !== displayName) ? ` · ` : ``}{c.jobTitle}{(c.fullName !== displayName || c.jobTitle) ? ` · ` : ``}{c.email !== displayName ? c.email : ``}
@@ -2032,6 +2110,31 @@ export default function AdminPage() {
                   {/* Expanded: workspaces */}
                   {expandedCompany === c.userId && (
                     <div className="border-t border-white/5 p-3 space-y-2 bg-black/20">
+                      {/* Connected Channels */}
+                      {c.channels.length > 0 && (
+                        <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Connected Channels</p>
+                          <div className="flex flex-wrap gap-2">
+                            {c.channels.map((ch, idx) => (
+                              <div key={idx} className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.03] px-2.5 py-1.5">
+                                <span className={cn(
+                                  "h-1.5 w-1.5 rounded-full",
+                                  ch.status === "connected" ? "bg-emerald-400" : "bg-orange-400"
+                                )} />
+                                <span className="text-xs font-medium text-white/90">{ch.label}</span>
+                                {ch.detail && (
+                                  <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{ch.detail}</span>
+                                )}
+                                {ch.connectedAt && (
+                                  <span className="text-[10px] text-muted-foreground/60">
+                                    {new Date(ch.connectedAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {c.workspaces.length === 0 ? (
                         <p className="px-2 py-3 text-xs text-muted-foreground text-center">{t("adminNoWorkspaces")}</p>
                       ) : (
@@ -2564,6 +2667,84 @@ export default function AdminPage() {
                       </tr>
                     )
                   })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Email Notifications */}
+        <div className="rounded-xl border border-white/5 bg-[#1a1f2b] p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Megaphone className="h-4 w-4 text-emerald-400" />
+              <h2 className="text-sm font-semibold text-white/90">Email Notifications</h2>
+              <span className="text-[10px] text-muted-foreground">auto-refreshes every 30s</span>
+            </div>
+            <button
+              onClick={() => loadNotifications()}
+              disabled={notificationsLoading}
+              className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] text-white/60 hover:bg-white/10 hover:text-white disabled:opacity-40"
+            >
+              {notificationsLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              Refresh
+            </button>
+          </div>
+
+          {notificationsLoading && notifications.length === 0 ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading notifications…
+            </div>
+          ) : notifications.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No notifications sent yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-white/5 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <th className="pb-2 pr-4 font-medium">Recipient</th>
+                    <th className="pb-2 pr-4 font-medium">Type</th>
+                    <th className="pb-2 pr-4 font-medium">Stage</th>
+                    <th className="pb-2 pr-4 font-medium">Days Left</th>
+                    <th className="pb-2 pr-4 font-medium">Plan</th>
+                    <th className="pb-2 font-medium">Sent At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {notifications.map(n => (
+                    <tr key={n.id} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                      <td className="py-2.5 pr-4">
+                        <p className="font-medium text-white/90">{n.fullName || n.email}</p>
+                        {n.fullName && <p className="text-[10px] text-muted-foreground">{n.email}</p>}
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground capitalize">
+                          {n.type.replace(/_/g, " ")}
+                        </span>
+                      </td>
+                      <td className="py-2.5 pr-4">
+                        {n.stage && (
+                          <span className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize",
+                            n.stage === "final" ? "bg-red-500/10 text-red-400" :
+                            n.stage === "urgent" ? "bg-[#FFBF00]/10 text-[#FFBF00]" :
+                            "bg-emerald-500/10 text-emerald-400"
+                          )}>
+                            {n.stage}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 pr-4 text-muted-foreground tabular-nums">
+                        {n.daysLeft !== null ? `${n.daysLeft}d` : "—"}
+                      </td>
+                      <td className="py-2.5 pr-4 text-muted-foreground capitalize">
+                        {n.plan || "—"}
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {new Date(n.sentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
