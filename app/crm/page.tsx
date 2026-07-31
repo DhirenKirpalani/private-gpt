@@ -22,7 +22,7 @@ import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
-import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramConnections, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, createNotification } from "@/lib/supabase"
+import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramUserSession, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, createNotification } from "@/lib/supabase"
 import { formatTelegramSender } from "@/lib/telegram"
 
 /* ─── real data ─── */
@@ -309,11 +309,11 @@ export default function CRMPage() {
     }
     for (const conn of telegramConnections) {
       list.push({
-        id: `tg_${conn.id}`,
-        label: "Telegram",
+        id: `tg_${conn.user_id || conn.id || "personal"}`,
+        label: conn.tg_username ? `Telegram (@${conn.tg_username})` : "Telegram",
         color: "bg-sky-500",
         type: "telegram",
-        connected: true,
+        connected: conn.status === "connected",
       })
     }
     for (const conn of slackConnections) {
@@ -359,7 +359,10 @@ export default function CRMPage() {
       return `To: ${msg.to_number || msg.chat_title || msg.chat_id}`
     }
     if (msg._source === "slack") return msg.slack_user_name || msg.slack_user_id || "Slack user"
-    if (msg._source === "telegram") return formatTelegramSender(msg)
+    if (msg._source === "telegram") {
+      if (msg.chat_type === "group" || msg.chat_type === "channel") return msg.chat_title || "Group"
+      return formatTelegramSender(msg)
+    }
     return msg.from_number
   }
 
@@ -426,7 +429,7 @@ export default function CRMPage() {
     return combinedMessages.filter(m => m._source === msgFilter)
   }, [combinedMessages, msgFilter])
 
-  // Group messages by thread (conversation)
+  // Group messages by thread (conversation) — one card per recipient
   const threadedMessages = useMemo(() => {
     const threads = new Map<string, any[]>()
     for (const msg of filteredCombinedMessages) {
@@ -434,7 +437,16 @@ export default function CRMPage() {
       if (!threads.has(tid)) threads.set(tid, [])
       threads.get(tid)!.push(msg)
     }
+    // Deduplicate messages within each thread (by id)
     for (const [, msgs] of Array.from(threads.entries())) {
+      const seen = new Set()
+      const deduped = msgs.filter((m: any) => {
+        if (seen.has(m.id)) return false
+        seen.add(m.id)
+        return true
+      })
+      msgs.length = 0
+      msgs.push(...deduped)
       msgs.sort((a: any, b: any) => {
         const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
         const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
@@ -447,6 +459,17 @@ export default function CRMPage() {
       return tb - ta
     })
   }, [filteredCombinedMessages])
+
+  // Assign each thread to exactly one kanban column (based on latest message)
+  const threadColumnMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const [tid, msgs] of threadedMessages) {
+      const lastMsg = msgs[msgs.length - 1]
+      const colId = msgCardCols[lastMsg?.id] || (lastMsg?.direction === "sent" ? "sent" : lastMsg?.read ? "read" : "unread")
+      map.set(tid, colId)
+    }
+    return map
+  }, [threadedMessages])
 
   // Upcoming calendar events count (events that haven't ended yet)
   const upcomingEventsCount = calendarEvents.filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).length
@@ -493,7 +516,7 @@ export default function CRMPage() {
         getEmailConnections(user.id),
         getCalendarConnections(user.id),
         getWhatsAppConnections(user.id),
-        getTelegramConnections(user.id),
+        getTelegramUserSession(user.id),
         getSlackConnections(user.id),
         getContacts(user.id),
       ])
@@ -501,7 +524,7 @@ export default function CRMPage() {
       if (emailConnsRes.status === "fulfilled") setEmailConnections(emailConnsRes.value)
       if (calConnsRes.status === "fulfilled") setCalendarConnections(calConnsRes.value)
       if (waConnsRes.status === "fulfilled") setWhatsAppConnections(waConnsRes.value)
-      if (tgConnsRes.status === "fulfilled") setTelegramConnections(tgConnsRes.value)
+      if (tgConnsRes.status === "fulfilled") setTelegramConnections(tgConnsRes.value ? [tgConnsRes.value] : [])
       if (slConnsRes.status === "fulfilled") setSlackConnections(slConnsRes.value)
       if (contactsRes.status === "fulfilled") {
         const list = contactsRes.value
@@ -529,7 +552,7 @@ export default function CRMPage() {
 
       // Set loading states for message channels so the refresh button shows a spinner
       if (waConnsRes.status === "fulfilled" && waConnsRes.value.length > 0) setWhatsAppLoading(true)
-      if (tgConnsRes.status === "fulfilled" && tgConnsRes.value.length > 0) setTelegramLoading(true)
+      if (tgConnsRes.status === "fulfilled" && tgConnsRes.value) setTelegramLoading(true)
       if (slConnsRes.status === "fulfilled" && slConnsRes.value.length > 0) setSlackLoading(true)
 
       // Then fetch heavy message/event data in parallel (non-blocking)
@@ -574,8 +597,8 @@ export default function CRMPage() {
               if (msgs.length > 0) setWhatsAppFetched(true)
             }).catch(() => {})
           : (() => { setWhatsAppMessages([]); setWhatsAppFetched(false); return Promise.resolve() })(),
-        tgConnsRes.status === "fulfilled" && tgConnsRes.value.length > 0
-          ? fetch("/api/telegram/fetch", {
+        tgConnsRes.status === "fulfilled" && tgConnsRes.value
+          ? fetch("/api/telegram/user/fetch-chats", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ userId: user.id }),
@@ -2442,7 +2465,7 @@ export default function CRMPage() {
                       try {
                         const [waMsgs, tgRes, slMsgs] = await Promise.allSettled([
                           getWhatsAppMessages(user.id),
-                          fetch("/api/telegram/fetch", {
+                          fetch("/api/telegram/user/fetch-chats", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ userId: user.id }),
@@ -2481,9 +2504,7 @@ export default function CRMPage() {
                   <div className="flex flex-1 overflow-x-auto overflow-y-hidden min-h-0">
                     <div className="flex h-full gap-5 p-6">
                       {msgKanbanCols.map(col => {
-                        const getColId = (m: any) => msgCardCols[m.id] || (m.direction === "sent" ? "sent" : m.read ? "read" : "unread")
-                        const colThreadIds = new Set(filteredCombinedMessages.filter(m => getColId(m) === col.id).map(m => msgThreadId(m)))
-                        const items = threadedMessages.filter(([tid, msgs]) => colThreadIds.has(tid))
+                        const items = threadedMessages.filter(([tid]) => threadColumnMap.get(tid) === col.id)
                         return (
                           <div
                             key={col.id}
@@ -2726,7 +2747,7 @@ export default function CRMPage() {
                               if (!user || !waReplyBody.trim() || !waReplyTo) return
                               setSendingWaReply(true)
                               try {
-                                const endpoint = replySource === "telegram" ? "/api/telegram/send" : replySource === "slack" ? "/api/slack/send" : "/api/whatsapp/send"
+                                const endpoint = replySource === "telegram" ? "/api/telegram/user/send" : replySource === "slack" ? "/api/slack/send" : "/api/whatsapp/send"
                                 const payload = replySource === "telegram"
                                   ? { userId: user.id, chatId: waReplyTo, body: waReplyBody }
                                   : replySource === "slack"

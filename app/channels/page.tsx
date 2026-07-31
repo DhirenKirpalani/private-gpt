@@ -17,8 +17,9 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
-import { getProfile, getEmailConnections, saveEmailConnection, deleteEmailConnection, type EmailConnection, getCalendarConnections, deleteCalendarConnection, getWhatsAppConnections, saveWhatsAppConnection, deleteWhatsAppConnection, getTelegramConnections, getSlackConnections } from "@/lib/supabase"
+import { getProfile, getEmailConnections, saveEmailConnection, deleteEmailConnection, type EmailConnection, getCalendarConnections, deleteCalendarConnection, getWhatsAppConnections, saveWhatsAppConnection, deleteWhatsAppConnection, getTelegramUserSession, getSlackConnections } from "@/lib/supabase"
 import { toast, Toaster } from "@/components/ui/toast"
+import { CountryCodeSelect } from "@/components/country-code-select"
 
 type SmtpDefaults = { smtp_host: string; smtp_port: number; imap_host: string; imap_port: number; smtp_secure?: boolean }
 type EmailProvider = { id: string; name: string; icon: React.ReactNode; defaults: SmtpDefaults; note?: string; noteKey?: string; noteLink?: string; descKey: string; isOAuth?: boolean }
@@ -101,15 +102,12 @@ function ChannelsPageContent() {
 
   // Telegram connect modal
   const [tgModalOpen, setTgModalOpen] = useState(false)
-  const [tgForm, setTgForm] = useState({ botToken: "" })
   const [tgSaving, setTgSaving] = useState(false)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
   const [connecting, setConnecting] = useState<string | null>(null)
-  const [telegramConnections, setTelegramConnections] = useState<Record<string, any>>({})
   const [tgStep, setTgStep] = useState<"personal" | "personal-code">("personal")
-  const [tgPolling, setTgPolling] = useState(false)
-  const tgPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [tgPersonalForm, setTgPersonalForm] = useState({ phoneNumber: "", code: "", password: "" })
+  const [tgDialCode, setTgDialCode] = useState("1")
   const [tgPersonalSaving, setTgPersonalSaving] = useState(false)
   const [tgPersonalNeedPassword, setTgPersonalNeedPassword] = useState(false)
   const [tgUserSession, setTgUserSession] = useState<any>(null)
@@ -138,10 +136,8 @@ function ChannelsPageContent() {
       setWhatsAppConnections(waMap)
     } catch { /* ignore */ }
     try {
-      const tgConns = await getTelegramConnections(user.id)
-      const tgMap: Record<string, any> = {}
-      tgConns.forEach(c => { tgMap[c.id] = c })
-      setTelegramConnections(tgMap)
+      const tgUserSess = await getTelegramUserSession(user.id)
+      setTgUserSession(tgUserSess)
     } catch { /* ignore */ }
     try {
       const slConns = await getSlackConnections(user.id)
@@ -400,28 +396,6 @@ function ChannelsPageContent() {
     return () => window.removeEventListener("message", handler)
   }, [loadConnections])
 
-  const handleConnectTelegram = async (botToken: string) => {
-    if (!user) return
-    setTgSaving(true)
-    try {
-      const res = await fetch("/api/telegram/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, botToken }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to connect Telegram bot")
-      toast({ title: "Connected", description: `Telegram bot @${data.botUsername || "bot"} connected successfully.`, variant: "success" })
-      await loadConnections()
-      setTgModalOpen(false)
-      setTgStep("personal")
-    } catch (e: any) {
-      toast({ title: "Connection Error", description: e?.message || "Telegram connection failed", variant: "error" })
-    } finally {
-      setTgSaving(false)
-    }
-  }
-
   // ── Personal account connection (Client API) ──
   const handleTgPersonalSendCode = async () => {
     if (!user || !tgPersonalForm.phoneNumber) return
@@ -431,7 +405,7 @@ function ChannelsPageContent() {
       const res = await fetch("/api/telegram/user/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, phoneNumber: tgPersonalForm.phoneNumber }),
+        body: JSON.stringify({ userId: user.id, phoneNumber: "+" + tgDialCode + tgPersonalForm.phoneNumber }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to send code")
@@ -453,7 +427,7 @@ function ChannelsPageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          phoneNumber: tgPersonalForm.phoneNumber,
+          phoneNumber: "+" + tgDialCode + tgPersonalForm.phoneNumber,
           code: tgPersonalForm.code,
           password: tgPersonalNeedPassword ? tgPersonalForm.password : undefined,
         }),
@@ -502,50 +476,17 @@ function ChannelsPageContent() {
     }
   }
 
-  // Gateway bot username from env — used for deep-link "forward to" instructions
-  const gatewayBotUsername = process.env.NEXT_PUBLIC_TELEGRAM_GATEWAY_BOT_USERNAME || "ConnectBot"
-
-  // Start polling for a forwarded token
-  const startTgPolling = () => {
-    if (tgPollRef.current) clearInterval(tgPollRef.current)
-    setTgPolling(true)
-    tgPollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch("/api/telegram/poll-token")
-        const data = await res.json()
-        if (data.found && data.botToken) {
-          if (tgPollRef.current) clearInterval(tgPollRef.current)
-          setTgPolling(false)
-          await handleConnectTelegram(data.botToken)
-        }
-      } catch { /* keep polling */ }
-    }, 3000)
-  }
-
-  // Cleanup polling on unmount or modal close
-  useEffect(() => {
-    if (!tgModalOpen && tgPollRef.current) {
-      clearInterval(tgPollRef.current)
-      tgPollRef.current = null
-      setTgPolling(false)
-    }
-  }, [tgModalOpen])
-
-  useEffect(() => {
-    return () => { if (tgPollRef.current) clearInterval(tgPollRef.current) }
-  }, [])
-
-  const handleDisconnectTelegram = async (connectionId: string) => {
+  const handleDisconnectTelegram = async () => {
     if (!user) return
-    setDisconnecting(`tg_${connectionId}`)
+    setDisconnecting("tg")
     try {
-      const res = await fetch("/api/telegram/disconnect", {
+      const res = await fetch("/api/telegram/user/disconnect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id }),
       })
       if (!res.ok) throw new Error("Failed to disconnect")
-      setTelegramConnections(prev => { const next = { ...prev }; delete next[connectionId]; return next })
+      setTgUserSession(null)
       toast({ title: "Disconnected", description: "Telegram has been disconnected.", variant: "success" })
     } catch {
       toast({ title: "Error", description: "Failed to disconnect Telegram.", variant: "error" })
@@ -832,8 +773,8 @@ function ChannelsPageContent() {
                   const isSlack = ch.id === "slack"
                   const waConnected = isWhatsApp && Object.keys(whatsappConnections).length > 0
                   const waConn = waConnected ? Object.values(whatsappConnections)[0] : null
-                  const tgConnected = isTelegram && Object.keys(telegramConnections).length > 0
-                  const tgConn = tgConnected ? Object.values(telegramConnections)[0] : null
+                  const tgConnected = isTelegram && !!tgUserSession
+                  const tgConn = tgConnected ? tgUserSession : null
                   const slConnected = isSlack && Object.keys(slackConnections).length > 0
                   const slConn = slConnected ? Object.values(slackConnections)[0] : null
                   const isConn = waConn || tgConn || slConn
@@ -854,7 +795,7 @@ function ChannelsPageContent() {
                           <p className="mt-0.5 text-[10px] text-emerald-400">{waConn.phone_number || waConn.phone_number_id}</p>
                         )}
                         {tgConn && (
-                          <p className="mt-0.5 text-[10px] text-emerald-400">@{tgConn.bot_username || "bot"}</p>
+                          <p className="mt-0.5 text-[10px] text-emerald-400">{tgConn.tg_first_name || tgConn.tg_username || "Connected"}</p>
                         )}
                         {slConn && (
                           <p className="mt-0.5 text-[10px] text-emerald-400">{slConn.team_name || slConn.team_id}</p>
@@ -884,11 +825,11 @@ function ChannelsPageContent() {
                       ) : isTelegram && ch.connectable ? (
                         tgConn ? (
                           <button
-                            onClick={() => handleDisconnectTelegram(tgConn.id)}
-                            disabled={disconnecting === `tg_${tgConn.id}`}
+                            onClick={() => handleDisconnectTelegram()}
+                            disabled={disconnecting === "tg"}
                             className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
                           >
-                            {disconnecting === `tg_${tgConn.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
+                            {disconnecting === "tg" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
                           </button>
                         ) : (
                           <button
@@ -1473,14 +1414,17 @@ function ChannelsPageContent() {
             </div>
 
             <div className="space-y-3">
-              <input
-                type="tel"
-                value={tgPersonalForm.phoneNumber}
-                onChange={e => setTgPersonalForm({ ...tgPersonalForm, phoneNumber: e.target.value })}
-                placeholder="Phone number (+1234567890)"
-                disabled={tgStep === "personal-code"}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:border-sky-500/50 focus:outline-none disabled:opacity-50"
-              />
+              <div className="flex items-stretch gap-2">
+                <CountryCodeSelect value={tgDialCode} onChange={setTgDialCode} disabled={tgStep === "personal-code"} />
+                <input
+                  type="tel"
+                  value={tgPersonalForm.phoneNumber}
+                  onChange={e => setTgPersonalForm({ ...tgPersonalForm, phoneNumber: e.target.value.replace(/[^0-9]/g, "") })}
+                  placeholder="Phone number"
+                  disabled={tgStep === "personal-code"}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:border-sky-500/50 focus:outline-none disabled:opacity-50"
+                />
+              </div>
 
               {tgStep === "personal-code" && (
                 <input

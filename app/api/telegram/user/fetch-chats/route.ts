@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createTelegramClient, getUserSession, supabase } from "@/lib/telegram-user"
+import { createTelegramClient, getUserSession, isSessionExpiredError, markSessionExpired } from "@/lib/telegram-user"
+import { createAdminClient } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
 
 async function _POST(req: NextRequest) {
+  const { userId, limit } = await req.json()
+  let client: any = null
   try {
-    const { userId, limit } = await req.json()
     if (!userId) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 })
     }
@@ -15,6 +17,7 @@ async function _POST(req: NextRequest) {
       return NextResponse.json({ error: "Telegram personal account not connected" }, { status: 404 })
     }
 
+    const supabase = createAdminClient()
     const client = createTelegramClient(session.sessionString)
     await client.connect()
 
@@ -27,8 +30,13 @@ async function _POST(req: NextRequest) {
       if (!entity) continue
 
       const chatId = String(entity.id)
-      const chatType = entity.className?.replace("User", "private").replace("Chat", "group") || "private"
-      const chatTitle = entity.title || `${entity.firstName || ""} ${entity.lastName || ""}`.trim() || entity.username || "Unknown"
+      const className = entity.className || ""
+      let chatType = "private"
+      if (className === "Channel" || className === "ChannelForbidden") chatType = entity.megagroup ? "group" : "channel"
+      else if (className === "Chat" || className === "ChatForbidden") chatType = "group"
+      else if (className === "User") chatType = "private"
+
+      const chatTitle = dialog.title || dialog.name || entity.title || `${entity.firstName || ""} ${entity.lastName || ""}`.trim() || entity.username || "Unknown"
 
       // Fetch last few messages from this dialog
       try {
@@ -80,7 +88,13 @@ async function _POST(req: NextRequest) {
     return NextResponse.json({ success: true, dialogs: dialogs.length, imported })
   } catch (err: any) {
     console.error("[TG FETCH CHATS]", err)
+    if (isSessionExpiredError(err)) {
+      await markSessionExpired(userId)
+      return NextResponse.json({ error: "Your Telegram session has expired. Please reconnect your account." }, { status: 401 })
+    }
     return NextResponse.json({ error: err?.message || "Failed to fetch chats" }, { status: 500 })
+  } finally {
+    if (client) { try { await client.disconnect() } catch {} }
   }
 }
 

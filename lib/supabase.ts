@@ -21,8 +21,9 @@ const cookieStorage = {
 }
 
 export function createAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const serviceRoleKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
-  return createClient(supabaseUrl, serviceRoleKey, {
+  return createClient(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 }
@@ -1202,6 +1203,19 @@ export async function getTelegramConnections(userId: string): Promise<TelegramCo
     .eq("user_id", userId)
   if (error) throw error
   return (data ?? []) as TelegramConnection[]
+}
+
+export async function getTelegramUserSession(userId: string): Promise<any | null> {
+  const { data, error } = await supabase
+    .from("telegram_user_sessions")
+    .select("user_id, phone_number, tg_username, tg_first_name, tg_last_name, status")
+    .eq("user_id", userId)
+    .in("status", ["connected", "expired", "pending"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error || !data) return null
+  return data
 }
 
 export async function getTelegramMessages(userId: string): Promise<TelegramMessage[]> {
