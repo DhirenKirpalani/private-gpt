@@ -50,6 +50,49 @@ async function _GET(req: Request) {
   const subMap: Record<string, { status: string; plan: string | null; currentPeriodEnd: string | null; currentPeriodStart: string | null }> = {}
   subs?.forEach(s => { subMap[s.user_id] = { status: s.status, plan: s.plan, currentPeriodEnd: s.current_period_end, currentPeriodStart: s.current_period_start } })
 
+  // Fetch all channel connections
+  const [emailConns, waConns, tgConns, slConns, calConns] = await Promise.all([
+    adminClient.from("email_connections").select("user_id, provider, status, email_address, created_at"),
+    adminClient.from("whatsapp_connections").select("user_id, phone_number_id, status, created_at"),
+    adminClient.from("telegram_connections").select("user_id, bot_username, status, created_at"),
+    adminClient.from("slack_connections").select("user_id, team_name, status, created_at"),
+    adminClient.from("calendar_connections").select("user_id, provider, status, calendar_email, created_at"),
+  ])
+
+  type ChannelInfo = { provider: string; label: string; status: string; detail: string; connectedAt: string | null }
+  const channelsMap: Record<string, ChannelInfo[]> = {}
+
+  const addChannel = (userId: string, ch: ChannelInfo) => {
+    if (!channelsMap[userId]) channelsMap[userId] = []
+    const existing = channelsMap[userId].find(c => c.label === ch.label)
+    if (existing) {
+      // Keep the most recent one
+      if (!existing.connectedAt || (ch.connectedAt && new Date(ch.connectedAt) > new Date(existing.connectedAt))) {
+        Object.assign(existing, ch)
+      }
+    } else {
+      channelsMap[userId].push(ch)
+    }
+  }
+
+  emailConns.data?.forEach((e: any) => {
+    const label = e.provider === "gmail" ? "Gmail" : e.provider === "outlook" ? "Outlook" : e.provider === "hostinger" ? "Hostinger" : e.provider ? e.provider.charAt(0).toUpperCase() + e.provider.slice(1) : "Email"
+    addChannel(e.user_id, { provider: "email", label, status: e.status, detail: e.email_address || e.provider, connectedAt: e.created_at })
+  })
+  waConns.data?.forEach((w: any) => {
+    addChannel(w.user_id, { provider: "whatsapp", label: "WhatsApp", status: w.status, detail: w.phone_number_id || "", connectedAt: w.created_at })
+  })
+  tgConns.data?.forEach((tg: any) => {
+    addChannel(tg.user_id, { provider: "telegram", label: "Telegram", status: tg.status, detail: tg.bot_username || "", connectedAt: tg.created_at })
+  })
+  slConns.data?.forEach((s: any) => {
+    addChannel(s.user_id, { provider: "slack", label: "Slack", status: s.status, detail: s.team_name || "", connectedAt: s.created_at })
+  })
+  calConns.data?.forEach((c: any) => {
+    if (!c.provider || (c.provider !== "calendly" && c.provider !== "google")) return
+    addChannel(c.user_id, { provider: "calendar", label: c.provider === "calendly" ? "Calendly" : "Google Calendar", status: c.status, detail: c.calendar_email || "", connectedAt: c.created_at })
+  })
+
   // Fetch auth users for emails + last sign-in (handle pagination)
   const emailMap: Record<string, string> = {}
   const lastSignInMap: Record<string, string | null> = {}
@@ -134,6 +177,7 @@ async function _GET(req: Request) {
       subPlan: sub?.plan ?? null,
       trialEnd: sub?.currentPeriodEnd ?? null,
       trialDaysRemaining,
+      channels: channelsMap[userId] ?? [],
       workspaces: allWsIds.map(wsId => {
         const ws = wsById[wsId]
         if (!ws) return null

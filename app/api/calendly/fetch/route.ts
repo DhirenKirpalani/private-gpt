@@ -38,13 +38,15 @@ async function _POST(req: NextRequest) {
       }
       const refreshRes = await fetch("https://auth.calendly.com/oauth/token", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
           grant_type: "refresh_token",
           refresh_token: conn.refresh_token,
           client_id: process.env.CALENDLY_CLIENT_ID!,
           client_secret: process.env.CALENDLY_CLIENT_SECRET!,
-        }),
+        }).toString(),
       })
       const refreshData = await refreshRes.json()
       if (!refreshRes.ok) {

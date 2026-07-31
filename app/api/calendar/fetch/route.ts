@@ -43,17 +43,130 @@ async function _POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 })
     }
 
+    // Get any connected calendar (Google or Calendly)
     const { data: conn, error } = await supabase
       .from("calendar_connections")
       .select("*")
       .eq("user_id", userId)
-      .eq("provider", "google")
-      .single()
+      .eq("status", "connected")
+      .maybeSingle()
 
     if (error || !conn) {
       return NextResponse.json({ error: "Calendar connection not found" }, { status: 404 })
     }
 
+    // If Calendly, fetch events directly
+    if (conn.provider === "calendly") {
+      let accessToken = conn.access_token
+
+      // Refresh if expired
+      if (conn.token_expires_at && new Date(conn.token_expires_at) <= new Date()) {
+        if (!conn.refresh_token) {
+          return NextResponse.json({ error: "Calendly token expired and no refresh token" }, { status: 401 })
+        }
+        const refreshRes = await fetch("https://auth.calendly.com/oauth/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            grant_type: "refresh_token",
+            refresh_token: conn.refresh_token,
+            client_id: process.env.CALENDLY_CLIENT_ID!,
+            client_secret: process.env.CALENDLY_CLIENT_SECRET!,
+          }),
+        })
+        const refreshData = await refreshRes.json()
+        if (!refreshRes.ok) {
+          return NextResponse.json({ error: refreshData.message || "Failed to refresh Calendly token" }, { status: 401 })
+        }
+        accessToken = refreshData.access_token
+        const expiresIn = refreshData.expires_in || 7200
+        await supabase.from("calendar_connections").update({
+          access_token: accessToken,
+          refresh_token: refreshData.refresh_token || conn.refresh_token,
+          token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq("id", conn.id)
+      }
+
+      // Get Calendly user URI
+      const userRes = await fetch("https://api.calendly.com/v2/users/me", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      const userData = await userRes.json()
+      if (!userRes.ok) {
+        return NextResponse.json({ error: userData.message || "Failed to get Calendly user" }, { status: 500 })
+      }
+      const userUri = userData.resource?.uri
+      if (!userUri) {
+        return NextResponse.json({ error: "No Calendly user URI found" }, { status: 500 })
+      }
+
+      // Fetch scheduled events (next 30 days)
+      const now = new Date().toISOString()
+      const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      const eventsUrl = new URL("https://api.calendly.com/v2/scheduled_events")
+      eventsUrl.searchParams.set("user", userUri)
+      eventsUrl.searchParams.set("min_start_time", now)
+      eventsUrl.searchParams.set("max_start_time", thirtyDaysLater)
+      eventsUrl.searchParams.set("count", "100")
+
+      const eventsRes = await fetch(eventsUrl.toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      const eventsData = await eventsRes.json()
+      if (!eventsRes.ok) {
+        return NextResponse.json({ error: eventsData.message || "Failed to fetch Calendly events" }, { status: 500 })
+      }
+
+      const events = eventsData.collection || []
+      let imported = 0
+      for (const event of events) {
+        const eventId = event.uri.split("/").pop()
+        const attendees = (event.event_memberships || []).map((m: any) => ({ email: m.email, name: m.user_name, status: m.status }))
+
+        const payload = {
+          user_id: userId,
+          connection_id: conn.id,
+          event_id: eventId,
+          summary: event.name || "Scheduled Meeting",
+          description: event.event_memberships?.map((m: any) => m.user_name).join(", ") || "",
+          start_time: event.start_time,
+          end_time: event.end_time,
+          attendees,
+          location: event.location?.type || "",
+          event_link: event.event_guests?.[0]?.invitee_url || event.uri || "",
+          is_online: ["zoom", "google_meet", "webex", "microsoft_teams"].includes(event.location?.type),
+        }
+
+        const { data: existing } = await supabase
+          .from("calendar_events")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("event_id", eventId)
+          .maybeSingle()
+
+        if (existing) {
+          await supabase.from("calendar_events").update({
+            summary: payload.summary,
+            description: payload.description,
+            start_time: payload.start_time,
+            end_time: payload.end_time,
+            attendees: payload.attendees,
+            location: payload.location,
+            event_link: payload.event_link,
+            is_online: payload.is_online,
+            updated_at: new Date().toISOString(),
+          }).eq("id", existing.id)
+        } else {
+          await supabase.from("calendar_events").insert(payload)
+        }
+        imported++
+      }
+
+      return NextResponse.json({ success: true, fetched: imported, events: [] })
+    }
+
+    // Google Calendar fetch
     const accessToken = await refreshIfNeeded(conn)
 
     // Delete past events from DB (end_time < now)

@@ -29,27 +29,35 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const { userId } = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"))
+    const { userId, cv: codeVerifier } = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"))
     if (!userId) {
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/channels?error=Invalid state`
       )
     }
 
-    // Exchange code for Calendly token
+    // Use the actual request origin for redirect_uri (must match authorize step)
+    const origin = new URL(req.url).origin
+    const redirectUri = `${origin}/api/calendly/oauth/callback`
+
+    // Exchange code for Calendly token (PKCE + form-urlencoded)
     const tokenRes = await fetch("https://auth.calendly.com/oauth/token", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: redirectUri,
         client_id: process.env.CALENDLY_CLIENT_ID!,
         client_secret: process.env.CALENDLY_CLIENT_SECRET!,
-      }),
+        code_verifier: codeVerifier,
+      }).toString(),
     })
 
     const tokenData = await tokenRes.json()
+    console.log("[CALENDLY CALLBACK] Token exchange:", tokenRes.status, JSON.stringify(tokenData))
     if (!tokenRes.ok) {
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/channels?error=${encodeURIComponent(tokenData.message || tokenData.error || "Calendly token exchange failed")}`
