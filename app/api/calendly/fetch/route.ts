@@ -63,7 +63,7 @@ async function _POST(req: NextRequest) {
     }
 
     // Get Calendly user URI
-    const userRes = await fetch("https://api.calendly.com/v2/users/me", {
+    const userRes = await fetch("https://api.calendly.com/users/me", {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     const userData = await userRes.json()
@@ -80,7 +80,7 @@ async function _POST(req: NextRequest) {
     const now = new Date().toISOString()
     const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
 
-    const eventsUrl = new URL("https://api.calendly.com/v2/scheduled_events")
+    const eventsUrl = new URL("https://api.calendly.com/scheduled_events")
     eventsUrl.searchParams.set("user", userUri)
     eventsUrl.searchParams.set("min_start_time", now)
     eventsUrl.searchParams.set("max_start_time", thirtyDaysLater)

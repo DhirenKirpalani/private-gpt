@@ -1026,12 +1026,16 @@ export default function CRMPage() {
     if (!user) return
     const hasConnectedCalendar = calendarConnections.some((c: any) => c.status === "connected")
     if (!hasConnectedCalendar) return
+    // Auto-sync when switching to Calendar tab
+    if (activeTab === "Calendar") {
+      fetchCalendar()
+    }
     const interval = setInterval(() => {
       console.log("[CRM] Auto-polling calendar...")
       fetchCalendar()
     }, 120000) // 2 minutes
     return () => clearInterval(interval)
-  }, [user?.id, calendarConnections.length])
+  }, [user?.id, calendarConnections.length, activeTab])
 
   // Fetch calendar events
   const fetchCalendar = async () => {
@@ -2013,7 +2017,7 @@ export default function CRMPage() {
                       {emailKanbanCols.map(col => {
                         const q = emailSearch.toLowerCase()
                         const allMsgs = [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")]
-                          .filter((m: any) => !activeCh.id || m.provider === activeCh.id)
+                          .filter((m: any) => !activeCh.id || activeCh.type !== "email" || m.provider === activeCh.id)
                           .filter((m: any) => !q || (m.subject || "").toLowerCase().includes(q) || (m.from_address || "").toLowerCase().includes(q) || (m.body || "").toLowerCase().includes(q))
                           .filter((m: any) => emailFilter.direction === "all" || m.direction === emailFilter.direction)
                           .filter((m: any) => emailFilter.read === "all" || (emailFilter.read === "read" ? m.read : !m.read))
@@ -2195,7 +2199,7 @@ export default function CRMPage() {
                       {t("crmGoToChannelsConnect")}
                     </Link>
                   </div>
-                ) : [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")].filter((m: any) => !activeCh.id || m.provider === activeCh.id).length === 0 ? (
+                ) : [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")].filter((m: any) => !activeCh.id || activeCh.type !== "email" || m.provider === activeCh.id).length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <Mail className="mb-2 h-6 w-6 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
@@ -2218,7 +2222,7 @@ export default function CRMPage() {
                         {(() => {
                           const q = emailSearch.toLowerCase()
                           const allMsgs = [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")]
-                            .filter((m: any) => !activeCh.id || m.provider === activeCh.id)
+                            .filter((m: any) => !activeCh.id || activeCh.type !== "email" || m.provider === activeCh.id)
                             .filter((m: any) => !q || (m.subject || "").toLowerCase().includes(q) || (m.from_address || "").toLowerCase().includes(q) || (m.body || "").toLowerCase().includes(q))
                             .filter((m: any) => emailFilter.direction === "all" || m.direction === emailFilter.direction)
                             .filter((m: any) => emailFilter.read === "all" || (emailFilter.read === "read" ? m.read : !m.read))
@@ -2333,7 +2337,7 @@ export default function CRMPage() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {[...inboxMessages].filter((m: any) => !activeCh.id || m.provider === activeCh.id).sort((a: any, b: any) => {
+                    {[...inboxMessages].filter((m: any) => !activeCh.id || activeCh.type !== "email" || m.provider === activeCh.id).sort((a: any, b: any) => {
                       const da = a.received_at ? new Date(a.received_at).getTime() : 0
                       const db = b.received_at ? new Date(b.received_at).getTime() : 0
                       return db - da

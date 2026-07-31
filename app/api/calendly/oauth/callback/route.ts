@@ -70,10 +70,11 @@ export async function GET(req: NextRequest) {
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
 
     // Get Calendly user info
-    const userRes = await fetch("https://api.calendly.com/v2/users/me", {
+    const userRes = await fetch("https://api.calendly.com/users/me", {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     const userData = await userRes.json()
+    console.log("[CALENDLY CALLBACK] User info:", userRes.status, JSON.stringify({ email: userData.resource?.email, scheduling_url: userData.resource?.scheduling_url }))
     const email = userData.resource?.email || ""
     const schedulingUrl = userData.resource?.scheduling_url || ""
 

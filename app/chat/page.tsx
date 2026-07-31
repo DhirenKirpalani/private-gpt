@@ -430,11 +430,14 @@ export default function ChatPage() {
     const controller = new AbortController()
     abortControllerRef.current = controller
 
+    setLoading(true)
+
     let convId = retryConvId || currentConversationId
     try {
       convId = await ensureConversation()
     } catch (err: any) {
       setChatError(err?.message || "Failed to create conversation")
+      setLoading(false)
       return
     }
 
@@ -448,7 +451,6 @@ export default function ChatPage() {
       if (textareaRef.current) { textareaRef.current.style.height = "auto" }
     }
     setShowKbPanel(false)
-    setLoading(true)
 
     // Detect if user is asking about internal documents — skip web search if so
     // Only applies when KB is actually enabled and has documents
@@ -708,6 +710,33 @@ export default function ChatPage() {
         `6. This rule applies to: proposals, business plans, contracts, pitches, SOWs, RFP responses, service agreements, and any other formal business documents.`,
       ].filter(Boolean).join("\n")
 
+      // Fetch long-term memories (cross-conversation context)
+      let longTermMemoryContext = ""
+      if (user) {
+        try {
+          const memRes = await fetch(`/api/ai/memory/fetch?userId=${user.id}`)
+          if (memRes.ok) {
+            const memData = await memRes.json()
+            const memories = memData.memories || []
+            if (memories.length > 0) {
+              const grouped: Record<string, string[]> = {}
+              for (const m of memories) {
+                const cat = m.category || "general"
+                if (!grouped[cat]) grouped[cat] = []
+                grouped[cat].push(m.content)
+              }
+              const sections = Object.entries(grouped).map(([cat, items]) => {
+                const label = cat.charAt(0).toUpperCase() + cat.slice(1) + "s"
+                return `${label}:\n${items.map((item, i) => `  ${i + 1}. ${item}`).join("\n")}`
+              })
+              longTermMemoryContext = `\n# Long-Term Memory (from previous conversations)\nThe following are things you've learned about the user from past conversations. Use this context proactively — do NOT ask the user to repeat information they've already shared.\n\n${sections.join("\n\n")}\n\nINSTRUCTION: Reference these memories naturally when relevant. Do NOT explicitly say "I remember from our previous conversations" — just use the information seamlessly.`
+            }
+          }
+        } catch (err) {
+          console.error("[MEMORY FETCH] Failed:", err)
+        }
+      }
+
       // Fetch live web search results if enabled and user is not asking about internal docs
       let webSearchContext = ""
       let wsData: any = null
@@ -788,7 +817,7 @@ export default function ChatPage() {
         }
       }
 
-      const finalSystemPrompt = systemPrompt + webSearchContext + emailCalendarContext
+      const finalSystemPrompt = systemPrompt + longTermMemoryContext + webSearchContext + emailCalendarContext
 
       const apiMessages = nextMessages.map((m, i) => {
         const isLastUser = m.role === "user" && i === nextMessages.length - 1
@@ -903,10 +932,15 @@ export default function ChatPage() {
               // Normal delta content
               if (parsed.content) {
                 streamedContent += parsed.content
-                // Update the assistant message progressively
+                // Update the assistant message progressively (strip complete and partial action tags)
+                let displayContent = streamedContent
+                  .replace(/<!--ACTION:[\s\S]*?-->/g, "")  // complete tags
+                  .replace(/<!--ACTION:[\s\S]*$/g, "")      // partial tag (no closing --> yet)
+                  .replace(/<!--AC[\s\S]*$/g, "")           // even more partial (mid-tag)
+                  .trim()
                 setMessages(prev => prev.map(m =>
                   m.id === assistantMsgId
-                    ? { ...m, content: streamedContent }
+                    ? { ...m, content: displayContent }
                     : m
                 ))
               }
@@ -948,6 +982,22 @@ export default function ChatPage() {
       // Generate title from AI after first exchange
       if (messages.length === 0) {
         generateTitle(convId, userMsg.content, streamedContent).catch(() => {})
+      }
+
+      // Extract long-term memories every 6 messages (3 exchanges)
+      const totalMsgs = nextMessages.length
+      if (totalMsgs > 0 && totalMsgs % 6 === 0) {
+        fetch("/api/ai/memory/extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user?.id,
+            conversationId: convId,
+            messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
+          }),
+        }).then(r => r.json()).then(d => {
+          if (d.extracted > 0) console.log("[MEMORY] Extracted", d.extracted, "new memories")
+        }).catch(e => console.error("[MEMORY] Extraction failed:", e))
       }
     } catch (err: any) {
       if (err?.name === "AbortError") return // Aborted by new request, don't show error
