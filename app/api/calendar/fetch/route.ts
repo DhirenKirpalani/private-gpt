@@ -66,13 +66,13 @@ async function _POST(req: NextRequest) {
         }
         const refreshRes = await fetch("https://auth.calendly.com/oauth/token", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
             grant_type: "refresh_token",
             refresh_token: conn.refresh_token,
             client_id: process.env.CALENDLY_CLIENT_ID!,
             client_secret: process.env.CALENDLY_CLIENT_SECRET!,
-          }),
+          }).toString(),
         })
         const refreshData = await refreshRes.json()
         if (!refreshRes.ok) {
@@ -89,11 +89,12 @@ async function _POST(req: NextRequest) {
       }
 
       // Get Calendly user URI
-      const userRes = await fetch("https://api.calendly.com/v2/users/me", {
+      const userRes = await fetch("https://api.calendly.com/users/me", {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       const userData = await userRes.json()
       if (!userRes.ok) {
+        console.error("[CALENDAR FETCH] Calendly /users/me failed:", userRes.status, JSON.stringify(userData))
         return NextResponse.json({ error: userData.message || "Failed to get Calendly user" }, { status: 500 })
       }
       const userUri = userData.resource?.uri
@@ -104,7 +105,7 @@ async function _POST(req: NextRequest) {
       // Fetch scheduled events (next 30 days)
       const now = new Date().toISOString()
       const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-      const eventsUrl = new URL("https://api.calendly.com/v2/scheduled_events")
+      const eventsUrl = new URL("https://api.calendly.com/scheduled_events")
       eventsUrl.searchParams.set("user", userUri)
       eventsUrl.searchParams.set("min_start_time", now)
       eventsUrl.searchParams.set("max_start_time", thirtyDaysLater)

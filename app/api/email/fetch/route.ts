@@ -197,7 +197,7 @@ async function _POST(req: NextRequest) {
       if (conn.oauth_provider === "google") {
         // Fetch via Gmail API with pagination + 15-day window (keyword filter applied client-side below)
         const pageTokenParam = pageToken ? `&pageToken=${pageToken}` : ""
-        const qParam = encodeURIComponent(`after:${afterTimestamp} -in:trash -in:spam -in:junk`)
+        const qParam = encodeURIComponent(`after:${afterTimestamp} -in:trash -in:spam -in:junk -in:sent`)
         const listRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${qParam}${pageTokenParam}`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -301,6 +301,12 @@ async function _POST(req: NextRequest) {
           // Always import emails from known CRM contacts
           const senderEmail = extractEmail(fromAddress)
           const isKnownContact = knownContactEmails.has(senderEmail)
+          // Skip emails sent by the user themselves (safety check)
+          const userEmail = (conn.email_address || conn.smtp_user || "").toLowerCase()
+          if (userEmail && senderEmail.toLowerCase() === userEmail) {
+            console.log(`[EMAIL FILTER] SKIPPED (own sent email): subject="${subject}"`)
+            continue
+          }
           // Otherwise require a business keyword in the subject
           const matchedKeywords = getMatchedKeywords(subject)
           if (!isKnownContact && matchedKeywords.length === 0) {
@@ -506,6 +512,12 @@ async function _POST(req: NextRequest) {
           // Always import emails from known CRM contacts
           const senderEmail = extractEmail(fromAddr)
           const isKnownContact = knownContactEmails.has(senderEmail)
+          // Skip emails sent by the user themselves (safety check)
+          const userEmail = (conn.email_address || conn.smtp_user || "").toLowerCase()
+          if (userEmail && senderEmail.toLowerCase() === userEmail) {
+            console.log(`[EMAIL FILTER] SKIPPED (own sent email): subject="${msgSubject}"`)
+            continue
+          }
           const matchedKeywords = getMatchedKeywords(msgSubject)
           if (!isKnownContact && matchedKeywords.length === 0) {
             console.log(`[EMAIL FILTER] DROPPED (no keyword match): subject="${msgSubject}"`)
