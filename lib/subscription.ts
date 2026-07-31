@@ -7,11 +7,8 @@ export type Subscription = {
   stripe_customer_id: string | null
   stripe_subscription_id: string | null
   stripe_price_id: string | null
-  fastspring_subscription_id: string | null
-  fastspring_customer_id: string | null
-  fastspring_product_path: string | null
-  lemonsqueezy_subscription_id: string | null
-  lemonsqueezy_customer_id: string | null
+  polar_subscription_id: string | null
+  polar_customer_id: string | null
   status: "active" | "canceled" | "incomplete" | "incomplete_expired" | "past_due" | "paused" | "trialing" | "unpaid" | null
   plan: "solo" | "team" | "enterprise" | null
   current_period_start: string | null
