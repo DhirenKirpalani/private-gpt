@@ -17,8 +17,9 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
-import { getProfile, getEmailConnections, saveEmailConnection, deleteEmailConnection, type EmailConnection, getCalendarConnections, deleteCalendarConnection, getWhatsAppConnections, saveWhatsAppConnection, deleteWhatsAppConnection, getTelegramConnections, getSlackConnections } from "@/lib/supabase"
+import { getProfile, getEmailConnections, saveEmailConnection, deleteEmailConnection, type EmailConnection, getCalendarConnections, deleteCalendarConnection, getWhatsAppConnections, saveWhatsAppConnection, deleteWhatsAppConnection, getTelegramUserSession, getSlackConnections } from "@/lib/supabase"
 import { toast, Toaster } from "@/components/ui/toast"
+import { CountryCodeSelect } from "@/components/country-code-select"
 
 type SmtpDefaults = { smtp_host: string; smtp_port: number; imap_host: string; imap_port: number; smtp_secure?: boolean }
 type EmailProvider = { id: string; name: string; icon: React.ReactNode; defaults: SmtpDefaults; note?: string; noteKey?: string; noteLink?: string; descKey: string; isOAuth?: boolean }
@@ -101,14 +102,15 @@ function ChannelsPageContent() {
 
   // Telegram connect modal
   const [tgModalOpen, setTgModalOpen] = useState(false)
-  const [tgForm, setTgForm] = useState({ botToken: "" })
   const [tgSaving, setTgSaving] = useState(false)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
   const [connecting, setConnecting] = useState<string | null>(null)
-  const [telegramConnections, setTelegramConnections] = useState<Record<string, any>>({})
-  const [tgStep, setTgStep] = useState<"create" | "forward" | "paste">("create")
-  const [tgPolling, setTgPolling] = useState(false)
-  const tgPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [tgStep, setTgStep] = useState<"personal" | "personal-code">("personal")
+  const [tgPersonalForm, setTgPersonalForm] = useState({ phoneNumber: "", code: "", password: "" })
+  const [tgDialCode, setTgDialCode] = useState("1")
+  const [tgPersonalSaving, setTgPersonalSaving] = useState(false)
+  const [tgPersonalNeedPassword, setTgPersonalNeedPassword] = useState(false)
+  const [tgUserSession, setTgUserSession] = useState<any>(null)
 
   // Slack
   const [slackConnections, setSlackConnections] = useState<Record<string, any>>({})
@@ -134,10 +136,8 @@ function ChannelsPageContent() {
       setWhatsAppConnections(waMap)
     } catch { /* ignore */ }
     try {
-      const tgConns = await getTelegramConnections(user.id)
-      const tgMap: Record<string, any> = {}
-      tgConns.forEach(c => { tgMap[c.id] = c })
-      setTelegramConnections(tgMap)
+      const tgUserSess = await getTelegramUserSession(user.id)
+      setTgUserSession(tgUserSess)
     } catch { /* ignore */ }
     try {
       const slConns = await getSlackConnections(user.id)
@@ -396,73 +396,97 @@ function ChannelsPageContent() {
     return () => window.removeEventListener("message", handler)
   }, [loadConnections])
 
-  const handleConnectTelegram = async (botToken: string) => {
-    if (!user) return
-    setTgSaving(true)
+  // ── Personal account connection (Client API) ──
+  const handleTgPersonalSendCode = async () => {
+    if (!user || !tgPersonalForm.phoneNumber) return
+    setTgPersonalSaving(true)
+    setTgPersonalNeedPassword(false)
     try {
-      const res = await fetch("/api/telegram/connect", {
+      const res = await fetch("/api/telegram/user/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, botToken }),
+        body: JSON.stringify({ userId: user.id, phoneNumber: "+" + tgDialCode + tgPersonalForm.phoneNumber }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to connect Telegram bot")
-      toast({ title: "Connected", description: `Telegram bot @${data.botUsername || "bot"} connected successfully.`, variant: "success" })
-      await loadConnections()
-      setTgModalOpen(false)
-      setTgForm({ botToken: "" })
-      setTgStep("create")
+      if (!res.ok) throw new Error(data.error || "Failed to send code")
+      setTgStep("personal-code")
+      toast({ title: "Code sent", description: "Check your Telegram app for the login code.", variant: "success" })
     } catch (e: any) {
-      toast({ title: "Connection Error", description: e?.message || "Telegram connection failed", variant: "error" })
+      toast({ title: "Error", description: e?.message || "Failed to send code", variant: "error" })
     } finally {
-      setTgSaving(false)
+      setTgPersonalSaving(false)
     }
   }
 
-  // Gateway bot username from env — used for deep-link "forward to" instructions
-  const gatewayBotUsername = process.env.NEXT_PUBLIC_TELEGRAM_GATEWAY_BOT_USERNAME || "ConnectBot"
-
-  // Start polling for a forwarded token
-  const startTgPolling = () => {
-    if (tgPollRef.current) clearInterval(tgPollRef.current)
-    setTgPolling(true)
-    tgPollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch("/api/telegram/poll-token")
-        const data = await res.json()
-        if (data.found && data.botToken) {
-          if (tgPollRef.current) clearInterval(tgPollRef.current)
-          setTgPolling(false)
-          await handleConnectTelegram(data.botToken)
-        }
-      } catch { /* keep polling */ }
-    }, 3000)
-  }
-
-  // Cleanup polling on unmount or modal close
-  useEffect(() => {
-    if (!tgModalOpen && tgPollRef.current) {
-      clearInterval(tgPollRef.current)
-      tgPollRef.current = null
-      setTgPolling(false)
-    }
-  }, [tgModalOpen])
-
-  useEffect(() => {
-    return () => { if (tgPollRef.current) clearInterval(tgPollRef.current) }
-  }, [])
-
-  const handleDisconnectTelegram = async (connectionId: string) => {
-    if (!user) return
-    setDisconnecting(`tg_${connectionId}`)
+  const handleTgPersonalVerifyCode = async () => {
+    if (!user || !tgPersonalForm.code) return
+    setTgPersonalSaving(true)
     try {
-      const res = await fetch("/api/telegram/disconnect", {
+      const res = await fetch("/api/telegram/user/verify-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          phoneNumber: "+" + tgDialCode + tgPersonalForm.phoneNumber,
+          code: tgPersonalForm.code,
+          password: tgPersonalNeedPassword ? tgPersonalForm.password : undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        if (data.needPassword) {
+          setTgPersonalNeedPassword(true)
+          toast({ title: "2FA Required", description: "Enter your Telegram cloud password.", variant: "default" })
+          return
+        }
+        throw new Error(data.error || "Failed to verify code")
+      }
+      toast({ title: "Connected", description: `Telegram personal account connected as ${data.user?.firstName || data.user?.username || "user"}.`, variant: "success" })
+      setTgModalOpen(false)
+      setTgStep("personal")
+      setTgPersonalForm({ phoneNumber: "", code: "", password: "" })
+      setTgPersonalNeedPassword(false)
+      // Fetch contacts and chats
+      fetch("/api/telegram/user/fetch-contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.id }) }).catch(() => {})
+      fetch("/api/telegram/user/fetch-chats", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.id }) }).catch(() => {})
+      await loadConnections()
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message || "Failed to verify code", variant: "error" })
+    } finally {
+      setTgPersonalSaving(false)
+    }
+  }
+
+  const handleTgPersonalDisconnect = async () => {
+    if (!user) return
+    setDisconnecting("tg_personal")
+    try {
+      await fetch("/api/telegram/user/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      })
+      toast({ title: "Disconnected", description: "Telegram personal account disconnected.", variant: "success" })
+      setTgUserSession(null)
+      await loadConnections()
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message || "Failed to disconnect", variant: "error" })
+    } finally {
+      setDisconnecting(null)
+    }
+  }
+
+  const handleDisconnectTelegram = async () => {
+    if (!user) return
+    setDisconnecting("tg")
+    try {
+      const res = await fetch("/api/telegram/user/disconnect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id }),
       })
       if (!res.ok) throw new Error("Failed to disconnect")
-      setTelegramConnections(prev => { const next = { ...prev }; delete next[connectionId]; return next })
+      setTgUserSession(null)
       toast({ title: "Disconnected", description: "Telegram has been disconnected.", variant: "success" })
     } catch {
       toast({ title: "Error", description: "Failed to disconnect Telegram.", variant: "error" })
@@ -749,8 +773,8 @@ function ChannelsPageContent() {
                   const isSlack = ch.id === "slack"
                   const waConnected = isWhatsApp && Object.keys(whatsappConnections).length > 0
                   const waConn = waConnected ? Object.values(whatsappConnections)[0] : null
-                  const tgConnected = isTelegram && Object.keys(telegramConnections).length > 0
-                  const tgConn = tgConnected ? Object.values(telegramConnections)[0] : null
+                  const tgConnected = isTelegram && !!tgUserSession
+                  const tgConn = tgConnected ? tgUserSession : null
                   const slConnected = isSlack && Object.keys(slackConnections).length > 0
                   const slConn = slConnected ? Object.values(slackConnections)[0] : null
                   const isConn = waConn || tgConn || slConn
@@ -771,7 +795,7 @@ function ChannelsPageContent() {
                           <p className="mt-0.5 text-[10px] text-emerald-400">{waConn.phone_number || waConn.phone_number_id}</p>
                         )}
                         {tgConn && (
-                          <p className="mt-0.5 text-[10px] text-emerald-400">@{tgConn.bot_username || "bot"}</p>
+                          <p className="mt-0.5 text-[10px] text-emerald-400">{tgConn.tg_first_name || tgConn.tg_username || "Connected"}</p>
                         )}
                         {slConn && (
                           <p className="mt-0.5 text-[10px] text-emerald-400">{slConn.team_name || slConn.team_id}</p>
@@ -801,11 +825,11 @@ function ChannelsPageContent() {
                       ) : isTelegram && ch.connectable ? (
                         tgConn ? (
                           <button
-                            onClick={() => handleDisconnectTelegram(tgConn.id)}
-                            disabled={disconnecting === `tg_${tgConn.id}`}
+                            onClick={() => handleDisconnectTelegram()}
+                            disabled={disconnecting === "tg"}
                             className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
                           >
-                            {disconnecting === `tg_${tgConn.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
+                            {disconnecting === "tg" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
                           </button>
                         ) : (
                           <button
@@ -1375,7 +1399,7 @@ function ChannelsPageContent() {
           </div>
         </div>
       )}
-      {/* Telegram Connect Wizard */}
+      {/* Telegram Connect Modal */}
       {tgModalOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#1a1f2e] p-6 shadow-2xl">
@@ -1384,91 +1408,59 @@ function ChannelsPageContent() {
                 <FaTelegram className="h-6 w-6" style={{ color: "#26A5E4" }} />
                 <h2 className="font-semibold text-white">Connect Telegram</h2>
               </div>
-              <button onClick={() => { setTgModalOpen(false); setTgStep("create") }} className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors">
+              <button onClick={() => { setTgModalOpen(false); setTgStep("personal"); setTgPersonalForm({ phoneNumber: "", code: "", password: "" }); setTgPersonalNeedPassword(false) }} className="rounded-lg p-1.5 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Step 1: Create bot */}
-            {tgStep === "create" && (
-              <div className="space-y-4">
-                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-4">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500/20 text-xs font-bold text-sky-400">1</span>
-                  <p className="text-sm text-muted-foreground">Create a bot with <span className="text-white font-medium">@BotFather</span></p>
-                </div>
-                <a
-                  href="https://t.me/BotFather?start=/newbot"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500/20 border border-sky-500/30 px-4 py-2.5 text-sm font-semibold text-sky-400 transition-colors hover:bg-sky-500/30"
-                >
-                  <FaTelegram className="h-4 w-4" />
-                  Open @BotFather
-                </a>
-                <button onClick={() => setTgStep("forward")} className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700">
-                  Next
-                </button>
-                <button onClick={() => setTgStep("paste")} className="w-full text-center text-xs text-muted-foreground hover:text-white transition-colors">
-                  Paste token manually
-                </button>
+            <div className="space-y-3">
+              <div className="flex items-stretch gap-2">
+                <CountryCodeSelect value={tgDialCode} onChange={setTgDialCode} disabled={tgStep === "personal-code"} />
+                <input
+                  type="tel"
+                  value={tgPersonalForm.phoneNumber}
+                  onChange={e => setTgPersonalForm({ ...tgPersonalForm, phoneNumber: e.target.value.replace(/[^0-9]/g, "") })}
+                  placeholder="Phone number"
+                  disabled={tgStep === "personal-code"}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:border-sky-500/50 focus:outline-none disabled:opacity-50"
+                />
               </div>
-            )}
 
-            {/* Step 2: Forward token */}
-            {tgStep === "forward" && (
-              <div className="space-y-4">
-                <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/5 p-4">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500/20 text-xs font-bold text-sky-400">2</span>
-                  <p className="text-sm text-muted-foreground">Forward the token message from @BotFather to <a href={`https://t.me/${gatewayBotUsername}`} target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline font-medium">@{gatewayBotUsername}</a></p>
-                </div>
-                <a
-                  href={`https://t.me/${gatewayBotUsername}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500/20 border border-sky-500/30 px-4 py-2.5 text-sm font-semibold text-sky-400 transition-colors hover:bg-sky-500/30"
-                >
-                  <FaTelegram className="h-4 w-4" />
-                  Open @{gatewayBotUsername}
-                </a>
-                {tgPolling ? (
-                  <div className="flex items-center justify-center gap-2 py-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-                    <span className="text-xs text-emerald-400">Listening…</span>
-                  </div>
-                ) : (
-                  <button onClick={startTgPolling} className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700">
-                    Start listening
-                  </button>
-                )}
-                <button onClick={() => setTgStep("create")} className="w-full text-center text-xs text-muted-foreground hover:text-white transition-colors">
-                  ← Back
-                </button>
-              </div>
-            )}
+              {tgStep === "personal-code" && (
+                <input
+                  type="text"
+                  value={tgPersonalForm.code}
+                  onChange={e => setTgPersonalForm({ ...tgPersonalForm, code: e.target.value })}
+                  placeholder="Login code"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:border-sky-500/50 focus:outline-none text-center text-lg tracking-widest"
+                />
+              )}
 
-            {/* Step 3: Paste token (manual) */}
-            {tgStep === "paste" && (
-              <div className="space-y-4">
+              {tgPersonalNeedPassword && (
                 <input
                   type="password"
-                  value={tgForm.botToken}
-                  onChange={e => setTgForm({ botToken: e.target.value })}
-                  placeholder="123456789:ABCdef…"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:border-emerald-500/50 focus:outline-none"
+                  value={tgPersonalForm.password}
+                  onChange={e => setTgPersonalForm({ ...tgPersonalForm, password: e.target.value })}
+                  placeholder="2FA password"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:border-sky-500/50 focus:outline-none"
                 />
-                <button
-                  onClick={async () => { if (tgForm.botToken) await handleConnectTelegram(tgForm.botToken) }}
-                  disabled={tgSaving || !tgForm.botToken}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-40"
-                >
-                  {tgSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Connect
+              )}
+
+              <button
+                onClick={tgStep === "personal" ? handleTgPersonalSendCode : handleTgPersonalVerifyCode}
+                disabled={tgPersonalSaving || !tgPersonalForm.phoneNumber || (tgStep === "personal-code" && !tgPersonalForm.code)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-600 disabled:opacity-40"
+              >
+                {tgPersonalSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {tgStep === "personal" ? "Send Code" : tgPersonalNeedPassword ? "Verify" : "Connect"}
+              </button>
+
+              {tgStep === "personal-code" && (
+                <button onClick={() => { setTgStep("personal"); setTgPersonalForm({ ...tgPersonalForm, code: "", password: "" }); setTgPersonalNeedPassword(false) }} className="w-full text-center text-xs text-muted-foreground hover:text-white transition-colors">
+                  ← Change number
                 </button>
-                <button onClick={() => setTgStep("create")} className="w-full text-center text-xs text-muted-foreground hover:text-white transition-colors">
-                  ← Back
-                </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}

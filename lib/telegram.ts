@@ -110,11 +110,31 @@ export async function fetchAndStoreUpdates(
     ? (existingMsgs[0].tg_message_id ?? 0) + 1
     : 0
 
+  // Temporarily delete webhook so getUpdates works (Telegram doesn't allow both)
+  let savedWebhookUrl: string | null = null
+  try {
+    const whInfo = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`)
+    const whData = await whInfo.json()
+    savedWebhookUrl = whData.result?.url || null
+    if (savedWebhookUrl) {
+      await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`)
+    }
+  } catch (e) {
+    console.error("[TG] Failed to check/delete webhook:", e)
+  }
+
   const res = await fetch(
     `https://api.telegram.org/bot${botToken}/getUpdates?offset=${offset}&limit=100&timeout=0`
   )
   const data = await res.json()
-  if (!data.ok) return 0
+  if (!data.ok) {
+    console.error("[TG] getUpdates failed:", data.description)
+    // Restore webhook even on failure
+    if (savedWebhookUrl) {
+      await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(savedWebhookUrl)}`)
+    }
+    return 0
+  }
 
   let imported = 0
   for (const update of data.result || []) {
@@ -122,6 +142,15 @@ export async function fetchAndStoreUpdates(
     if (!parsed) continue
     const inserted = await insertTelegramMessage(userId, connectionId, parsed)
     if (inserted) imported++
+  }
+
+  // Restore webhook if it was set
+  if (savedWebhookUrl) {
+    try {
+      await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(savedWebhookUrl)}&secret_token=${connectionId}`)
+    } catch (e) {
+      console.error("[TG] Failed to restore webhook:", e)
+    }
   }
 
   return imported

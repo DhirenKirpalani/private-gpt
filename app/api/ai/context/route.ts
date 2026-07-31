@@ -155,7 +155,7 @@ async function _POST(req: NextRequest) {
         const date = m.timestamp ? new Date(m.timestamp).toLocaleString() : ""
         const dir = m.direction === "sent" ? "→" : "←"
         const name = m.direction === "sent" ? (m.chat_title || m.chat_id || "Telegram") : (m.from_first_name || m.from_username || "Unknown")
-        return `${i + 1}. ${dir} ${name}\n   Time: ${date}\n   Message: ${m.body || ""}`
+        return `${i + 1}. ${dir} ${name} (chatId: ${m.chat_id})\n   Time: ${date}\n   Message: ${m.body || ""}`
       }).join("\n\n")
     }
 

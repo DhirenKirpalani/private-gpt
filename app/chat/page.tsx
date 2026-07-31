@@ -26,7 +26,7 @@ import {
   deleteConversation, getMessages, saveMessage, updateMessageContent, deleteMessagesAfter, type ChatConversation,
   fetchDocumentContents, uploadDocument, updateDocumentText,
   getEmailConnections, getCalendarConnections, getWhatsAppConnections,
-  getSlackConnections, getTelegramConnections,
+  getSlackConnections, getTelegramUserSession,
 } from "@/lib/supabase"
 import { useI18n } from "@/lib/i18n"
 import { ACCEPTED_MIME_TYPES, isAcceptedFile, isCountableDocument } from "@/lib/file-types"
@@ -189,6 +189,8 @@ export default function ChatPage() {
   const [editingMsgContent, setEditingMsgContent] = useState("")
   const [editingMsgWidth, setEditingMsgWidth] = useState<number | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const sendingRef = useRef(false)
+  const savedAssistantIdRef = useRef<string | null>(null)
   const [failedMessageId, setFailedMessageId] = useState<string | null>(null)
   const [previewDoc, setPreviewDoc] = useState<{ name: string; content: string; category: string } | null>(null)
 
@@ -414,9 +416,12 @@ export default function ChatPage() {
 
   const sendMessage = async (retryContent?: string, retryConvId?: string, overrideMessages?: Message[]) => {
     const content = retryContent || input
-    if (!content.trim() || loading) return
+    if (!content.trim() || loading || sendingRef.current) return
+    sendingRef.current = true
+    savedAssistantIdRef.current = null
     if (content.length > 5000) {
       setChatError("Message too long. Please limit to 5000 characters.")
+      sendingRef.current = false
       return
     }
     setChatError("")
@@ -438,6 +443,7 @@ export default function ChatPage() {
     } catch (err: any) {
       setChatError(err?.message || "Failed to create conversation")
       setLoading(false)
+      sendingRef.current = false
       return
     }
 
@@ -656,6 +662,12 @@ export default function ChatPage() {
         `# CRITICAL: WHATSAPP SENDING PROTOCOL`,
         `Similarly, you CANNOT send WhatsApp messages yourself. When the user asks to send a WhatsApp, draft it and append:`,
         `<!--ACTION:{"type":"send_whatsapp","to":"+1234567890","body":"Hi, just following up on our meeting"}-->`,
+        ``,
+        `# CRITICAL: TELEGRAM SENDING PROTOCOL`,
+        `Similarly, you CANNOT send Telegram messages yourself. When the user asks to send a Telegram message, draft it and append:`,
+        `<!--ACTION:{"type":"send_telegram","chatId":"1234567890","body":"Hi, just following up on our meeting"}-->`,
+        `- chatId is the Telegram chat ID (numeric) from the conversation context`,
+        `- If the user refers to a contact by name, resolve the chatId from the Telegram context section`,
         ``,
         `When NO channel context is provided in the prompt, you do NOT have access to the user's inbox, calendar, WhatsApp, Slack, Telegram, or Calendly. In that case, tell them to ask about their emails, calendar, or messages to activate the context.`,
         ``,
@@ -975,6 +987,7 @@ export default function ChatPage() {
         .then((saved) => {
           if (saved?.id) {
             console.log("[CHAT] Saved assistant message to DB, id:", saved.id, "has action:", !!extracted.action)
+            savedAssistantIdRef.current = saved.id
             setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, id: saved.id } : m))
           }
         })
@@ -1023,6 +1036,7 @@ export default function ChatPage() {
       clearInterval(iv)
       setLoading(false)
       setLoadingText("")
+      sendingRef.current = false
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null
       }
@@ -1387,6 +1401,21 @@ export default function ChatPage() {
         ? `*(WhatsApp sent to ${action.to})*`
         : `*(WhatsApp failed: ${waData.error || "Unknown error"})*`
     }
+    if (action.type === "send_telegram" && user) {
+      const tgRes = await fetch("/api/telegram/user/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          chatId: action.chatId,
+          body: action.body,
+        }),
+      })
+      const tgData = await tgRes.json()
+      return tgRes.ok
+        ? `*(Telegram message sent)*`
+        : `*(Telegram failed: ${tgData.error || "Unknown error"})*`
+    }
     return ""
   }
 
@@ -1395,28 +1424,22 @@ export default function ChatPage() {
     try {
       const resultText = await executeAiAction(action)
       const isFailure = resultText.includes("failed") || resultText.includes("No connected")
+      const dbId = savedAssistantIdRef.current
       setMessages(prev => prev.map(m => {
-        if (m.id !== msgId) return m
+        if (m.id !== msgId && m.id !== dbId) return m
         const updatedContent = m.content + "\n\n" + resultText
-        // Update message in DB so sent status survives reload (may fail if ID is still temp)
-        updateMessageContent(m.id, updatedContent).catch(() => {
-          // Fallback: if update fails (temp ID), try saving as new message
-          if (currentConversationId) {
-            saveMessage(currentConversationId, "assistant", updatedContent, m.sources).catch(() => {})
-          }
-        })
+        const updateId = dbId || m.id
+        updateMessageContent(updateId, updatedContent).catch(() => {})
         return { ...m, content: updatedContent, action: isFailure ? m.action : undefined }
       }))
     } catch (err: any) {
       console.error("[AI ACTION] handleExecuteAction error:", err?.message, err)
+      const dbId = savedAssistantIdRef.current
       setMessages(prev => prev.map(m => {
-        if (m.id !== msgId) return m
+        if (m.id !== msgId && m.id !== dbId) return m
         const updatedContent = m.content + `\n\n*(Action failed: ${err?.message || "Unknown error"})*`
-        updateMessageContent(m.id, updatedContent).catch(() => {
-          if (currentConversationId) {
-            saveMessage(currentConversationId, "assistant", updatedContent, m.sources).catch(() => {})
-          }
-        })
+        const updateId = dbId || m.id
+        updateMessageContent(updateId, updatedContent).catch(() => {})
         return { ...m, content: updatedContent, action: m.action }
       }))
     } finally {
@@ -1455,8 +1478,14 @@ export default function ChatPage() {
     localStorage.setItem("exploro_current_conv", convId)
     try {
       const dbMessages = await getMessages(convId)
-      setMessages(dbMessages.map(m => {
-        // Re-parse ACTION blocks from saved content to restore action buttons after refresh
+      // Deduplicate: remove consecutive messages with same role + content, then parse action blocks
+      const deduped = dbMessages.filter((m: any, i: number) => {
+        if (i === 0) return true
+        const prev2 = dbMessages[i - 1]
+        const prevContent = (prev2.content || "").replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
+        const currContent = (m.content || "").replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
+        return !(m.role === prev2.role && currContent === prevContent)
+      }).map((m: any) => {
         const rawContent = m.content || ""
         const actionMatch = rawContent.match(/<!--ACTION_B64:([A-Za-z0-9+/=]+)-->/)
         let action: { type: string; [key: string]: any } | undefined
@@ -1477,7 +1506,8 @@ export default function ChatPage() {
           timestamp: new Date(m.created_at),
           action,
         }
-      }))
+      })
+      setMessages(deduped)
     } catch (e) { console.error("[CHAT] Failed to load conversation messages:", e) }
   }
 
@@ -1544,7 +1574,7 @@ export default function ChatPage() {
         getCalendarConnections(user.id),
         getWhatsAppConnections(user.id),
         getSlackConnections(user.id),
-        getTelegramConnections(user.id),
+        getTelegramUserSession(user.id),
       ])
       const channels: typeof connectedChannels = []
       const connectedEmail = emailConns.find((c: any) => c.status === "connected")
@@ -1598,13 +1628,13 @@ export default function ChatPage() {
         connected: waConnected,
         detail: waConnected ? (waConns[0]?.phone_number || waConns[0]?.phone_number_id || "Connected") : "Not connected",
       })
-      const tgConnected = tgConns.length > 0
+      const tgConnected = !!tgConns
       channels.push({
         id: "telegram",
         name: "Telegram",
         icon: <Send className="h-3.5 w-3.5" />,
         connected: tgConnected,
-        detail: tgConnected ? (tgConns[0]?.bot_username ? `@${tgConns[0].bot_username}` : "Connected") : "Not connected",
+        detail: tgConnected ? (tgConns?.tg_username ? `@${tgConns.tg_username}` : tgConns?.tg_first_name || "Connected") : "Not connected",
       })
       const slackConnected = slackConns.length > 0
       channels.push({
@@ -2321,6 +2351,8 @@ export default function ChatPage() {
                               ? "bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30"
                               : msg.action!.type === "send_whatsapp"
                               ? "bg-green-600/20 text-green-400 border border-green-500/30 hover:bg-green-600/30"
+                              : msg.action!.type === "send_telegram"
+                              ? "bg-sky-600/20 text-sky-400 border border-sky-500/30 hover:bg-sky-600/30"
                               : "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30",
                             executingActions.has(msg.id) && "opacity-50 cursor-not-allowed"
                           )}
@@ -2328,12 +2360,12 @@ export default function ChatPage() {
                           {executingActions.has(msg.id) ? (
                             <>
                               <Loader2 className="h-3 w-3 animate-spin" />
-                              {msg.action!.type === "send_email" ? "Sending..." : msg.action!.type === "send_whatsapp" ? "Sending..." : "Creating..."}
+                              {msg.action!.type === "send_email" ? "Sending..." : msg.action!.type === "send_whatsapp" ? "Sending..." : msg.action!.type === "send_telegram" ? "Sending..." : "Creating..."}
                             </>
                           ) : (
                             <>
-                              {msg.action!.type === "send_email" ? <Send className="h-3 w-3" /> : msg.action!.type === "send_whatsapp" ? <MessageSquare className="h-3 w-3" /> : <CalendarDays className="h-3 w-3" />}
-                              {msg.action!.type === "send_email" ? "Send Email" : msg.action!.type === "send_whatsapp" ? "Send WhatsApp" : "Create Event"}
+                              {msg.action!.type === "send_email" ? <Send className="h-3 w-3" /> : msg.action!.type === "send_whatsapp" ? <MessageSquare className="h-3 w-3" /> : msg.action!.type === "send_telegram" ? <Send className="h-3 w-3" /> : <CalendarDays className="h-3 w-3" />}
+                              {msg.action!.type === "send_email" ? "Send Email" : msg.action!.type === "send_whatsapp" ? "Send WhatsApp" : msg.action!.type === "send_telegram" ? "Send Telegram" : "Create Event"}
                             </>
                           )}
                         </button>
