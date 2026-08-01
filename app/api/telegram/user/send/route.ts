@@ -3,15 +3,19 @@ import { createTelegramClient, getUserSession, isSessionExpiredError, markSessio
 import { createAdminClient } from "@/lib/supabase"
 import { withApiLogging } from "@/lib/with-api-logging"
 import { Api } from "teleproto"
+import fs from "fs"
+import path from "path"
+import os from "os"
 
 export const dynamic = "force-dynamic"
 
 async function _POST(req: NextRequest) {
-  const { userId, chatId, body } = await req.json()
+  const { userId, chatId, body, mediaUrl } = await req.json()
   let client: any = null
+  let tempFilePath: string | null = null
   try {
-    if (!userId || !chatId || !body) {
-      return NextResponse.json({ error: "Missing userId, chatId, or body" }, { status: 400 })
+    if (!userId || !chatId || (!body && !mediaUrl)) {
+      return NextResponse.json({ error: "Missing userId, chatId, or body/mediaUrl" }, { status: 400 })
     }
 
     const session = await getUserSession(userId)
@@ -66,7 +70,30 @@ async function _POST(req: NextRequest) {
       return NextResponse.json({ error: "Could not resolve this chat. Try refreshing your Telegram messages first." }, { status: 400 })
     }
 
-    const result: any = await client.sendMessage(entity, { message: body })
+    let result: any
+    let sentBody = body || ""
+
+    if (mediaUrl) {
+      // Download the image from Supabase storage to a temp file
+      const response = await fetch(mediaUrl)
+      if (!response.ok) {
+        return NextResponse.json({ error: "Failed to download media from storage" }, { status: 500 })
+      }
+      const arrayBuffer = await response.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+      tempFilePath = path.join(os.tmpdir(), `tg_send_${Date.now()}.jpg`)
+      fs.writeFileSync(tempFilePath, buffer)
+
+      // Send photo with optional caption
+      result = await client.sendFile(entity, {
+        file: tempFilePath,
+        caption: body || undefined,
+        forceDocument: false,
+      })
+      sentBody = body ? `[Photo] ${body}` : "[Photo]"
+    } else {
+      result = await client.sendMessage(entity, { message: body })
+    }
 
     const messageId = result.id
     const timestamp = new Date((result.date || 0) * 1000).toISOString()
@@ -84,7 +111,9 @@ async function _POST(req: NextRequest) {
       chat_title: result.chat?.title || result.chat?.firstName || result.chat?.username || null,
       from_id: null,
       tg_message_id: messageId,
-      body,
+      body: sentBody,
+      media_url: mediaUrl || null,
+      media_type: mediaUrl ? "photo" : null,
       timestamp,
       read: true,
     })
@@ -98,6 +127,7 @@ async function _POST(req: NextRequest) {
     }
     return NextResponse.json({ error: err?.message || "Failed to send" }, { status: 500 })
   } finally {
+    if (tempFilePath) { try { fs.unlinkSync(tempFilePath) } catch {} }
     if (client) { try { await client.disconnect() } catch {} }
   }
 }

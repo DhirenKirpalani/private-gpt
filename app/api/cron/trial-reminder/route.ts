@@ -125,7 +125,7 @@ async function _GET(req: Request) {
 
       try {
         await resend.emails.send({
-          from: "Exploro <support@exploro-os.com>",
+          from: "Exploro OS <no-reply@exploro-os.com>",
           to: email,
           subject: subjectLine,
           html: `

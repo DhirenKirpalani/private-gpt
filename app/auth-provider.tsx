@@ -115,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initAuth()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       setSession(newSession)
       const newUser = newSession?.user ?? null
       setUser(newUser)
@@ -123,6 +123,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (newUser) {
         loadProfile(newUser.id)
         loadSubscription(newUser.id)
+        // Send welcome email only on first signup (account created within last 5 min)
+        if (event === "SIGNED_IN" && newUser.created_at) {
+          const createdAt = new Date(newUser.created_at)
+          const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000)
+          if (createdAt > fiveMinAgo) {
+            const fullName = newUser.user_metadata?.full_name || ""
+            fetch("/api/email/welcome", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: newUser.email, name: fullName }),
+            }).catch(() => {})
+          }
+        }
       } else {
         setProfile(null)
         setRole(null)
