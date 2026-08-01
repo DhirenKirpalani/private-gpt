@@ -155,6 +155,7 @@ async function _POST(req: NextRequest) {
           }
 
           const fromEntity = msg.sender as any
+          const fromPhone = fromEntity?.phone || null
           const { error } = await supabase.from("telegram_messages").insert({
             user_id: userId,
             connection_id: null,
@@ -166,6 +167,7 @@ async function _POST(req: NextRequest) {
             from_first_name: fromEntity?.firstName || null,
             from_last_name: fromEntity?.lastName || null,
             from_username: fromEntity?.username || null,
+            from_phone: fromPhone,
             tg_message_id: parseInt(msgId),
             body: msg.message || "",
             media_url: mediaUrl,
@@ -192,7 +194,10 @@ async function _POST(req: NextRequest) {
     }
     return NextResponse.json({ error: err?.message || "Failed to fetch chats" }, { status: 500 })
   } finally {
-    if (client) { try { await client.disconnect() } catch {} }
+    if (client) {
+      try { await client.disconnect() } catch {}
+      try { client.destroy() } catch {}
+    }
   }
 }
 
