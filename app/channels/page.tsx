@@ -74,7 +74,7 @@ function ChannelsPageContent() {
   const [calendarConnections, setCalendarConnections] = useState<Record<string, any>>({})
   const [whatsappConnections, setWhatsAppConnections] = useState<Record<string, any>>({})
   const [modalProvider, setModalProvider] = useState<EmailProvider | null>(null)
-  const [smtpForm, setSmtpForm] = useState<SmtpForm>({ email_address: "", smtp_host: "", smtp_port: "", smtp_user: "", smtp_pass: "", imap_host: "", imap_port: "", smtp_secure: true })
+  const [smtpForm, setSmtpForm] = useState<SmtpForm>({ email_address: "", smtp_host: "", smtp_port: "", smtp_user: "", smtp_pass: "", imap_host: "", imap_port: "", smtp_secure: false })
   const [showPass, setShowPass] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
@@ -238,7 +238,7 @@ function ChannelsPageContent() {
       smtp_pass: "",
       imap_host: existing?.imap_host || provider.defaults.imap_host,
       imap_port: String(existing?.imap_port || provider.defaults.imap_port),
-      smtp_secure: existing?.smtp_secure ?? (provider.defaults.smtp_secure ?? true),
+      smtp_secure: existing?.smtp_secure ?? (provider.defaults.smtp_secure ?? (provider.defaults.smtp_port === 465)),
     })
     setSaveError("")
     setShowPass(false)
