@@ -191,6 +191,8 @@ export default function ChatPage() {
   const abortControllerRef = useRef<AbortController | null>(null)
   const sendingRef = useRef(false)
   const savedAssistantIdRef = useRef<string | null>(null)
+  const currentConvIdRef = useRef<string | null>(null)
+  const inflightStreamRef = useRef<{ convId: string; assistantMsgId: string; content: string } | null>(null)
   const [failedMessageId, setFailedMessageId] = useState<string | null>(null)
   const [previewDoc, setPreviewDoc] = useState<{ name: string; content: string; category: string } | null>(null)
 
@@ -451,6 +453,7 @@ export default function ChatPage() {
     const baseMessages = overrideMessages || messages
     const nextMessages = [...baseMessages, userMsg]
     setMessages(nextMessages)
+    currentConvIdRef.current = convId
     if (!retryContent) {
       setInput("")
       localStorage.removeItem("exploro_chat_draft")
@@ -665,8 +668,9 @@ export default function ChatPage() {
         ``,
         `# CRITICAL: TELEGRAM SENDING PROTOCOL`,
         `Similarly, you CANNOT send Telegram messages yourself. When the user asks to send a Telegram message, draft it and append:`,
-        `<!--ACTION:{"type":"send_telegram","chatId":"1234567890","body":"Hi, just following up on our meeting"}-->`,
+        `<!--ACTION:{"type":"send_telegram","chatId":"1234567890","recipientName":"Exploro OS","body":"Hi, just following up on our meeting"}-->`,
         `- chatId is the Telegram chat ID (numeric) from the conversation context`,
+        `- recipientName is the name of the contact, group, or channel (e.g. "Exploro OS", "Marketing Team")`,
         `- If the user refers to a contact by name, resolve the chatId from the Telegram context section`,
         ``,
         `When NO channel context is provided in the prompt, you do NOT have access to the user's inbox, calendar, WhatsApp, Slack, Telegram, or Calendly. In that case, tell them to ask about their emails, calendar, or messages to activate the context.`,
@@ -840,6 +844,14 @@ export default function ChatPage() {
             : m.content,
         }
       })
+      // Save user message to DB before API call so it's available when switching conversations
+      console.log("[CHAT] Saving user message to convId:", convId)
+      saveMessage(convId, "user", userMsg.content).catch((e) => console.error("[CHAT] Failed to save user message:", e))
+
+      // Set preliminary inflight ref so switching back during API wait shows loading state
+      const preliminaryAssistantId = (Date.now() + 1).toString()
+      inflightStreamRef.current = { convId, assistantMsgId: preliminaryAssistantId, content: "" }
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -866,9 +878,6 @@ export default function ChatPage() {
         throw new Error(errData.error || "Request failed")
       }
 
-      // Save user message to DB only after API confirms request is allowed
-      saveMessage(convId, "user", userMsg.content).catch((e) => console.error("[CHAT] Failed to save user message:", e))
-
       // Check if response is degraded (>80% quota used)
       const isDegraded = res.headers.get("x-usage-degraded") === "true"
       setUsageDegraded(isDegraded)
@@ -884,7 +893,7 @@ export default function ChatPage() {
       }
 
       // ── Stream response with typing indicator ───────────────────
-      const assistantMsgId = (Date.now() + 1).toString()
+      const assistantMsgId = preliminaryAssistantId
       const assistantMsg: Message = {
         id: assistantMsgId,
         role: "assistant",
@@ -894,7 +903,12 @@ export default function ChatPage() {
         timestamp: new Date(),
         sources: wsData?.sources?.map((s: any) => s.url).filter(Boolean) || undefined,
       }
-      setMessages(prev => [...prev, assistantMsg])
+      setMessages(prev => {
+        if (currentConvIdRef.current !== convId) return prev
+        // Don't append if already exists (e.g. user switched back and handleSelectConversation added it)
+        if (prev.some(m => m.id === assistantMsgId)) return prev
+        return [...prev, assistantMsg]
+      })
 
       let streamedContent = ""
       let streamUsage: any = null
@@ -944,17 +958,36 @@ export default function ChatPage() {
               // Normal delta content
               if (parsed.content) {
                 streamedContent += parsed.content
+                if (inflightStreamRef.current?.assistantMsgId === assistantMsgId) {
+                  inflightStreamRef.current.content = streamedContent
+                }
                 // Update the assistant message progressively (strip complete and partial action tags)
                 let displayContent = streamedContent
                   .replace(/<!--ACTION:[\s\S]*?-->/g, "")  // complete tags
                   .replace(/<!--ACTION:[\s\S]*$/g, "")      // partial tag (no closing --> yet)
                   .replace(/<!--AC[\s\S]*$/g, "")           // even more partial (mid-tag)
                   .trim()
-                setMessages(prev => prev.map(m =>
-                  m.id === assistantMsgId
-                    ? { ...m, content: displayContent }
-                    : m
-                ))
+                setMessages(prev => {
+                  if (currentConvIdRef.current !== convId) return prev
+                  const exists = prev.some(m => m.id === assistantMsgId)
+                  if (exists) {
+                    return prev.map(m =>
+                      m.id === assistantMsgId
+                        ? { ...m, content: displayContent }
+                        : m
+                    )
+                  }
+                  // Message not in list (user switched back) — append it
+                  return [...prev, {
+                    id: assistantMsgId,
+                    role: "assistant",
+                    content: displayContent,
+                    action: undefined,
+                    confidence: "high",
+                    timestamp: new Date(),
+                    sources: wsData?.sources?.map((s: any) => s.url).filter(Boolean) || undefined,
+                  }]
+                })
               }
               if (parsed.usage) {
                 streamUsage = parsed.usage
@@ -971,11 +1004,14 @@ export default function ChatPage() {
 
       // Extract action blocks from final content
       const extracted = extractAiAction(streamedContent, userMsg.content)
-      setMessages(prev => prev.map(m =>
-        m.id === assistantMsgId
-          ? { ...m, content: extracted.content, action: extracted.action }
-          : m
-      ))
+      setMessages(prev => {
+        if (currentConvIdRef.current !== convId) return prev
+        return prev.map(m =>
+          m.id === assistantMsgId
+            ? { ...m, content: extracted.content, action: extracted.action }
+            : m
+        )
+      })
 
       // Save assistant message to DB
       const contentToSave = extracted.action
@@ -988,8 +1024,12 @@ export default function ChatPage() {
           if (saved?.id) {
             console.log("[CHAT] Saved assistant message to DB, id:", saved.id, "has action:", !!extracted.action)
             savedAssistantIdRef.current = saved.id
-            setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, id: saved.id } : m))
+            setMessages(prev => {
+              if (currentConvIdRef.current !== convId) return prev
+              return prev.map(m => m.id === assistantMsgId ? { ...m, id: saved.id } : m)
+            })
           }
+          inflightStreamRef.current = null
         })
         .catch((e) => console.error("[CHAT] Failed to save assistant message:", e))
       // Generate title from AI after first exchange
@@ -1013,6 +1053,7 @@ export default function ChatPage() {
         }).catch(e => console.error("[MEMORY] Extraction failed:", e))
       }
     } catch (err: any) {
+      inflightStreamRef.current = null
       if (err?.name === "AbortError") return // Aborted by new request, don't show error
       // Skip error banner if quota exceeded modal is already shown
       if (err?.message === "__QUOTA_EXCEEDED__") return
@@ -1424,14 +1465,47 @@ export default function ChatPage() {
     try {
       const resultText = await executeAiAction(action)
       const isFailure = resultText.includes("failed") || resultText.includes("No connected")
-      const dbId = savedAssistantIdRef.current
-      setMessages(prev => prev.map(m => {
-        if (m.id !== msgId && m.id !== dbId) return m
+
+      // Wait for the DB save to complete so we have the real message ID
+      let dbId = savedAssistantIdRef.current
+      if (!dbId) {
+        for (let i = 0; i < 10; i++) {
+          await new Promise(r => setTimeout(r, 200))
+          dbId = savedAssistantIdRef.current
+          if (dbId) break
+        }
+      }
+
+      const finalDbId = dbId
+      console.log("[AI ACTION] handleExecuteAction:", { msgId, dbId: finalDbId, isFailure, resultText })
+      if (!finalDbId) {
+        console.warn("[AI ACTION] No DB ID available after retry — message may not be saved yet")
+      }
+      setMessages(prev => {
+        const allIds = prev.map(m => `${m.role}:${m.id}`).join(", ")
+        console.log("[AI ACTION] Current message IDs:", allIds)
+        return prev.map(m => {
+        if (m.id !== msgId && m.id !== finalDbId) return m
         const updatedContent = m.content + "\n\n" + resultText
-        const updateId = dbId || m.id
-        updateMessageContent(updateId, updatedContent).catch(() => {})
+        const updateId = finalDbId || m.id
+        console.log("[AI ACTION] Updating message in DB:", { updateId, currentMsgId: m.id, hasAction: !isFailure })
+        if (!isFailure) {
+          // On success, save WITHOUT the ACTION_B64 block so button doesn't reappear on reload
+          updateMessageContent(updateId, updatedContent).then(() => {
+            console.log("[AI ACTION] DB update SUCCESS — message saved without action block")
+          }).catch((e) => {
+            console.error("[AI ACTION] Failed to update message in DB:", e?.message || e)
+          })
+        } else {
+          // On failure, keep the action block so user can retry
+          const contentWithAction = updatedContent + `\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(action))))}-->`
+          updateMessageContent(updateId, contentWithAction).catch((e) => {
+            console.error("[AI ACTION] Failed to update message in DB:", e)
+          })
+        }
         return { ...m, content: updatedContent, action: isFailure ? m.action : undefined }
-      }))
+        })
+      })
     } catch (err: any) {
       console.error("[AI ACTION] handleExecuteAction error:", err?.message, err)
       const dbId = savedAssistantIdRef.current
@@ -1452,13 +1526,11 @@ export default function ChatPage() {
   }
 
   async function handleNewConversation() {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-      abortControllerRef.current = null
-    }
+    // Don't abort in-flight stream — let it finish in background
     setLoading(false)
     setMessages([])
     setCurrentConversationId(null)
+    currentConvIdRef.current = null
     localStorage.removeItem("exploro_current_conv")
     setChatError("")
     setFailedMessageId(null)
@@ -1466,15 +1538,12 @@ export default function ChatPage() {
 
   async function handleSelectConversation(convId: string) {
     if (convId === currentConversationId) return
-    // Abort any in-flight chat request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-      abortControllerRef.current = null
-    }
+    // Don't abort in-flight stream — let it finish in background and save to DB
     setLoading(false)
     setChatError("")
     setFailedMessageId(null)
     setCurrentConversationId(convId)
+    // Don't update currentConvIdRef yet — wait until messages are loaded to avoid race condition
     localStorage.setItem("exploro_current_conv", convId)
     try {
       const dbMessages = await getMessages(convId)
@@ -1507,17 +1576,83 @@ export default function ChatPage() {
           action,
         }
       })
+      // If switching back to a conversation with an active stream, append the in-flight assistant message
+      const inflight = inflightStreamRef.current
+      console.log("[CHAT SWITCH] convId:", convId, "dbMessages:", deduped.length, "inflight:", inflight ? { convId: inflight.convId, contentLen: inflight.content.length } : null)
+      if (inflight && inflight.convId === convId) {
+        // Stream still active — only append if there's content, otherwise loading indicator handles it
+        const displayContent = inflight.content
+          .replace(/<!--ACTION:[\s\S]*?-->/g, "")
+          .replace(/<!--ACTION:[\s\S]*$/g, "")
+          .replace(/<!--AC[\s\S]*$/g, "")
+          .trim()
+        if (displayContent && !deduped.some(m => m.id === inflight.assistantMsgId)) {
+          deduped.push({
+            id: inflight.assistantMsgId,
+            role: "assistant",
+            content: displayContent,
+            sources: undefined,
+            action: undefined,
+            timestamp: new Date(),
+          })
+        }
+        setLoading(true)
+      }
       setMessages(deduped)
+      // Now that messages are loaded, update currentConvIdRef so stream updates can flow
+      currentConvIdRef.current = convId
+      // If stream just finished while we were loading, reload to get the assistant message from DB
+      if (!inflightStreamRef.current && deduped.length > 0 && deduped[deduped.length - 1].role === "user") {
+        const refreshed = await getMessages(convId)
+        const refreshedDeduped = refreshed.filter((m: any, i: number) => {
+          if (i === 0) return true
+          const prev2 = refreshed[i - 1]
+          const prevContent = (prev2.content || "").replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
+          const currContent = (m.content || "").replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
+          return !(m.role === prev2.role && currContent === prevContent)
+        }).map((m: any) => {
+          const rawContent = m.content || ""
+          const actionMatch = rawContent.match(/<!--ACTION_B64:([A-Za-z0-9+/=]+)-->/)
+          let action: { type: string; [key: string]: any } | undefined
+          let cleanContent = rawContent
+          if (actionMatch) {
+            try {
+              action = JSON.parse(decodeURIComponent(escape(atob(actionMatch[1]))))
+              cleanContent = rawContent.replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
+            } catch {
+              cleanContent = rawContent.replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
+            }
+          }
+          return {
+            id: m.id,
+            role: m.role,
+            content: cleanContent,
+            sources: m.sources || undefined,
+            timestamp: new Date(m.created_at),
+            action,
+          }
+        })
+        setMessages(refreshedDeduped)
+      }
     } catch (e) { console.error("[CHAT] Failed to load conversation messages:", e) }
   }
 
   async function handleDeleteConversation(e: React.MouseEvent, convId: string) {
     e.stopPropagation()
+    // If deleting the conversation with an active stream, abort it
+    if (inflightStreamRef.current?.convId === convId) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
+      inflightStreamRef.current = null
+    }
     try {
       await deleteConversation(convId)
       setConversations(prev => prev.filter(c => c.id !== convId))
       if (currentConversationId === convId) {
         setCurrentConversationId(null)
+        currentConvIdRef.current = null
         setMessages([])
         localStorage.removeItem("exploro_current_conv")
       }
@@ -2369,7 +2504,7 @@ export default function ChatPage() {
                             </>
                           )}
                         </button>
-                        {msg.action!.type === "send_email" && (
+                        {(msg.action!.type === "send_email" || msg.action!.type === "send_whatsapp" || msg.action!.type === "send_telegram") && (
                           <button
                             onClick={() => setEditingActionMsgId(msg.id)}
                             disabled={executingActions.has(msg.id)}
@@ -2414,6 +2549,81 @@ export default function ChatPage() {
                         onCancel={() => setEditingActionMsgId(null)}
                       />
                     )}
+                    {/* Telegram/WhatsApp edit form */}
+                    {msg.role === "assistant" && msg.action && (msg.action.type === "send_telegram" || msg.action.type === "send_whatsapp") && editingActionMsgId === msg.id && (
+                      <div className="mt-2 rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
+                        <div>
+                          <label className="text-[11px] font-medium text-muted-foreground">
+                            {msg.action.type === "send_telegram" ? "Recipient" : "To (phone)"}
+                          </label>
+                          <input
+                            type="text"
+                            defaultValue={msg.action.type === "send_telegram" ? (() => {
+                              if (msg.action.recipientName) return msg.action.recipientName
+                              // Fallback: extract name from content like "To: Exploro OS (Telegram chat 8860404140)"
+                              const match = msg.content.match(/To:\s*(.+?)\s*\(Telegram chat/)
+                              if (match) return match[1].trim()
+                              return msg.action.chatId || ""
+                            })() : msg.action.to || ""}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setMessages(prev => prev.map(m => {
+                                if (m.id !== msg.id) return m
+                                const updatedAction = { ...m.action! }
+                                if (msg.action!.type === "send_telegram") updatedAction.recipientName = val
+                                else updatedAction.to = val
+                                return { ...m, action: updatedAction }
+                              }))
+                            }}
+                            className="mt-1 w-full rounded-md border border-white/10 bg-background px-2.5 py-1.5 text-xs text-foreground"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-medium text-muted-foreground">Message</label>
+                          <textarea
+                            defaultValue={msg.action.body || ""}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setMessages(prev => prev.map(m => {
+                                if (m.id !== msg.id) return m
+                                const updatedAction = { ...m.action!, body: val }
+                                return { ...m, action: updatedAction }
+                              }))
+                            }}
+                            rows={3}
+                            className="mt-1 w-full rounded-md border border-white/10 bg-background px-2.5 py-1.5 text-xs text-foreground resize-y"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setMessages(prev => prev.map(m => {
+                                if (m.id !== msg.id) return m
+                                const updatedAction = m.action!
+                                const recipientLabel = updatedAction.type === "send_telegram"
+                                  ? (updatedAction.recipientName || `Telegram chat ${updatedAction.chatId}`)
+                                  : updatedAction.to
+                                const updatedContent = `Here is the updated ${updatedAction.type === "send_telegram" ? "Telegram" : "WhatsApp"} message:\n\nTo: ${recipientLabel}\nMessage: ${updatedAction.body}`
+                                const contentToSave = `${updatedContent}\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(updatedAction))))}-->`
+                                const dbId = savedAssistantIdRef.current || m.id
+                                updateMessageContent(dbId, contentToSave).catch(() => {})
+                                return { ...m, content: updatedContent, action: updatedAction }
+                              }))
+                              setEditingActionMsgId(null)
+                            }}
+                            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingActionMsgId(null)}
+                            className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-white/5"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
                       <div className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
                         <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Sources</p>
@@ -2441,7 +2651,7 @@ export default function ChatPage() {
               </div>
               )
             })}
-              {loading && (!messages.length || messages[messages.length - 1].role !== "assistant" || !messages[messages.length - 1].content) && (
+              {loading && (!messages.length || messages[messages.length - 1].role !== "assistant" || (!messages[messages.length - 1].content && !inflightStreamRef.current)) && (
                 <div className="flex gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent overflow-hidden">
                     <img src="/assets/images/exploro-icon.svg" alt="" className="h-8 w-8 object-contain" />

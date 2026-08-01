@@ -10,7 +10,7 @@ import {
   Filter, CircleDollarSign, ChevronDown, ChevronUp, X,
   ClipboardList, FileText, Send, Inbox,
   Star, StarOff, Shield, User, Loader2, Reply, Trash2, Check, Pencil, Menu, PanelLeft, Tag,
-  LayoutDashboard, MessageSquare, Calendar,
+  LayoutDashboard, MessageSquare, Calendar, ImagePlus,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { NotificationBell } from "@/components/notification-bell"
@@ -179,6 +179,7 @@ export default function CRMPage() {
   const [editingCalCol, setEditingCalCol] = useState<string | null>(null)
   const [dragOverCalCol, setDragOverCalCol] = useState<string | null>(null)
   const dragCalId = useRef<string | null>(null)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
 
   // Table status dropdown state
   const [emailStatusOpen, setEmailStatusOpen] = useState<string | null>(null)
@@ -205,6 +206,7 @@ export default function CRMPage() {
   const [waReplyTo, setWaReplyTo] = useState<string | null>(null)
   const [sendingWaReply, setSendingWaReply] = useState(false)
   const [replySource, setReplySource] = useState<"whatsapp" | "telegram" | "slack">("whatsapp")
+  const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null)
   const [activeThread, setActiveThread] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
 
@@ -272,6 +274,27 @@ export default function CRMPage() {
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("slackFetched"), JSON.stringify(slackFetched)) } catch {} }, [slackFetched, user])
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("activeChannel"), activeChannel) } catch {} }, [activeChannel, user])
   useEffect(() => { if (user) try { sessionStorage.setItem(storageKey("activeTab"), activeTab) } catch {} }, [activeTab, user])
+
+  // Fetch media on-demand when opening a Telegram conversation thread
+  useEffect(() => {
+    if (!user || !activeThread || replySource !== "telegram") return
+    const threadMsgs = threadedMessages.find(([tid]) => tid === activeThread)?.[1] || []
+    const tgMsgsNeedingMedia = threadMsgs.filter((m: any) => m.media_type === "photo" && !m.media_url)
+    if (tgMsgsNeedingMedia.length === 0) return
+    const chatId = threadMsgs[0]?.chat_id
+    if (!chatId) return
+    const messageIds = tgMsgsNeedingMedia.map((m: any) => m.tg_message_id)
+    fetch("/api/telegram/user/fetch-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.id, chatId, messageIds }),
+    }).then(r => r.json()).then(async (data) => {
+      if (data.downloaded > 0) {
+        const tgMsgs = await getTelegramMessages(user.id)
+        setTelegramMessages(tgMsgs)
+      }
+    }).catch(e => console.error("[CRM] Fetch media error:", e))
+  }, [activeThread, replySource, user])
 
   // Build dynamic channels from actual connections
   const channels = useMemo(() => {
@@ -2660,7 +2683,7 @@ export default function CRMPage() {
                   const SourceIcon = replySource === "telegram" ? Send : replySource === "slack" ? MessageSquare : Phone
                   const displayName = firstMsg ? msgDisplayName(firstMsg) : "Unknown"
                   const initials = getInitials(displayName.replace(/^To:\s*/i, ""))
-                  const close = () => { setActiveThread(null); setWaReplyTo(null); setWaReplyBody("") }
+                  const close = () => { setActiveThread(null); setWaReplyTo(null); setWaReplyBody(""); setPendingImage(null); if (imageInputRef.current) imageInputRef.current.value = "" }
                   return createPortal(
                   <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in" onClick={close}>
                     <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-white/10 bg-[#1a1f2e] shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
@@ -2719,7 +2742,16 @@ export default function CRMPage() {
                                     ? "bg-emerald-600/20 text-emerald-50 rounded-tr-sm border border-emerald-500/15"
                                     : "bg-white/[0.04] text-white/90 rounded-tl-sm border border-white/5"
                                 )}>
-                                  <p className="whitespace-pre-wrap break-words">{m.body || ""}</p>
+                                  {m.media_url && m.media_type === "photo" && (
+                                    <img
+                                      src={m.media_url}
+                                      alt="Photo"
+                                      className="mb-2 max-w-full rounded-lg object-cover"
+                                      style={{ maxHeight: "300px" }}
+                                      onClick={() => window.open(m.media_url, "_blank")}
+                                    />
+                                  )}
+                                  <p className="whitespace-pre-wrap break-words">{m.body || m.caption || ""}</p>
                                 </div>
                                 <p className={cn("mt-1 text-[10px] text-muted-foreground", isSent ? "text-right" : "text-left")}>
                                   {isSent ? "You" : senderName} · {msgTimeStr(m)}
@@ -2733,23 +2765,79 @@ export default function CRMPage() {
 
                       {/* Reply section — sticky bottom */}
                       <div className="border-t border-white/5 px-6 py-4">
+                        {/* Image preview */}
+                        {pendingImage && (
+                          <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
+                            <img src={pendingImage.url} alt="Preview" className="h-12 w-12 rounded object-cover" />
+                            <span className="text-xs text-muted-foreground truncate flex-1">{pendingImage.file.name}</span>
+                            <button
+                              onClick={() => { setPendingImage(null); if (imageInputRef.current) imageInputRef.current.value = "" }}
+                              className="rounded p-1 text-muted-foreground hover:bg-white/10 hover:text-white"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
                         <div className="flex items-end gap-2">
+                          {replySource === "telegram" && (
+                            <input
+                              ref={imageInputRef}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={e => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                if (file.size > 10 * 1024 * 1024) {
+                                  toast({ title: "File too large", description: "Max 10MB for images", variant: "error" })
+                                  return
+                                }
+                                setPendingImage({ url: URL.createObjectURL(file), file })
+                              }}
+                            />
+                          )}
+                          {replySource === "telegram" && (
+                            <button
+                              onClick={() => imageInputRef.current?.click()}
+                              disabled={sendingWaReply}
+                              title="Attach image"
+                              className="flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] p-3 text-muted-foreground transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40 shrink-0"
+                            >
+                              <ImagePlus className="h-4 w-4" />
+                            </button>
+                          )}
                           <textarea
                             value={waReplyBody}
                             onChange={e => setWaReplyBody(e.target.value)}
-                            placeholder="Type your message..."
+                            placeholder={pendingImage ? "Add a caption (optional)..." : "Type your message..."}
                             className="flex-1 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/30 transition-all"
                             rows={2}
-                            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); (e.currentTarget.parentElement?.querySelector("button") as HTMLButtonElement)?.click() } }}
+                            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); (e.currentTarget.parentElement?.querySelector("button.send-btn") as HTMLButtonElement)?.click() } }}
                           />
                           <button
+                            className="send-btn flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                            disabled={sendingWaReply || (!waReplyBody.trim() && !pendingImage)}
                             onClick={async () => {
-                              if (!user || !waReplyBody.trim() || !waReplyTo) return
+                              if (!user || !waReplyTo || (!waReplyBody.trim() && !pendingImage)) return
                               setSendingWaReply(true)
                               try {
+                                let mediaUrl: string | undefined
+                                // If there's a pending image, upload to Supabase storage first
+                                if (pendingImage) {
+                                  const formData = new FormData()
+                                  formData.append("file", pendingImage.file)
+                                  formData.append("userId", user.id)
+                                  const uploadRes = await fetch("/api/telegram/user/upload-media", {
+                                    method: "POST",
+                                    body: formData,
+                                  })
+                                  const uploadData = await uploadRes.json()
+                                  if (!uploadRes.ok) throw new Error(uploadData.error || "Failed to upload image")
+                                  mediaUrl = uploadData.mediaUrl
+                                }
                                 const endpoint = replySource === "telegram" ? "/api/telegram/user/send" : replySource === "slack" ? "/api/slack/send" : "/api/whatsapp/send"
                                 const payload = replySource === "telegram"
-                                  ? { userId: user.id, chatId: waReplyTo, body: waReplyBody }
+                                  ? { userId: user.id, chatId: waReplyTo, body: waReplyBody, mediaUrl }
                                   : replySource === "slack"
                                   ? { userId: user.id, channelId: waReplyTo, text: waReplyBody }
                                   : { userId: user.id, to: waReplyTo, body: waReplyBody }
@@ -2771,14 +2859,14 @@ export default function CRMPage() {
                                   setWhatsAppMessages(msgs)
                                 }
                                 setWaReplyBody("")
+                                setPendingImage(null)
+                                if (imageInputRef.current) imageInputRef.current.value = ""
                               } catch (e: any) {
                                 toast({ title: "Error", description: e?.message || "Failed to send message", variant: "error" })
                               } finally {
                                 setSendingWaReply(false)
                               }
                             }}
-                            disabled={sendingWaReply || !waReplyBody.trim()}
-                            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                           >
                             {sendingWaReply ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                             {sendingWaReply ? "Sending..." : "Send"}

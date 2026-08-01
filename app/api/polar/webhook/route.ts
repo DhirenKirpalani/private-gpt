@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyWebhookSignature, mapPolarStatus } from "@/lib/polar"
 import { createAdminClient } from "@/lib/supabase"
+import { sendSubscriptionActivatedEmail, sendSubscriptionCanceledEmail } from "@/lib/system-email"
 
 /**
  * Polar webhook handler.
@@ -110,6 +111,19 @@ async function handleSubscriptionActivated(event: any) {
   }
 
   console.log(`[Polar Webhook] Subscription ${subscriptionId} activated for user ${userId}`)
+
+  // Send billing confirmation email
+  try {
+    const { data: authData } = await adminClient.auth.admin.getUserById(userId)
+    const email = authData.user?.email
+    const { data: profile } = await adminClient.from("profiles").select("full_name").eq("user_id", userId).maybeSingle()
+    if (email) {
+      const planName = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : "Solo"
+      await sendSubscriptionActivatedEmail(email, planName, profile?.full_name || undefined)
+    }
+  } catch (emailErr) {
+    console.error("[Polar Webhook] Failed to send activation email:", emailErr)
+  }
 }
 
 async function handleSubscriptionDeactivated(event: any) {
@@ -137,4 +151,20 @@ async function handleSubscriptionDeactivated(event: any) {
   }
 
   console.log(`[Polar Webhook] Subscription ${subscriptionId} deactivated`)
+
+  // Send cancellation email
+  try {
+    const { data: sub } = await adminClient.from("subscriptions").select("user_id, plan, current_period_end").eq("polar_subscription_id", subscriptionId).maybeSingle()
+    if (sub?.user_id) {
+      const { data: authData } = await adminClient.auth.admin.getUserById(sub.user_id)
+      const email = authData.user?.email
+      const { data: profile } = await adminClient.from("profiles").select("full_name").eq("user_id", sub.user_id).maybeSingle()
+      if (email) {
+        const planName = sub.plan ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : "Solo"
+        await sendSubscriptionCanceledEmail(email, planName, sub.current_period_end || undefined, profile?.full_name || undefined)
+      }
+    }
+  } catch (emailErr) {
+    console.error("[Polar Webhook] Failed to send cancellation email:", emailErr)
+  }
 }
