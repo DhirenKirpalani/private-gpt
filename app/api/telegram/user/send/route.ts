@@ -128,7 +128,10 @@ async function _POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Failed to send" }, { status: 500 })
   } finally {
     if (tempFilePath) { try { fs.unlinkSync(tempFilePath) } catch {} }
-    if (client) { try { await client.disconnect() } catch {} }
+    if (client) {
+      try { await client.disconnect() } catch {}
+      try { client.destroy() } catch {}
+    }
   }
 }
 

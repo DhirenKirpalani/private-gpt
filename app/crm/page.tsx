@@ -22,7 +22,7 @@ import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
-import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramUserSession, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, createNotification } from "@/lib/supabase"
+import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramUserSession, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, getKanbanCardCols, setKanbanCardCol, createNotification } from "@/lib/supabase"
 import { formatTelegramSender } from "@/lib/telegram"
 
 /* ─── real data ─── */
@@ -68,7 +68,8 @@ export default function CRMPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [contactModalId, setContactModalId] = useState<string | null>(null)
   const [contactsModalOpen, setContactsModalOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState("Overview")
+  const [contactsChannelFilter, setContactsChannelFilter] = useState<string>("all")
+  const [activeTab, setActiveTab] = useState<string>("Overview")
   const [search, setSearch] = useState("")
   const [activeNav] = useState("Contacts")
   const [activeChannel, setActiveChannel] = useState("")
@@ -120,9 +121,23 @@ export default function CRMPage() {
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [fetchStep, setFetchStep] = useState<"scanning" | "filtering" | "importing" | "done" | null>(null)
   const [fetchedCount, setFetchedCount] = useState(0)
+  const [emailSyncModal, setEmailSyncModal] = useState<{
+    visible: boolean
+    step: "connecting" | "scanning" | "filtering" | "done"
+    progress: number
+    totalFetched: number
+    totalScanned: number
+    keptEmails: any[]
+    droppedEmails: any[]
+    dateRange: { from: string | null; to: string | null }
+  } | null>(null)
   const [emailView, setEmailView] = useState<"kanban" | "table">("kanban")
   const [messagesView, setMessagesView] = useState<"kanban" | "table">("kanban")
   const [calendarView, setCalendarView] = useState<"kanban" | "table">("kanban")
+  const TABLE_PAGE_SIZE = 10
+  const [emailTablePage, setEmailTablePage] = useState(0)
+  const [msgTablePage, setMsgTablePage] = useState(0)
+  const [calTablePage, setCalTablePage] = useState(0)
 
   // Email search + filter
   const [emailSearch, setEmailSearch] = useState("")
@@ -146,6 +161,11 @@ export default function CRMPage() {
     "presentation", "webinar", "workshop", "training",
     "invite", "invitation", "podcast", "speaker", "guest",
   ]
+
+  // Reset table pages when filters/search/channel change
+  useEffect(() => { setEmailTablePage(0) }, [emailSearch, emailFilter, contactEmailFilter, keywordFilter, activeChannel])
+  useEffect(() => { setMsgTablePage(0) }, [activeChannel])
+  useEffect(() => { setCalTablePage(0) }, [activeChannel])
 
   // Email kanban state
   const [emailKanbanCols, setEmailKanbanCols] = useState<KanbanCol[]>([
@@ -180,6 +200,8 @@ export default function CRMPage() {
   const [dragOverCalCol, setDragOverCalCol] = useState<string | null>(null)
   const dragCalId = useRef<string | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
+  const emailSyncShownRef = useRef(false)
+  const emailFetchingRef = useRef(false)
 
   // Table status dropdown state
   const [emailStatusOpen, setEmailStatusOpen] = useState<string | null>(null)
@@ -235,7 +257,7 @@ export default function CRMPage() {
       const savedInbox = sessionStorage.getItem(storageKey("inboxMessages"))
       if (savedInbox) setInboxMessages(JSON.parse(savedInbox))
       const savedInboxFetched = sessionStorage.getItem(storageKey("inboxFetched"))
-      if (savedInboxFetched) setInboxFetched(JSON.parse(savedInboxFetched))
+      // Don't restore inboxFetched — let the real Supabase fetch set it, to prevent badge flashing
       const savedCalendar = sessionStorage.getItem(storageKey("calendarEvents"))
       if (savedCalendar) setCalendarEvents(JSON.parse(savedCalendar))
       const savedCalendarFetched = sessionStorage.getItem(storageKey("calendarFetched"))
@@ -351,29 +373,58 @@ export default function CRMPage() {
     return list
   }, [emailConnections, calendarConnections, whatsappConnections, telegramConnections, slackConnections])
 
-  // Default active channel to first connected one
-  const activeCh = channels.find((c) => c.id === activeChannel) || channels[0] || { id: "", label: "No channels", color: "bg-slate-500", type: "", connected: false }
+  // Default active channel to first connected one (filtered by current tab)
+  const tabChannelType = activeTab === "Email" ? "email" : activeTab === "Calendar" ? "calendar" : activeTab === "Messages" ? "messaging" : ""
+  const tabChannels = tabChannelType ? channels.filter(c => tabChannelType === "messaging" ? (c.type === "whatsapp" || c.type === "telegram" || c.type === "slack") : c.type === tabChannelType) : channels
+  const activeCh = tabChannels.find((c) => c.id === activeChannel) || tabChannels[0] || { id: "", label: "No channels", color: "bg-slate-500", type: "", connected: false }
 
-  // Initialize activeChannel to first available channel on load
+  // Initialize activeChannel to first available channel for the current tab
   useEffect(() => {
-    if (!activeChannel && channels.length > 0) {
-      setActiveChannel(channels[0].id)
+    if (tabChannels.length > 0 && !tabChannels.some(c => c.id === activeChannel)) {
+      setActiveChannel(tabChannels[0].id)
     }
-  }, [channels, activeChannel])
+  }, [tabChannels, activeChannel])
 
   const contact = contacts.find((c: Contact) => c.id === selectedId)
 
-  // Thread-deduped counts — match kanban column display
+  // Thread-deduped counts — match kanban column display (respect emailCardCols overrides + active channel)
+  const prevUnreadRef = useRef(0)
   const { unreadCount, totalThreadCount } = useMemo(() => {
-    const deduped = inboxMessages.filter((m: any, i: number, arr: any[]) =>
+    // Same data source + filters as kanban
+    const activeCh = channels.find(c => c.id === activeChannel && c.type === "email")
+    const allMsgs = [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")]
+      .filter((m: any) => !activeCh || activeCh.type !== "email" || m.provider === activeCh.id)
+    const deduped = allMsgs.filter((m: any, i: number, arr: any[]) =>
       arr.findIndex((x: any) => x.message_id === m.message_id) === i
     )
-    const threadIds = new Set(deduped.map((m: any) => m.thread_id || m.id))
-    const unreadThreadIds = new Set(
-      deduped.filter((m: any) => !m.read).map((m: any) => m.thread_id || m.id)
-    )
-    return { unreadCount: unreadThreadIds.size, totalThreadCount: threadIds.size }
-  }, [inboxMessages])
+    // Group by thread_id like the kanban does
+    const threadGroups = new Map<string, any[]>()
+    for (const m of deduped) {
+      const tid = m.thread_id || m.id
+      if (!threadGroups.has(tid)) threadGroups.set(tid, [])
+      threadGroups.get(tid)!.push(m)
+    }
+    let unread = 0
+    for (const [tid, msgs] of threadGroups) {
+      // Check if any message in this thread has a custom column mapping
+      const customColId = msgs.find(m => emailCardCols[m.id])?.id
+      if (customColId) {
+        // Thread is in a custom column — only count as unread if mapped to "unread"
+        if (emailCardCols[customColId] === "unread") unread++
+      } else {
+        // No custom mapping — use default logic: skip sent-only threads, unread if any received message is unread
+        if (msgs.some(m => m.direction === "sent") && !msgs.some(m => m.direction === "received")) continue
+        if (msgs.some(m => !m.read)) unread++
+      }
+    }
+    // During loading, preserve previous count to prevent badge flashing
+    if (inboxLoading && unread === 0 && prevUnreadRef.current > 0) {
+      unread = prevUnreadRef.current
+    } else {
+      prevUnreadRef.current = unread
+    }
+    return { unreadCount: unread, totalThreadCount: threadGroups.size }
+  }, [inboxMessages, emailMessages, emailCardCols, activeChannel, channels, inboxLoading])
 
   // Helper: display name for a message based on source
   const msgDisplayName = (msg: any) => {
@@ -644,6 +695,25 @@ export default function CRMPage() {
       setWhatsAppLoading(false)
       setTelegramLoading(false)
       setSlackLoading(false)
+
+      // Auto-import contacts from all connected channels
+      Promise.allSettled([
+        importContactsFromEmails(user.id),
+        importContactsFromWhatsApp(user.id),
+        importContactsFromTelegram(user.id),
+        importContactsFromSlack(user.id),
+      ]).then(async () => {
+        try {
+          const contactList = await getContacts(user.id)
+          setContacts(contactList.map((c: any) => ({
+            id: c.id, name: c.name, company: c.company || "", role: c.role || "",
+            email: c.email || "", phone: c.phone || "", location: c.location || "",
+            tags: c.tags || [], starred: c.starred,
+            lastContact: c.last_contact ? new Date(c.last_contact).toLocaleDateString() : "",
+            dealValue: c.deal_value || 0, dealStage: c.deal_stage || "",
+          })))
+        } catch {}
+      }).catch(() => {})
     }
     load()
   }, [user, pathname])
@@ -880,14 +950,22 @@ export default function CRMPage() {
       getKanbanCols(user.id, "email"),
       getKanbanCols(user.id, "messages"),
       getKanbanCols(user.id, "calendar"),
-    ]).then(([eRes, mRes, cRes]) => {
-      if (eRes.status === "fulfilled" && eRes.value.length > 0) setEmailKanbanCols(eRes.value)
+      getKanbanCardCols(user.id, "email"),
+      getKanbanCardCols(user.id, "messages"),
+    ]).then(([eRes, mRes, cRes, eCardRes, mCardRes]) => {
+      if (eRes.status === "fulfilled" && eRes.value.length > 0) {
+        const seen = new Set<string>()
+        const deduped = eRes.value.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true })
+        setEmailKanbanCols(deduped)
+      }
       if (mRes.status === "fulfilled" && mRes.value.length > 0) {
         const seen = new Set<string>()
         const deduped = mRes.value.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true })
         setMsgKanbanCols(deduped)
       }
       if (cRes.status === "fulfilled" && cRes.value.length > 0) setCalKanbanCols(cRes.value)
+      if (eCardRes.status === "fulfilled") setEmailCardCols(eCardRes.value)
+      if (mCardRes.status === "fulfilled") setMsgCardCols(mCardRes.value)
     })
   }, [user])
 
@@ -909,6 +987,13 @@ export default function CRMPage() {
     const t = setTimeout(() => { upsertKanbanCols(user.id, "calendar", calKanbanCols).catch(() => {}) }, 600)
     return () => clearTimeout(t)
   }, [user, calKanbanCols])
+
+  // Clear email sync modal when leaving Email tab
+  useEffect(() => {
+    if (activeTab !== "Email" && emailSyncModal) {
+      setEmailSyncModal(null)
+    }
+  }, [activeTab])
 
   // Reload email data when Email tab is activated
   useEffect(() => {
@@ -932,29 +1017,75 @@ export default function CRMPage() {
       } else {
         // Load from DB first (instant display)
         const loadFromDB = () => getEmailMessages(user.id).then((msgs: any[]) => {
-          setEmailMessages(msgs)
-          const received = msgs.filter((m: any) => m.direction === "received")
+          // Dedup by message_id in case DB still has stale duplicates
+          const deduped = msgs.filter((m: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.message_id === m.message_id) === i)
+          setEmailMessages(deduped)
+          const received = deduped.filter((m: any) => m.direction === "received")
           setInboxMessages(received)
-          setInboxFetched(received.length > 0 || msgs.some((m: any) => m.direction === "sent"))
+          setInboxFetched(received.length > 0 || deduped.some((m: any) => m.direction === "sent"))
         }).catch(() => {})
 
         await loadFromDB()
 
         // Auto-fetch from Gmail in background, then reload from DB
         const conn = conns.find((c: any) => c.status === "connected")
-        if (conn) {
+        const isNewConnection = conn && !conn.last_fetched_at
+        if (conn && isNewConnection && !emailFetchingRef.current) {
+          emailFetchingRef.current = true
           setInboxLoading(true)
+          setEmailSyncModal({
+            visible: true,
+            step: "connecting",
+            progress: 0,
+            totalFetched: 0,
+            totalScanned: 0,
+            keptEmails: [],
+            droppedEmails: [],
+            dateRange: { from: null, to: null },
+          })
+
+          // Animate progress linearly to 95% over ~15 seconds, then wait for API
+          let progressVal = 0
+          const progressTimer = setInterval(() => {
+            progressVal = Math.min(progressVal + 0.7, 95)
+            setEmailSyncModal(prev => prev ? { ...prev, progress: Math.round(progressVal) } : null)
+          }, 100)
+
           try {
-            await fetch("/api/email/fetch", {
+            const fetchRes = await fetch("/api/email/fetch", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId: user.id, providerId: conn.provider }),
+              body: JSON.stringify({ userId: user.id, providerId: conn.provider, since: conn.last_fetched_at || undefined }),
             })
+            const fetchData = await fetchRes.json()
+            const fetchedMsgs = fetchData.messages || []
+            const droppedMsgs = fetchData.dropped || []
+            const apiDateRange = fetchData.dateRange || { from: null, to: null }
+
+            clearInterval(progressTimer)
+
+            setEmailSyncModal({
+              visible: true,
+              step: "done",
+              progress: 100,
+              totalFetched: fetchedMsgs.length,
+              totalScanned: fetchedMsgs.length + droppedMsgs.length,
+              keptEmails: fetchedMsgs,
+              droppedEmails: droppedMsgs,
+              dateRange: { from: apiDateRange.from, to: apiDateRange.to },
+            })
+
             await loadFromDB()
+            // Reload connections so last_fetched_at is updated in state
+            const updatedConns = await getEmailConnections(user.id)
+            setEmailConnections(updatedConns)
           } catch (e) {
             console.error("[EMAIL TAB] Auto-fetch failed:", e)
+            clearInterval(progressTimer)
+            setEmailSyncModal(null)
           } finally {
             setInboxLoading(false)
+            emailFetchingRef.current = false
           }
         }
       }
@@ -962,7 +1093,7 @@ export default function CRMPage() {
   }, [user, activeTab])
 
   // Fetch inbox emails + auto-import contacts
-  const fetchInbox = async (pageToken?: string) => {
+  const fetchInbox = async (pageToken?: string, showSyncModal?: boolean) => {
     if (!user) return
     const providerId = activeChannel || emailConnections.find((c: any) => c.status === "connected")?.provider
     if (!providerId) { setFetchError("No email provider selected."); return }
@@ -974,26 +1105,66 @@ export default function CRMPage() {
     else { setInboxLoading(true); setFetchStep("scanning") }
     setFetchError(null)
 
+    // Show modal with progress for manual fetch
+    let progressTimer: any = null
+    if (showSyncModal && !isLoadMore) {
+      let progressVal = 0
+      progressTimer = setInterval(() => {
+        progressVal = Math.min(progressVal + 0.7, 95)
+        setEmailSyncModal(prev => prev ? { ...prev, progress: Math.round(progressVal) } : null)
+      }, 100)
+      setEmailSyncModal({
+        visible: true,
+        step: "connecting",
+        progress: 0,
+        totalFetched: 0,
+        totalScanned: 0,
+        keptEmails: [],
+        droppedEmails: [],
+        dateRange: { from: null, to: null },
+      })
+    }
+
     try {
       const res = await fetch("/api/email/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, providerId, pageToken }),
+        body: JSON.stringify({ userId: user.id, providerId, pageToken, since: !isLoadMore ? (conn as any)?.last_fetched_at || undefined : undefined }),
       })
       if (!isLoadMore) setFetchStep("filtering")
       const data = await res.json()
       if (!res.ok) {
         setFetchError(data.error || "Failed to fetch emails")
+        if (progressTimer) clearInterval(progressTimer)
+        setEmailSyncModal(null)
         return
       }
+
       setNextPageToken(data.nextPageToken || null)
 
       // Merge API-returned messages directly into state (no extra DB reload)
       const fetched = data.messages || []
+      const droppedEmails = data.dropped || []
+      const apiDateRange = data.dateRange || { from: null, to: null }
       setFetchedCount(fetched.length)
+
+      // Update modal with results
+      if (showSyncModal && !isLoadMore && progressTimer) {
+        clearInterval(progressTimer)
+        setEmailSyncModal({
+          visible: true,
+          step: "done",
+          progress: 100,
+          totalFetched: fetched.length,
+          totalScanned: fetched.length + droppedEmails.length,
+          keptEmails: fetched,
+          droppedEmails: droppedEmails,
+          dateRange: apiDateRange,
+        })
+      }
       const merge = (prev: any[]) => {
-        const map = new Map(prev.map(m => [m.id, m]))
-        for (const m of fetched) map.set(m.id, m)
+        const map = new Map(prev.map(m => [m.message_id || m.id, m]))
+        for (const m of fetched) map.set(m.message_id || m.id, m)
         return Array.from(map.values()).sort((a, b) => {
           const da = a.received_at ? new Date(a.received_at).getTime() : 0
           const db = b.received_at ? new Date(b.received_at).getTime() : 0
@@ -1049,23 +1220,13 @@ export default function CRMPage() {
     } catch (e: any) {
       setFetchError(e?.message || "Network error fetching emails")
       setFetchStep(null)
+      if (progressTimer) clearInterval(progressTimer)
+      setEmailSyncModal(null)
     } finally {
       if (isLoadMore) setLoadingMore(false)
       else setInboxLoading(false)
     }
   }
-
-  // ── Auto-poll for new emails every 2 minutes (client-side, no cron) ────────
-  useEffect(() => {
-    if (!user) return
-    const hasConnectedEmail = emailConnections.some((c: any) => c.status === "connected")
-    if (!hasConnectedEmail) return
-    const interval = setInterval(() => {
-      console.log("[CRM] Auto-polling emails...")
-      fetchInbox()
-    }, 120000) // 2 minutes
-    return () => clearInterval(interval)
-  }, [user?.id, emailConnections.length, activeChannel])
 
   // ── Auto-poll for calendar events every 2 minutes (client-side) ─────────────
   useEffect(() => {
@@ -1257,7 +1418,7 @@ export default function CRMPage() {
                   )}
                 >
                   <span>{tab === "Overview" ? t("crmOverviewTab") : tab === "Email" ? t("crmEmailTab") : tab === "Messages" ? t("crmMessages") : tab === "Calendar" ? t("crmCalendarTab") : tab}</span>
-                  {tab === "Email" && unreadCount > 0 && (
+                  {tab === "Email" && inboxFetched && unreadCount > 0 && (
                     <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
@@ -1428,7 +1589,7 @@ export default function CRMPage() {
                 {tabs.map(tab => {
                   const label = tab === "Overview" ? t("crmOverviewTab") : tab === "Email" ? t("crmEmailTab") : tab === "Messages" ? t("crmMessages") : tab === "Calendar" ? t("crmCalendarTab") : tab
                   const Icon = tab === "Overview" ? LayoutDashboard : tab === "Email" ? Mail : tab === "Messages" ? MessageSquare : Calendar
-                  const count = tab === "Email" ? unreadCount : tab === "Calendar" ? upcomingEventsCount : 0
+                  const count = tab === "Email" ? (inboxFetched ? unreadCount : 0) : tab === "Calendar" ? upcomingEventsCount : 0
                   const active = activeTab === tab
                   return (
                     <button
@@ -1995,7 +2156,7 @@ export default function CRMPage() {
                     <div className="relative">
                       <button
                         onClick={() => setKeywordFilterOpen(v => !v)}
-                        className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors", keywordFilter ? "bg-amber-600/10 border-amber-500/30 text-amber-400" : "hover:bg-accent")}
+                        className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition-colors", keywordFilter ? "bg-amber-600/10 border-amber-500/30 text-amber-400" : "hover:bg-accent")}
                       >
                         <Tag className="h-3.5 w-3.5" />
                         {keywordFilter ? keywordFilter : t("crmKeyword")}
@@ -2022,7 +2183,11 @@ export default function CRMPage() {
                       )}
                     </div>
                     <button
-                      onClick={() => fetchInbox()}
+                      onClick={() => {
+                        const conn = emailConnections.find((c: any) => c.provider === (activeChannel || emailConnections.find((c: any) => c.status === "connected")?.provider) && c.status === "connected")
+                        console.log("[FETCH EMAILS] Manual fetch — last_fetched_at:", conn?.last_fetched_at || "none (full 15-day)", "→ now:", new Date().toISOString())
+                        fetchInbox(undefined, true)
+                      }}
                       disabled={inboxLoading}
                       className={cn(
                         "relative overflow-hidden flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-300 disabled:cursor-not-allowed",
@@ -2106,7 +2271,21 @@ export default function CRMPage() {
                             onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverEmailCol(null) }}
                             onDrop={e => {
                               e.preventDefault()
-                              if (dragEmailId.current) setEmailCardCols(prev => ({ ...prev, [dragEmailId.current!]: col.id }))
+                              if (dragEmailId.current) {
+                                const cardId = dragEmailId.current
+                                const colId = col.id
+                                setEmailCardCols(prev => ({ ...prev, [cardId]: colId }))
+                                if (user) setKanbanCardCol(user.id, "email", cardId, colId).catch(() => {})
+                                // Sync read flag when moving to read/unread columns
+                                if (colId === "read") {
+                                  setEmailMessages(prev => prev.map(m => m.id === cardId ? { ...m, read: true } : m))
+                                  setInboxMessages(prev => prev.map(m => m.id === cardId ? { ...m, read: true } : m))
+                                  if (user) markEmailAsRead(user.id, cardId).catch(() => {})
+                                } else if (colId === "unread") {
+                                  setEmailMessages(prev => prev.map(m => m.id === cardId ? { ...m, read: false } : m))
+                                  setInboxMessages(prev => prev.map(m => m.id === cardId ? { ...m, read: false } : m))
+                                }
+                              }
                               dragEmailId.current = null; setDragOverEmailCol(null)
                             }}
                           >
@@ -2293,7 +2472,7 @@ export default function CRMPage() {
                             const db = b.latest.received_at ? new Date(b.latest.received_at).getTime() : b.latest.sent_at ? new Date(b.latest.sent_at).getTime() : 0
                             return db - da
                           })
-                        })().map((item: any) => {
+                        })().slice(emailTablePage * TABLE_PAGE_SIZE, (emailTablePage + 1) * TABLE_PAGE_SIZE).map((item: any) => {
                           const msg = item.latest
                           const replyCount = item.msgs.length
                           const colId = emailCardCols[msg.id] || (msg.direction === "sent" ? "sent" : msg.read ? "read" : "unread")
@@ -2346,7 +2525,7 @@ export default function CRMPage() {
                                             onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingEmailLabel(null) }}
                                           />
                                         ) : (
-                                          <button onClick={e => { e.stopPropagation(); setEmailCardCols(prev => ({ ...prev, [msg.id]: c.id })); setEmailStatusOpen(null) }}
+                                          <button onClick={e => { e.stopPropagation(); const cardId = msg.id; const colId = c.id; setEmailCardCols(prev => ({ ...prev, [cardId]: colId })); if (user) setKanbanCardCol(user.id, "email", cardId, colId).catch(() => {}); if (colId === "read") { setEmailMessages(prev => prev.map(m => m.id === cardId ? { ...m, read: true } : m)); setInboxMessages(prev => prev.map(m => m.id === cardId ? { ...m, read: true } : m)); if (user) markEmailAsRead(user.id, cardId).catch(() => {}) } else if (colId === "unread") { setEmailMessages(prev => prev.map(m => m.id === cardId ? { ...m, read: false } : m)); setInboxMessages(prev => prev.map(m => m.id === cardId ? { ...m, read: false } : m)) } setEmailStatusOpen(null) }}
                                             className="flex flex-1 items-center gap-2 py-1 text-left text-xs">
                                             <span className="flex-1">{c.label}</span>
                                             {c.id === colId && <Check className="h-3 w-3 text-emerald-400 shrink-0" />}
@@ -2372,6 +2551,41 @@ export default function CRMPage() {
                         })}
                       </tbody>
                     </table>
+                    {(() => {
+                      const q = emailSearch.toLowerCase()
+                      const allMsgs = [...inboxMessages, ...emailMessages.filter((m: any) => m.direction === "sent")]
+                        .filter((m: any) => !activeCh.id || activeCh.type !== "email" || m.provider === activeCh.id)
+                        .filter((m: any) => !q || (m.subject || "").toLowerCase().includes(q) || (m.from_address || "").toLowerCase().includes(q) || (m.body || "").toLowerCase().includes(q))
+                        .filter((m: any) => emailFilter.direction === "all" || m.direction === emailFilter.direction)
+                        .filter((m: any) => emailFilter.read === "all" || (emailFilter.read === "read" ? m.read : !m.read))
+                        .filter((m: any) => !contactEmailFilter || (m.from_address || "").includes(contactEmailFilter) || (m.to_address || "").includes(contactEmailFilter))
+                        .filter((m: any) => !keywordFilter || (m.subject || "").toLowerCase().includes(keywordFilter) || (m.body || "").toLowerCase().includes(keywordFilter))
+                      const threadGroups = new Map<string, any[]>()
+                      for (const m of allMsgs) { const tid = m.thread_id || m.id; if (!threadGroups.has(tid)) threadGroups.set(tid, []); threadGroups.get(tid)!.push(m) }
+                      const totalItems = threadGroups.size
+                      const totalPages = Math.ceil(totalItems / TABLE_PAGE_SIZE)
+                      if (totalPages <= 1) return null
+                      const pages: number[] = []
+                      for (let i = 0; i < totalPages; i++) pages.push(i)
+                      const visiblePages = pages.filter(p => p === 0 || p === totalPages - 1 || Math.abs(p - emailTablePage) <= 1)
+                      return (
+                        <div className="flex items-center justify-between border-t px-4 py-2.5">
+                          <span className="text-[10px] text-muted-foreground">Showing {Math.min(emailTablePage * TABLE_PAGE_SIZE + 1, totalItems)}–{Math.min((emailTablePage + 1) * TABLE_PAGE_SIZE, totalItems)} of {totalItems}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => setEmailTablePage(0)} disabled={emailTablePage === 0} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">First</button>
+                            <button onClick={() => setEmailTablePage(p => Math.max(0, p - 1))} disabled={emailTablePage === 0} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">Prev</button>
+                            {visiblePages.map((p, i) => (
+                              <span key={i} className="flex items-center">
+                                {i > 0 && p - visiblePages[i - 1] > 1 && <span className="px-1 text-[10px] text-muted-foreground">…</span>}
+                                <button onClick={() => setEmailTablePage(p)} className={cn("rounded-md px-2.5 py-1 text-[10px] font-medium transition-colors", p === emailTablePage ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-400" : "border border-white/10 text-muted-foreground hover:text-white hover:border-white/20")}>{p + 1}</button>
+                              </span>
+                            ))}
+                            <button onClick={() => setEmailTablePage(p => Math.min(totalPages - 1, p + 1))} disabled={emailTablePage >= totalPages - 1} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">Next</button>
+                            <button onClick={() => setEmailTablePage(totalPages - 1)} disabled={emailTablePage >= totalPages - 1} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">Last</button>
+                          </div>
+                        </div>
+                      )
+                    })()}
                     {nextPageToken && (
                       <div className="flex justify-center p-3 border-t">
                         <button onClick={() => fetchInbox(nextPageToken)} disabled={loadingMore} className="flex items-center gap-1.5 rounded-lg border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-40">
@@ -2430,6 +2644,129 @@ export default function CRMPage() {
                 </div>
                 )}
               </div>
+            )}
+
+            {/* Email sync modal — rendered at outer scope so it works on Email tab */}
+            {mounted && emailSyncModal?.visible && activeTab === "Email" && createPortal(
+              <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setEmailSyncModal(prev => prev ? { ...prev, visible: false } : null)}>
+                <div
+                  className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#1a1f2e] shadow-2xl animate-fade-in-up overflow-hidden"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="h-1 bg-gradient-to-r from-emerald-500 via-sky-500 to-emerald-500 bg-[length:200%_100%] animate-[shimmer-slide_2s_ease-in-out_infinite]" />
+                  <div className="p-6 max-h-[80vh] overflow-y-auto">
+                    {emailSyncModal.step === "connecting" && (
+                      <div className="flex flex-col items-center text-center py-4">
+                        <div className="relative mb-4">
+                          <div className="h-14 w-14 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
+                          <Mail className="absolute inset-0 m-auto h-6 w-6 text-emerald-400" />
+                        </div>
+                        <h3 className="text-base font-semibold text-white">Syncing your inbox</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {emailSyncModal.progress < 20
+                            ? "Connecting to your email provider..."
+                            : emailSyncModal.progress < 50
+                            ? "Fetching emails from the last 15 days..."
+                            : emailSyncModal.progress < 80
+                            ? "Filtering and categorizing emails..."
+                            : "Almost done..."}
+                        </p>
+                        {/* Progress bar */}
+                        <div className="mt-4 w-full max-w-xs">
+                          <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 transition-[width] duration-150 ease-out"
+                              style={{ width: `${emailSyncModal.progress}%` }}
+                            />
+                          </div>
+                          <p className="mt-1.5 text-xs font-medium text-emerald-400">{emailSyncModal.progress}%</p>
+                        </div>
+                      </div>
+                    )}
+                    {emailSyncModal.step === "done" && (
+                      <div className="flex flex-col">
+                        {/* Header */}
+                        <div className="flex flex-col items-center text-center mb-4">
+                          <div className="relative mb-3">
+                            <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping" />
+                            <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 border-2 border-emerald-500/40">
+                              <Check className="h-6 w-6 text-emerald-400" />
+                            </div>
+                          </div>
+                          <h3 className="text-base font-semibold text-white">
+                            {emailSyncModal.totalFetched > 0
+                              ? `${emailSyncModal.totalFetched} email${emailSyncModal.totalFetched === 1 ? "" : "s"} imported`
+                              : "No new emails"}
+                          </h3>
+                        </div>
+
+                        {/* Period */}
+                        {emailSyncModal.dateRange.from && emailSyncModal.dateRange.to && (
+                          <div className="mb-4 flex flex-col items-center gap-1.5 rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(emailSyncModal.dateRange.from).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                {" → "}
+                                {new Date(emailSyncModal.dateRange.to).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground/60">
+                              {emailSyncModal.droppedEmails.length === 0 && emailSyncModal.totalFetched === 0
+                                ? "Incremental sync — no new emails since last fetch"
+                                : `${emailSyncModal.totalScanned} emails scanned in this period`}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Kept emails */}
+                        {emailSyncModal.keptEmails.length > 0 && (
+                          <div className="mb-3">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                              <span className="text-xs font-semibold text-emerald-400">Imported ({emailSyncModal.totalFetched})</span>
+                            </div>
+                            <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                              {emailSyncModal.keptEmails.map((email: any, i: number) => (
+                                <div
+                                  key={email.id || i}
+                                  className="flex items-start gap-2.5 rounded-lg border border-emerald-500/10 bg-emerald-500/[0.03] p-2.5 text-left animate-fade-in-up"
+                                  style={{ animationDelay: `${i * 60}ms` }}
+                                >
+                                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-[10px] font-bold text-emerald-400">
+                                    {(email.from_address || "?").charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-white truncate">
+                                      {email.subject || "(No subject)"}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground truncate">
+                                      {email.from_address || "Unknown"}
+                                    </p>
+                                  </div>
+                                  {email.received_at && (
+                                    <span className="text-[10px] text-muted-foreground shrink-0">
+                                      {new Date(email.received_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => setEmailSyncModal(prev => prev ? { ...prev, visible: false } : null)}
+                          className="mx-auto mt-2 rounded-lg bg-white/5 px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-white/10 hover:text-white transition-colors"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>,
+              document.body
             )}
 
             {/* ── MESSAGES ── */}
@@ -2534,7 +2871,7 @@ export default function CRMPage() {
                             className={cn("group flex w-72 shrink-0 flex-col h-full rounded-xl transition-all", dragOverMsgCol === col.id && "ring-2 ring-emerald-500/40 bg-emerald-500/5")}
                             onDragOver={e => { e.preventDefault(); setDragOverMsgCol(col.id) }}
                             onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverMsgCol(null) }}
-                            onDrop={e => { e.preventDefault(); if (dragMsgId.current) setMsgCardCols(prev => ({ ...prev, [dragMsgId.current!]: col.id })); dragMsgId.current = null; setDragOverMsgCol(null) }}
+                            onDrop={e => { e.preventDefault(); if (dragMsgId.current) { const cardId = dragMsgId.current; const colId = col.id; setMsgCardCols(prev => ({ ...prev, [cardId]: colId })); if (user) setKanbanCardCol(user.id, "messages", cardId, colId).catch(() => {}) } dragMsgId.current = null; setDragOverMsgCol(null) }}
                           >
                             <div className="mb-3 flex items-center gap-2">
                               {editingMsgCol === col.id ? (
@@ -2610,7 +2947,7 @@ export default function CRMPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {threadedMessages.map(([tid, msgs]: [string, any[]]) => {
+                        {threadedMessages.slice(msgTablePage * TABLE_PAGE_SIZE, (msgTablePage + 1) * TABLE_PAGE_SIZE).map(([tid, msgs]: [string, any[]]) => {
                           const lastMsg = msgs[msgs.length - 1]
                           const firstMsg = msgs[0]
                           return (
@@ -2635,6 +2972,31 @@ export default function CRMPage() {
                         })}
                       </tbody>
                     </table>
+                    {(() => {
+                      const totalItems = threadedMessages.length
+                      const totalPages = Math.ceil(totalItems / TABLE_PAGE_SIZE)
+                      if (totalPages <= 1) return null
+                      const pages: number[] = []
+                      for (let i = 0; i < totalPages; i++) pages.push(i)
+                      const visiblePages = pages.filter(p => p === 0 || p === totalPages - 1 || Math.abs(p - msgTablePage) <= 1)
+                      return (
+                        <div className="flex items-center justify-between border-t px-4 py-2.5">
+                          <span className="text-[10px] text-muted-foreground">Showing {Math.min(msgTablePage * TABLE_PAGE_SIZE + 1, totalItems)}–{Math.min((msgTablePage + 1) * TABLE_PAGE_SIZE, totalItems)} of {totalItems}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => setMsgTablePage(0)} disabled={msgTablePage === 0} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">First</button>
+                            <button onClick={() => setMsgTablePage(p => Math.max(0, p - 1))} disabled={msgTablePage === 0} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">Prev</button>
+                            {visiblePages.map((p, i) => (
+                              <span key={i} className="flex items-center">
+                                {i > 0 && p - visiblePages[i - 1] > 1 && <span className="px-1 text-[10px] text-muted-foreground">…</span>}
+                                <button onClick={() => setMsgTablePage(p)} className={cn("rounded-md px-2.5 py-1 text-[10px] font-medium transition-colors", p === msgTablePage ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-400" : "border border-white/10 text-muted-foreground hover:text-white hover:border-white/20")}>{p + 1}</button>
+                              </span>
+                            ))}
+                            <button onClick={() => setMsgTablePage(p => Math.min(totalPages - 1, p + 1))} disabled={msgTablePage >= totalPages - 1} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">Next</button>
+                            <button onClick={() => setMsgTablePage(totalPages - 1)} disabled={msgTablePage >= totalPages - 1} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">Last</button>
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -3009,7 +3371,7 @@ export default function CRMPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {calendarEvents.map((ev: any) => {
+                        {calendarEvents.slice(calTablePage * TABLE_PAGE_SIZE, (calTablePage + 1) * TABLE_PAGE_SIZE).map((ev: any) => {
                           const now = new Date(); const todayEnd = new Date(now); todayEnd.setHours(23,59,59,999)
                           const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7)
                           const natural = (e: any) => { if (!e.start_time) return "upcoming"; const t = new Date(e.start_time); if (t >= now && t <= todayEnd) return "today"; if (t > todayEnd && t <= weekEnd) return "week"; return "upcoming" }
@@ -3072,6 +3434,31 @@ export default function CRMPage() {
                         })}
                       </tbody>
                     </table>
+                    {(() => {
+                      const totalItems = calendarEvents.length
+                      const totalPages = Math.ceil(totalItems / TABLE_PAGE_SIZE)
+                      if (totalPages <= 1) return null
+                      const pages: number[] = []
+                      for (let i = 0; i < totalPages; i++) pages.push(i)
+                      const visiblePages = pages.filter(p => p === 0 || p === totalPages - 1 || Math.abs(p - calTablePage) <= 1)
+                      return (
+                        <div className="flex items-center justify-between border-t px-4 py-2.5">
+                          <span className="text-[10px] text-muted-foreground">Showing {Math.min(calTablePage * TABLE_PAGE_SIZE + 1, totalItems)}–{Math.min((calTablePage + 1) * TABLE_PAGE_SIZE, totalItems)} of {totalItems}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => setCalTablePage(0)} disabled={calTablePage === 0} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">First</button>
+                            <button onClick={() => setCalTablePage(p => Math.max(0, p - 1))} disabled={calTablePage === 0} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">Prev</button>
+                            {visiblePages.map((p, i) => (
+                              <span key={i} className="flex items-center">
+                                {i > 0 && p - visiblePages[i - 1] > 1 && <span className="px-1 text-[10px] text-muted-foreground">…</span>}
+                                <button onClick={() => setCalTablePage(p)} className={cn("rounded-md px-2.5 py-1 text-[10px] font-medium transition-colors", p === calTablePage ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-400" : "border border-white/10 text-muted-foreground hover:text-white hover:border-white/20")}>{p + 1}</button>
+                              </span>
+                            ))}
+                            <button onClick={() => setCalTablePage(p => Math.min(totalPages - 1, p + 1))} disabled={calTablePage >= totalPages - 1} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">Next</button>
+                            <button onClick={() => setCalTablePage(totalPages - 1)} disabled={calTablePage >= totalPages - 1} className="rounded-md border px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-white hover:border-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">Last</button>
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -3262,27 +3649,32 @@ export default function CRMPage() {
               {visibleMessages.map((msg: any, idx: number) => {
                 const cleanBody = (() => {
                   const hasHtml = (text: string) => /<[a-z][\s\S]*>/i.test(text || "")
+                  const sanitizeHtml = (html: string) => html
+                    .replace(/<div style="border-left:[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
+                    .replace(/<blockquote[^>]*>[\s\S]*?<\/blockquote>/gi, "")
+                    .replace(/<div class="gmail_quote[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
+                    .replace(/<div class="moz-cite-prefix[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
+                    .replace(/On .* wrote:[\s\S]*$/i, "")
+                    .replace(/Pada .* menulis:[\s\S]*$/i, "")
+                    .replace(/^---$/gm, "")
+                    .replace(/\*+/g, "")
+                    // Remove tracking pixels only (1x1 images)
+                    .replace(/<img[^>]*width=["']?1["']?[^>]*height=["']?1["']?[^>]*>/gi, "")
+                    .replace(/<img[^>]*height=["']?1["']?[^>]*width=["']?1["']?[^>]*>/gi, "")
+                    // Make all remaining images lazy-loaded with error handling
+                    .replace(/<img([^>]*?)>/gi, (match, attrs) => {
+                      // Skip if already has loading attr
+                      if (/loading=/i.test(attrs)) return match
+                      // Add loading=lazy, referrerpolicy, onerror to hide broken images, max-width style
+                      return `<img${attrs} loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" style="max-width:100%;height:auto;border-radius:6px;margin:4px 0"${/style=/i.test(attrs) ? '' : ''}>`
+                    })
+                    .trim()
                   if (msg.html_body) {
-                    return msg.html_body
-                      .replace(/<div style="border-left:[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
-                      .replace(/<blockquote[^>]*>[\s\S]*?<\/blockquote>/gi, "")
-                      .replace(/<div class="gmail_quote[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
-                      .replace(/<div class="moz-cite-prefix[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
-                      .replace(/On .* wrote:[\s\S]*$/i, "")
-                      .replace(/Pada .* menulis:[\s\S]*$/i, "")
-                      .replace(/^---$/gm, "")
-                      .replace(/\*+/g, "")
-                      .trim()
+                    return sanitizeHtml(msg.html_body)
                   }
                   // If body contains HTML tags, treat as HTML
                   if (hasHtml(msg.body)) {
-                    return (msg.body || "")
-                      .replace(/<div style="border-left:[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
-                      .replace(/<blockquote[^>]*>[\s\S]*?<\/blockquote>/gi, "")
-                      .replace(/<div class="gmail_quote[^"]*"[^>]*>[\s\S]*?<\/div>/gi, "")
-                      .replace(/On .* wrote:[\s\S]*$/i, "")
-                      .replace(/Pada .* menulis:[\s\S]*$/i, "")
-                      .trim()
+                    return sanitizeHtml(msg.body || "")
                   }
                   const raw = msg.body || "(No content)"
                   return raw
@@ -3536,22 +3928,55 @@ export default function CRMPage() {
       )}
 
       {/* ── CONTACTS PICKER MODAL ── */}
-      {contactsModalOpen && (
+      {contactsModalOpen && (() => {
+        const channelCounts = {
+          all: contacts.length,
+          whatsapp: contacts.filter((c: Contact) => c.tags.includes("whatsapp")).length,
+          email: contacts.filter((c: Contact) => c.email).length,
+          telegram: contacts.filter((c: Contact) => c.tags.includes("telegram")).length,
+          slack: contacts.filter((c: Contact) => c.tags.includes("slack")).length,
+        }
+        const channelFiltered = contactsChannelFilter === "all" ? filtered
+          : contactsChannelFilter === "whatsapp" ? filtered.filter((c: Contact) => c.tags.includes("whatsapp"))
+          : contactsChannelFilter === "email" ? filtered.filter((c: Contact) => c.email)
+          : contactsChannelFilter === "telegram" ? filtered.filter((c: Contact) => c.tags.includes("telegram"))
+          : contactsChannelFilter === "slack" ? filtered.filter((c: Contact) => c.tags.includes("slack"))
+          : filtered
+        return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setContactsModalOpen(false)}>
           <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1e2330] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
             <button onClick={() => setContactsModalOpen(false)} className="absolute right-3 top-3 text-muted-foreground hover:text-white transition-colors">
               <X className="h-5 w-5" />
             </button>
             <h2 className="mb-1 text-lg font-bold text-white">{t('crmContacts')}</h2>
-            <p className="mb-4 text-xs text-muted-foreground">{filtered.length} {t('crmTotal')} · {filtered.filter((c: Contact) => c.tags.includes("whatsapp")).length} {t('crmWhatsApp')} · {filtered.filter((c: Contact) => c.email).length} {t('crmEmail')}</p>
-            {filtered.length === 0 ? (
+            <p className="mb-3 text-xs text-muted-foreground">{channelFiltered.length} {t('crmTotal')}</p>
+            {/* Channel filter tabs */}
+            <div className="mb-4 flex flex-wrap gap-1.5">
+              {([
+                { id: "all", label: "All", count: channelCounts.all, color: "bg-white/10 text-white" },
+                { id: "whatsapp", label: "WhatsApp", count: channelCounts.whatsapp, color: "bg-emerald-500/10 text-emerald-400" },
+                { id: "email", label: "Email", count: channelCounts.email, color: "bg-blue-500/10 text-blue-400" },
+                { id: "telegram", label: "Telegram", count: channelCounts.telegram, color: "bg-sky-500/10 text-sky-400" },
+                { id: "slack", label: "Slack", count: channelCounts.slack, color: "bg-purple-500/10 text-purple-400" },
+              ] as const).map(ch => (
+                <button
+                  key={ch.id}
+                  onClick={() => setContactsChannelFilter(ch.id)}
+                  className={cn("flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all", contactsChannelFilter === ch.id ? ch.color + " ring-1 ring-white/10" : "bg-white/5 text-muted-foreground hover:bg-white/10")}
+                >
+                  {ch.label}
+                  <span className="rounded-full bg-black/20 px-1.5 text-[9px] font-bold">{ch.count}</span>
+                </button>
+              ))}
+            </div>
+            {channelFiltered.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
                 <User className="mb-2 h-6 w-6 text-muted-foreground opacity-40" />
                 <p className="text-sm text-muted-foreground">{t('crmNoContactsYet')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {filtered.map((c: Contact) => (
+                {channelFiltered.map((c: Contact) => (
                   <button
                     key={c.id}
                     onClick={() => { setContactModalId(c.id); setContactsModalOpen(false) }}
@@ -3580,15 +4005,23 @@ export default function CRMPage() {
                         )}
                       </div>
                     </div>
-                    {c.tags.includes("whatsapp") && <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400">WA</span>}
-                    {c.starred && <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" />}
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <div className="flex gap-1">
+                        {c.tags.includes("whatsapp") && <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400">WA</span>}
+                        {c.tags.includes("telegram") && <span className="rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-medium text-sky-400">TG</span>}
+                        {c.tags.includes("slack") && <span className="rounded-full bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-medium text-purple-400">SL</span>}
+                        {c.email && !c.tags.includes("whatsapp") && !c.tags.includes("telegram") && !c.tags.includes("slack") && <span className="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-medium text-blue-400">EMAIL</span>}
+                      </div>
+                      {c.starred && <Star className="h-3 w-3 fill-amber-400 text-amber-400" />}
+                    </div>
                   </button>
                 ))}
               </div>
             )}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* ── CONTACT DETAIL MODAL ── */}
       {contactModalId && (() => {

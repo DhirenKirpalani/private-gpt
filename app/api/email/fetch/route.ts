@@ -160,7 +160,7 @@ function extractEmail(address: string): string {
 
 async function _POST(req: NextRequest) {
   try {
-    const { userId, providerId, pageToken } = await req.json()
+    const { userId, providerId, pageToken, since } = await req.json()
     if (!userId || !providerId) {
       return NextResponse.json({ error: "Missing userId or providerId" }, { status: 400 })
     }
@@ -180,14 +180,20 @@ async function _POST(req: NextRequest) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    // 15-day window since connection
-    const connectionDate = new Date(conn.created_at)
-    const cutoffDate = new Date(connectionDate)
-    cutoffDate.setDate(cutoffDate.getDate() - 15)
+    // Use 'since' timestamp for incremental fetch, otherwise 15-day window from connection
+    let cutoffDate: Date
+    if (since) {
+      cutoffDate = new Date(since)
+    } else {
+      const connectionDate = new Date(conn.created_at)
+      cutoffDate = new Date(connectionDate)
+      cutoffDate.setDate(cutoffDate.getDate() - 15)
+    }
     const afterTimestamp = Math.floor(cutoffDate.getTime() / 1000)
     const cutoffISO = cutoffDate.toISOString()
 
     const results: any[] = []
+    const droppedEmails: any[] = []
     let nextPageToken: string | null = null
 
     // ── OAuth path ──
@@ -195,20 +201,39 @@ async function _POST(req: NextRequest) {
       const accessToken = await refreshIfNeeded(conn)
 
       if (conn.oauth_provider === "google") {
+        console.log(`[EMAIL FETCH] ${since ? `Incremental fetch since ${cutoffISO}` : `Full 15-day fetch from ${cutoffISO}`}`)
         // Fetch via Gmail API with pagination + 15-day window (keyword filter applied client-side below)
         const pageTokenParam = pageToken ? `&pageToken=${pageToken}` : ""
         const qParam = encodeURIComponent(`after:${afterTimestamp} -in:trash -in:spam -in:junk -in:sent`)
-        const listRes = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${qParam}${pageTokenParam}`,
+        let listRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=100&q=${qParam}${pageTokenParam}`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         )
-        const listData = await listRes.json()
+        let listData = await listRes.json()
         if (!listRes.ok) throw new Error(listData.error?.message || "Gmail list failed")
 
-        nextPageToken = listData.nextPageToken || null
-        const messageIds = (listData.messages || []).map((m: any) => m.id)
+        let allMessageIds = (listData.messages || []).map((m: any) => m.id)
+        let currentNextPageToken = listData.nextPageToken || null
+
+        // Paginate to get all emails in the window (up to 500 total)
+        let paginationGuard = 0
+        while (currentNextPageToken && allMessageIds.length < 500 && paginationGuard < 5) {
+          paginationGuard++
+          const pageRes = await fetch(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=100&q=${qParam}&pageToken=${currentNextPageToken}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          )
+          const pageData = await pageRes.json()
+          if (!pageRes.ok) break
+          allMessageIds.push(...(pageData.messages || []).map((m: any) => m.id))
+          currentNextPageToken = pageData.nextPageToken || null
+        }
+
+        nextPageToken = currentNextPageToken
+        const messageIds = allMessageIds
+        console.log(`[EMAIL FETCH] Gmail returned ${messageIds.length} messages. since=${since || "none"}, cutoff=${cutoffISO}`)
         if (messageIds.length === 0) {
-          return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
+          return NextResponse.json({ success: true, fetched: 0, messages: [], dropped: [], dateRange: { from: cutoffISO, to: new Date().toISOString() }, nextPageToken })
         }
 
         // Batch check existing messages in one query
@@ -221,9 +246,54 @@ async function _POST(req: NextRequest) {
 
         const existingIds = new Set((existingRows || []).map((r: any) => r.message_id))
         const newIds = messageIds.filter((id: string) => !existingIds.has(id))
+        const skippedIds = messageIds.filter((id: string) => existingIds.has(id))
+        console.log(`[EMAIL FETCH] ${newIds.length} new, ${skippedIds.length} already imported`)
+
+        // Fetch details of already-imported emails for the modal display + sync read status
+        if (skippedIds.length > 0) {
+          const { data: skippedDetails } = await supabase
+            .from("email_messages")
+            .select("subject, from_address, received_at, read, message_id")
+            .eq("user_id", userId)
+            .eq("connection_id", conn.id)
+            .in("message_id", skippedIds)
+          for (const d of (skippedDetails || [])) {
+            droppedEmails.push({ subject: d.subject || "(No subject)", from: d.from_address || "Unknown", reason: "already imported", date: d.received_at || null })
+          }
+
+          // Sync read status from Gmail for skipped emails (batch fetch labelIds)
+          const toCheck = (skippedDetails || []).filter((d: any) => d.read === false)
+          if (toCheck.length > 0) {
+            const readUpdates: any[] = []
+            for (const d of toCheck) {
+              try {
+                const detailRes = await fetch(
+                  `https://gmail.googleapis.com/gmail/v1/users/me/messages/${d.message_id}?format=minimal`,
+                  { headers: { Authorization: `Bearer ${accessToken}` } }
+                )
+                if (detailRes.ok) {
+                  const detail = await detailRes.json()
+                  const isUnread = (detail.labelIds || []).includes("UNREAD")
+                  if (!isUnread) {
+                    readUpdates.push(d.message_id)
+                  }
+                }
+              } catch { /* ignore individual failures */ }
+            }
+            if (readUpdates.length > 0) {
+              await supabase
+                .from("email_messages")
+                .update({ read: true })
+                .eq("user_id", userId)
+                .eq("connection_id", conn.id)
+                .in("message_id", readUpdates)
+              console.log(`[EMAIL FETCH] Synced read status for ${readUpdates.length} emails`)
+            }
+          }
+        }
 
         if (newIds.length === 0) {
-          return NextResponse.json({ success: true, fetched: 0, messages: [], nextPageToken })
+          return NextResponse.json({ success: true, fetched: 0, messages: [], dropped: droppedEmails, dateRange: { from: cutoffISO, to: new Date().toISOString() }, nextPageToken })
         }
 
         // Fetch thread IDs of existing emails in DB so we can match replies to keyword threads + sent emails
@@ -273,6 +343,7 @@ async function _POST(req: NextRequest) {
 
           let body = ""
           let html = ""
+          const attachments: any[] = []
           const traverse = (parts: any[]) => {
             for (const part of parts || []) {
               if (part.mimeType === "text/plain" && part.body?.data) {
@@ -280,6 +351,16 @@ async function _POST(req: NextRequest) {
               } else if (part.mimeType === "text/html" && part.body?.data) {
                 html = Buffer.from(part.body.data, "base64url").toString("utf-8")
               } else if (part.parts) { traverse(part.parts) }
+              // Collect image attachments
+              if (part.filename && part.body?.attachmentId && part.mimeType?.startsWith("image/")) {
+                attachments.push({
+                  filename: part.filename,
+                  mimeType: part.mimeType,
+                  size: part.body.size || 0,
+                  attachmentId: part.body.attachmentId,
+                  messageId: d.id,
+                })
+              }
             }
           }
           if (d.payload?.parts) traverse(d.payload.parts)
@@ -287,15 +368,36 @@ async function _POST(req: NextRequest) {
             body = Buffer.from(d.payload.body.data, "base64url").toString("utf-8")
           }
 
+          // Fetch actual attachment data for images
+          for (const att of attachments) {
+            try {
+              const attRes = await fetch(
+                `https://gmail.googleapis.com/gmail/v1/users/me/messages/${att.messageId}/attachments/${att.attachmentId}`,
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+              )
+              if (attRes.ok) {
+                const attData = await attRes.json()
+                att.data = attData.data || ""
+                delete att.attachmentId
+                delete att.messageId
+                console.log(`[EMAIL FETCH] Retrieved attachment: ${att.filename} (${att.mimeType}, ${att.size} bytes)`)
+              }
+            } catch (e) {
+              console.error(`[EMAIL FETCH] Failed to fetch attachment ${att.filename}:`, e)
+            }
+          }
+
           const subject = getHeader("Subject")
           const fromAddress = getHeader("From")
           if (isExcludedSender(fromAddress)) {
             console.log(`[EMAIL FILTER] DROPPED (excluded sender): from="${fromAddress}" subject="${subject}"`)
+            droppedEmails.push({ subject, from: fromAddress, reason: "excluded sender", date: new Date(parseInt(d.internalDate)).toISOString() })
             continue
           }
           // Skip newsletters and automated emails
           if (isNewsletter(body || html, headers)) {
             console.log(`[EMAIL FILTER] DROPPED (newsletter): from="${fromAddress}" subject="${subject}"`)
+            droppedEmails.push({ subject, from: fromAddress, reason: "newsletter", date: new Date(parseInt(d.internalDate)).toISOString() })
             continue
           }
           // Always import emails from known CRM contacts
@@ -311,6 +413,7 @@ async function _POST(req: NextRequest) {
           const matchedKeywords = getMatchedKeywords(subject)
           if (!isKnownContact && matchedKeywords.length === 0) {
             console.log(`[EMAIL FILTER] DROPPED (no keyword match): subject="${subject}"`)
+            droppedEmails.push({ subject, from: fromAddress, reason: "no keyword match", date: new Date(parseInt(d.internalDate)).toISOString() })
             continue
           }
           console.log(`[EMAIL FILTER] KEPT: subject="${subject}" knownContact=${isKnownContact} matchedKeywords=[${matchedKeywords.join(", ")}]`)
@@ -329,15 +432,16 @@ async function _POST(req: NextRequest) {
             message_id: d.id,
             message_id_header: getHeader("Message-ID") || null,
             thread_id: d.threadId || d.id,
-            read: false,
+            read: !(d.labelIds || []).includes("UNREAD"),
             received_at: new Date(parseInt(d.internalDate)).toISOString(),
+            attachments: attachments.length > 0 ? attachments : [],
           })
         }
 
         if (payloads.length > 0) {
           const { data: inserted } = await supabase
             .from("email_messages")
-            .insert(payloads)
+            .upsert(payloads, { onConflict: "message_id,connection_id" })
             .select()
           if (inserted) results.push(...inserted)
         }
@@ -394,6 +498,7 @@ async function _POST(req: NextRequest) {
 
                 let sentBody = ""
                 let sentHtml = ""
+                const sentAttachments: any[] = []
                 const traverseSent = (parts: any[]) => {
                   for (const part of parts || []) {
                     if (part.mimeType === "text/plain" && part.body?.data) {
@@ -401,11 +506,39 @@ async function _POST(req: NextRequest) {
                     } else if (part.mimeType === "text/html" && part.body?.data) {
                       sentHtml = Buffer.from(part.body.data, "base64url").toString("utf-8")
                     } else if (part.parts) { traverseSent(part.parts) }
+                    if (part.filename && part.body?.attachmentId && part.mimeType?.startsWith("image/")) {
+                      sentAttachments.push({
+                        filename: part.filename,
+                        mimeType: part.mimeType,
+                        size: part.body.size || 0,
+                        attachmentId: part.body.attachmentId,
+                        messageId: d.id,
+                      })
+                    }
                   }
                 }
                 if (d.payload?.parts) traverseSent(d.payload.parts)
                 else if (d.payload?.body?.data) {
                   sentBody = Buffer.from(d.payload.body.data, "base64url").toString("utf-8")
+                }
+
+                // Fetch actual attachment data for images
+                for (const att of sentAttachments) {
+                  try {
+                    const attRes = await fetch(
+                      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${att.messageId}/attachments/${att.attachmentId}`,
+                      { headers: { Authorization: `Bearer ${accessToken}` } }
+                    )
+                    if (attRes.ok) {
+                      const attData = await attRes.json()
+                      att.data = attData.data || ""
+                      delete att.attachmentId
+                      delete att.messageId
+                      console.log(`[EMAIL FETCH] Retrieved sent attachment: ${att.filename} (${att.mimeType}, ${att.size} bytes)`)
+                    }
+                  } catch (e) {
+                    console.error(`[EMAIL FETCH] Failed to fetch sent attachment ${att.filename}:`, e)
+                  }
                 }
 
                 sentPayloads.push({
@@ -423,13 +556,14 @@ async function _POST(req: NextRequest) {
                   thread_id: threadId,
                   read: true,
                   sent_at: new Date(parseInt(d.internalDate)).toISOString(),
+                  attachments: sentAttachments.length > 0 ? sentAttachments : [],
                 })
               }
 
               if (sentPayloads.length > 0) {
                 const { data: sentInserted } = await supabase
                   .from("email_messages")
-                  .insert(sentPayloads)
+                  .upsert(sentPayloads, { onConflict: "message_id,connection_id" })
                   .select()
                 if (sentInserted) results.push(...sentInserted)
                 console.log(`[EMAIL FETCH] Imported ${sentPayloads.length} sent emails from Gmail Sent folder`)
@@ -704,7 +838,7 @@ async function _POST(req: NextRequest) {
             html_body: sanitizeText(parsed.html) || null,
             message_id: uid,
             thread_id: sanitizeText(parsed.inReplyTo) || uid,
-            read: false,
+            read: raw.flags?.includes("\\Seen") || false,
             received_at: parsed.date?.toISOString() || new Date().toISOString(),
           })
         }
@@ -731,8 +865,19 @@ async function _POST(req: NextRequest) {
       }
     }
 
+    // Update last_fetched_at on the connection
+    const nowISO = new Date().toISOString()
+    const { error: updateErr } = await supabase.from("email_connections").update({ last_fetched_at: nowISO }).eq("id", conn.id)
+    if (updateErr) console.error("[EMAIL FETCH] Failed to update last_fetched_at:", updateErr.message)
+    else console.log("[EMAIL FETCH] Updated last_fetched_at to", nowISO, "for connection", conn.id)
+
     return NextResponse.json({
-      success: true, fetched: results.length, messages: results, nextPageToken,
+      success: true,
+      fetched: results.length,
+      messages: results,
+      dropped: droppedEmails,
+      dateRange: { from: cutoffISO, to: nowISO },
+      nextPageToken,
     })
   } catch (err: any) {
     console.error("[EMAIL FETCH] Error:", err)

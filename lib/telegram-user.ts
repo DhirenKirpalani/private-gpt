@@ -7,7 +7,9 @@ export function createTelegramClient(sessionString?: string): TelegramClient {
   const apiHash = process.env.TELEGRAM_API_HASH || ""
   const session = new StringSession(sessionString || "")
   const client = new TelegramClient(session, apiId, apiHash, {
-    connectionRetries: 5,
+    connectionRetries: 1,
+    retryDelay: 1000,
+    autoReconnect: false,
   })
   return client
 }

@@ -1271,24 +1271,31 @@ export async function deleteTelegramConnection(userId: string, connectionId: str
 export async function importContactsFromTelegram(userId: string): Promise<number> {
   const { data: messages, error } = await supabase
     .from("telegram_messages")
-    .select("from_id, from_first_name, from_last_name, from_username, body, timestamp")
+    .select("from_id, from_first_name, from_last_name, from_username, from_phone, body, timestamp")
     .eq("user_id", userId)
     .eq("direction", "received")
     .not("from_id", "is", null)
 
   if (error || !messages || messages.length === 0) return 0
 
-  const uniqueSenders = new Map<string, { firstName?: string; lastName?: string; username?: string; lastContact?: string }>()
+  // Skip known Telegram service accounts
+  const SERVICE_ACCOUNT_IDS = new Set(["777000", "427728", "333000"])
+
+  const uniqueSenders = new Map<string, { firstName?: string; lastName?: string; username?: string; phone?: string; lastContact?: string }>()
   for (const msg of messages) {
+    if (SERVICE_ACCOUNT_IDS.has(msg.from_id)) continue
     if (!uniqueSenders.has(msg.from_id)) {
       uniqueSenders.set(msg.from_id, {
         firstName: msg.from_first_name,
         lastName: msg.from_last_name,
         username: msg.from_username,
+        phone: msg.from_phone,
         lastContact: msg.timestamp,
       })
     }
   }
+
+  if (uniqueSenders.size === 0) return 0
 
   const senderIds = Array.from(uniqueSenders.keys())
   const { data: existing } = await supabase
@@ -1304,11 +1311,12 @@ export async function importContactsFromTelegram(userId: string): Promise<number
   const rows = newSenders.map(id => {
     const info = uniqueSenders.get(id)!
     const name = [info.firstName, info.lastName].filter(Boolean).join(" ") || info.username || id
+    const phone = info.phone || (info.username ? `@${info.username}` : id)
     return {
       user_id: userId,
       name,
       email: null,
-      phone: id,
+      phone,
       company: null,
       role: null,
       location: null,
@@ -1516,6 +1524,27 @@ export async function upsertKanbanCols(
   const { error } = await supabase.from("crm_kanban_cols").insert(
     cols.map((c, i) => ({ user_id: userId, board, col_id: c.id, label: c.label, color: c.color, position: i }))
   )
+  if (error) throw error
+}
+
+// ─── CRM Kanban card-to-column persistence ──────────────────────────────────
+
+export async function getKanbanCardCols(userId: string, board: string): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from("crm_kanban_card_cols")
+    .select("card_id, col_id")
+    .eq("user_id", userId)
+    .eq("board", board)
+  if (error) throw error
+  const map: Record<string, string> = {}
+  for (const r of data || []) map[r.card_id] = r.col_id
+  return map
+}
+
+export async function setKanbanCardCol(userId: string, board: string, cardId: string, colId: string) {
+  const { error } = await supabase
+    .from("crm_kanban_card_cols")
+    .upsert({ user_id: userId, board, card_id: cardId, col_id: colId, updated_at: new Date().toISOString() })
   if (error) throw error
 }
 

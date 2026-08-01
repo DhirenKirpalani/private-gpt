@@ -116,7 +116,10 @@ async function _POST(req: NextRequest) {
     }
     return NextResponse.json({ error: err?.message || "Failed to fetch media" }, { status: 500 })
   } finally {
-    if (client) { try { await client.disconnect() } catch {} }
+    if (client) {
+      try { await client.disconnect() } catch {}
+      try { client.destroy() } catch {}
+    }
   }
 }
 
