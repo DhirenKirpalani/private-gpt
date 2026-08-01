@@ -405,7 +405,7 @@ export default function CRMPage() {
       threadGroups.get(tid)!.push(m)
     }
     let unread = 0
-    for (const [tid, msgs] of threadGroups) {
+    for (const [tid, msgs] of Array.from(threadGroups)) {
       // Check if any message in this thread has a custom column mapping
       const customColId = msgs.find(m => emailCardCols[m.id])?.id
       if (customColId) {
@@ -537,7 +537,7 @@ export default function CRMPage() {
   // Assign each thread to exactly one kanban column (based on latest message)
   const threadColumnMap = useMemo(() => {
     const map = new Map<string, string>()
-    for (const [tid, msgs] of threadedMessages) {
+    for (const [tid, msgs] of Array.from(threadedMessages)) {
       const lastMsg = msgs[msgs.length - 1]
       const colId = msgCardCols[lastMsg?.id] || (lastMsg?.direction === "sent" ? "sent" : lastMsg?.read ? "read" : "unread")
       map.set(tid, colId)
