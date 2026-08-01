@@ -43,17 +43,21 @@ async function _POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 })
     }
 
-    // Get any connected calendar (Google or Calendly)
-    const { data: conn, error } = await supabase
+    // Get ALL connected calendar connections (Google + Calendly)
+    const { data: connections, error } = await supabase
       .from("calendar_connections")
       .select("*")
       .eq("user_id", userId)
       .eq("status", "connected")
-      .maybeSingle()
 
-    if (error || !conn) {
+    if (error || !connections || connections.length === 0) {
       return NextResponse.json({ error: "Calendar connection not found" }, { status: 404 })
     }
+
+    let totalFetched = 0
+    const allResults: any[] = []
+
+    for (const conn of connections) {
 
     // If Calendly, fetch events directly
     if (conn.provider === "calendly") {
@@ -62,7 +66,8 @@ async function _POST(req: NextRequest) {
       // Refresh if expired
       if (conn.token_expires_at && new Date(conn.token_expires_at) <= new Date()) {
         if (!conn.refresh_token) {
-          return NextResponse.json({ error: "Calendly token expired and no refresh token" }, { status: 401 })
+          console.error("[CALENDAR FETCH] Calendly token expired and no refresh token")
+          continue
         }
         const refreshRes = await fetch("https://auth.calendly.com/oauth/token", {
           method: "POST",
@@ -76,7 +81,8 @@ async function _POST(req: NextRequest) {
         })
         const refreshData = await refreshRes.json()
         if (!refreshRes.ok) {
-          return NextResponse.json({ error: refreshData.message || "Failed to refresh Calendly token" }, { status: 401 })
+          console.error("[CALENDAR FETCH] Failed to refresh Calendly token:", refreshData.message)
+          continue
         }
         accessToken = refreshData.access_token
         const expiresIn = refreshData.expires_in || 7200
@@ -95,19 +101,20 @@ async function _POST(req: NextRequest) {
       const userData = await userRes.json()
       if (!userRes.ok) {
         console.error("[CALENDAR FETCH] Calendly /users/me failed:", userRes.status, JSON.stringify(userData))
-        return NextResponse.json({ error: userData.message || "Failed to get Calendly user" }, { status: 500 })
+        continue
       }
       const userUri = userData.resource?.uri
       if (!userUri) {
-        return NextResponse.json({ error: "No Calendly user URI found" }, { status: 500 })
+        console.error("[CALENDAR FETCH] No Calendly user URI found")
+        continue
       }
 
-      // Fetch scheduled events (next 30 days)
-      const now = new Date().toISOString()
+      // Fetch scheduled events (past 7 days to next 30 days)
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
       const eventsUrl = new URL("https://api.calendly.com/scheduled_events")
       eventsUrl.searchParams.set("user", userUri)
-      eventsUrl.searchParams.set("min_start_time", now)
+      eventsUrl.searchParams.set("min_start_time", sevenDaysAgo)
       eventsUrl.searchParams.set("max_start_time", thirtyDaysLater)
       eventsUrl.searchParams.set("count", "100")
 
@@ -116,7 +123,8 @@ async function _POST(req: NextRequest) {
       })
       const eventsData = await eventsRes.json()
       if (!eventsRes.ok) {
-        return NextResponse.json({ error: eventsData.message || "Failed to fetch Calendly events" }, { status: 500 })
+        console.error("[CALENDAR FETCH] Calendly events fetch failed:", eventsData.message)
+        continue
       }
 
       const events = eventsData.collection || []
@@ -164,7 +172,9 @@ async function _POST(req: NextRequest) {
         imported++
       }
 
-      return NextResponse.json({ success: true, fetched: imported, events: [] })
+      totalFetched += imported
+      console.log(`[CALENDAR FETCH] Calendly: imported ${imported} events`)
+      continue
     }
 
     // Google Calendar fetch
@@ -314,7 +324,12 @@ async function _POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, fetched: results.length, events: results })
+    totalFetched += results.length
+    allResults.push(...results)
+    console.log(`[CALENDAR FETCH] Google: imported ${results.length} events`)
+    } // end for loop over connections
+
+    return NextResponse.json({ success: true, fetched: totalFetched, events: allResults })
   } catch (err: any) {
     console.error("[CALENDAR FETCH]", err)
     return NextResponse.json({ error: err?.message || "Failed to fetch calendar events" }, { status: 500 })
