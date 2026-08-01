@@ -233,6 +233,147 @@ async function _POST(req: NextRequest) {
         const messageIds = allMessageIds
         console.log(`[EMAIL FETCH] Gmail returned ${messageIds.length} messages. since=${since || "none"}, cutoff=${cutoffISO}`)
         if (messageIds.length === 0) {
+          // No new received emails, but still fetch sent emails for tracked threads
+          console.log(`[SENT FETCH] No received emails from Gmail, checking sent emails...`)
+          const { data: existingThreadEmails } = await supabase
+            .from("email_messages")
+            .select("thread_id, subject, body, direction")
+            .eq("user_id", userId)
+            .eq("connection_id", conn.id)
+            .not("thread_id", "is", null)
+          console.log(`[SENT FETCH] existingThreadEmails: ${existingThreadEmails?.length || 0} rows`)
+
+          if (existingThreadEmails && existingThreadEmails.length > 0) {
+            const trackedThreadIds = new Set(existingThreadEmails.map((te: any) => te.thread_id).filter(Boolean))
+            console.log(`[SENT FETCH] trackedThreadIds (${trackedThreadIds.size}):`, Array.from(trackedThreadIds).slice(0, 10))
+            const sentCutoffDate = new Date()
+            sentCutoffDate.setDate(sentCutoffDate.getDate() - 15)
+            const sentAfterTimestamp = Math.floor(sentCutoffDate.getTime() / 1000)
+            const sentQParam = encodeURIComponent(`after:${sentAfterTimestamp} in:sent`)
+            const sentListRes = await fetch(
+              `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${sentQParam}`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            )
+            const sentListData = await sentListRes.json()
+            const sentResults: any[] = []
+            if (sentListRes.ok && sentListData.messages) {
+              const sentMessageIds = sentListData.messages.map((m: any) => m.id)
+              console.log(`[SENT FETCH] Gmail returned ${sentMessageIds.length} sent emails`)
+              const { data: existingSentRows } = await supabase
+                .from("email_messages")
+                .select("message_id")
+                .eq("user_id", userId)
+                .eq("connection_id", conn.id)
+                .in("message_id", sentMessageIds)
+              const existingSentIds = new Set((existingSentRows || []).map((r: any) => r.message_id))
+              const newSentIds = sentMessageIds.filter((id: string) => !existingSentIds.has(id))
+              console.log(`[SENT FETCH] ${newSentIds.length} new sent emails to check (after filtering ${existingSentIds.size} existing)`)
+
+              if (newSentIds.length > 0) {
+                const sentDetails: (any | null)[] = []
+                for (let i = 0; i < newSentIds.length; i += 8) {
+                  const batch = newSentIds.slice(i, i + 8)
+                  const batchResults = await Promise.allSettled(
+                    batch.map((id: string) =>
+                      fetch(
+                        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+                        { headers: { Authorization: `Bearer ${accessToken}` } }
+                      ).then(r => r.ok ? r.json() : null)
+                    )
+                  )
+                  for (const r of batchResults) {
+                    sentDetails.push(r.status === "fulfilled" ? r.value : null)
+                  }
+                }
+
+                const sentPayloads: any[] = []
+                for (const d of sentDetails) {
+                  if (!d) continue
+                  const threadId = d.threadId || d.id
+                  const subj = (d.payload?.headers || []).find((h: any) => h.name === "Subject")?.value || "(no subject)"
+                  if (!trackedThreadIds.has(threadId)) {
+                    console.log(`[SENT FETCH] SKIP thread_id=${threadId} not in tracked set — subject="${subj}"`)
+                    continue
+                  }
+                  console.log(`[SENT FETCH] MATCH thread_id=${threadId} — subject="${subj}"`)
+
+                  const headers = d.payload?.headers || []
+                  const getHeader = (name: string) => headers.find((h: any) => h.name === name)?.value || ""
+
+                  let sentBody = ""
+                  let sentHtml = ""
+                  const sentAttachments: any[] = []
+                  const traverseSent = (parts: any[]) => {
+                    for (const part of parts || []) {
+                      if (part.mimeType === "text/plain" && part.body?.data) {
+                        sentBody = Buffer.from(part.body.data, "base64url").toString("utf-8")
+                      } else if (part.mimeType === "text/html" && part.body?.data) {
+                        sentHtml = Buffer.from(part.body.data, "base64url").toString("utf-8")
+                      } else if (part.parts) { traverseSent(part.parts) }
+                      if (part.filename && part.body?.attachmentId && part.mimeType?.startsWith("image/")) {
+                        sentAttachments.push({
+                          filename: part.filename,
+                          mimeType: part.mimeType,
+                          size: part.body.size || 0,
+                          attachmentId: part.body.attachmentId,
+                          messageId: d.id,
+                        })
+                      }
+                    }
+                  }
+                  if (d.payload?.parts) traverseSent(d.payload.parts)
+                  else if (d.payload?.body?.data) {
+                    sentBody = Buffer.from(d.payload.body.data, "base64url").toString("utf-8")
+                  }
+
+                  for (const att of sentAttachments) {
+                    try {
+                      const attRes = await fetch(
+                        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${att.messageId}/attachments/${att.attachmentId}`,
+                        { headers: { Authorization: `Bearer ${accessToken}` } }
+                      )
+                      const attData = await attRes.json()
+                      if (attRes.ok && attData.data) {
+                        att.data = attData.data || ""
+                        delete att.attachmentId
+                        delete att.messageId
+                      }
+                    } catch (e) {
+                      console.error(`[EMAIL FETCH] Failed to fetch sent attachment ${att.filename}:`, e)
+                    }
+                  }
+
+                  sentPayloads.push({
+                    user_id: userId,
+                    connection_id: conn.id,
+                    provider: providerId,
+                    direction: "sent",
+                    from_address: getHeader("From"),
+                    to_address: getHeader("To"),
+                    subject: getHeader("Subject"),
+                    body: sentBody || sentHtml,
+                    html_body: sentHtml || null,
+                    message_id: d.id,
+                    message_id_header: getHeader("Message-ID") || null,
+                    thread_id: threadId,
+                    read: true,
+                    sent_at: new Date(parseInt(d.internalDate)).toISOString(),
+                    attachments: sentAttachments.length > 0 ? sentAttachments : [],
+                  })
+                }
+
+                if (sentPayloads.length > 0) {
+                  const { data: sentInserted } = await supabase
+                    .from("email_messages")
+                    .upsert(sentPayloads, { onConflict: "message_id,connection_id" })
+                    .select()
+                  if (sentInserted) sentResults.push(...sentInserted)
+                  console.log(`[EMAIL FETCH] Imported ${sentPayloads.length} sent emails (0 received path)`)
+                }
+              }
+            }
+            return NextResponse.json({ success: true, fetched: sentResults.length, messages: sentResults, dropped: [], dateRange: { from: cutoffISO, to: new Date().toISOString() }, nextPageToken })
+          }
           return NextResponse.json({ success: true, fetched: 0, messages: [], dropped: [], dateRange: { from: cutoffISO, to: new Date().toISOString() }, nextPageToken })
         }
 
@@ -293,7 +434,147 @@ async function _POST(req: NextRequest) {
         }
 
         if (newIds.length === 0) {
-          return NextResponse.json({ success: true, fetched: 0, messages: [], dropped: droppedEmails, dateRange: { from: cutoffISO, to: new Date().toISOString() }, nextPageToken })
+          console.log(`[SENT FETCH] No new received emails, checking sent emails for tracked threads...`)
+          // Even with no new received emails, still fetch sent emails for tracked threads
+          const { data: existingThreadEmails } = await supabase
+            .from("email_messages")
+            .select("thread_id, subject, body, direction")
+            .eq("user_id", userId)
+            .eq("connection_id", conn.id)
+            .not("thread_id", "is", null)
+          console.log(`[SENT FETCH] existingThreadEmails: ${existingThreadEmails?.length || 0} rows`)
+
+          if (existingThreadEmails && existingThreadEmails.length > 0) {
+            const trackedThreadIds = new Set(existingThreadEmails.map((te: any) => te.thread_id).filter(Boolean))
+            console.log(`[SENT FETCH] trackedThreadIds (${trackedThreadIds.size}):`, Array.from(trackedThreadIds).slice(0, 10))
+            const sentCutoffDate = new Date()
+            sentCutoffDate.setDate(sentCutoffDate.getDate() - 15)
+            const sentAfterTimestamp = Math.floor(sentCutoffDate.getTime() / 1000)
+            const sentQParam = encodeURIComponent(`after:${sentAfterTimestamp} in:sent`)
+            const sentListRes = await fetch(
+              `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${sentQParam}`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            )
+            const sentListData = await sentListRes.json()
+            if (sentListRes.ok && sentListData.messages) {
+              const sentMessageIds = sentListData.messages.map((m: any) => m.id)
+              console.log(`[SENT FETCH] Gmail returned ${sentMessageIds.length} sent emails`)
+              const { data: existingSentRows } = await supabase
+                .from("email_messages")
+                .select("message_id")
+                .eq("user_id", userId)
+                .eq("connection_id", conn.id)
+                .in("message_id", sentMessageIds)
+              const existingSentIds = new Set((existingSentRows || []).map((r: any) => r.message_id))
+              const newSentIds = sentMessageIds.filter((id: string) => !existingSentIds.has(id))
+              console.log(`[SENT FETCH] ${newSentIds.length} new sent emails to check (after filtering ${existingSentIds.size} existing)`)
+
+              if (newSentIds.length > 0) {
+                const sentDetails: (any | null)[] = []
+                for (let i = 0; i < newSentIds.length; i += 8) {
+                  const batch = newSentIds.slice(i, i + 8)
+                  const batchResults = await Promise.allSettled(
+                    batch.map((id: string) =>
+                      fetch(
+                        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+                        { headers: { Authorization: `Bearer ${accessToken}` } }
+                      ).then(r => r.ok ? r.json() : null)
+                    )
+                  )
+                  for (const r of batchResults) {
+                    sentDetails.push(r.status === "fulfilled" ? r.value : null)
+                  }
+                }
+
+                const sentPayloads: any[] = []
+                for (const d of sentDetails) {
+                  if (!d) continue
+                  const threadId = d.threadId || d.id
+                  const subj = (d.payload?.headers || []).find((h: any) => h.name === "Subject")?.value || "(no subject)"
+                  if (!trackedThreadIds.has(threadId)) {
+                    console.log(`[SENT FETCH] SKIP thread_id=${threadId} not in tracked set — subject="${subj}"`)
+                    continue
+                  }
+                  console.log(`[SENT FETCH] MATCH thread_id=${threadId} — subject="${subj}"`)
+
+                  const headers = d.payload?.headers || []
+                  const getHeader = (name: string) => headers.find((h: any) => h.name === name)?.value || ""
+
+                  let sentBody = ""
+                  let sentHtml = ""
+                  const sentAttachments: any[] = []
+                  const traverseSent = (parts: any[]) => {
+                    for (const part of parts || []) {
+                      if (part.mimeType === "text/plain" && part.body?.data) {
+                        sentBody = Buffer.from(part.body.data, "base64url").toString("utf-8")
+                      } else if (part.mimeType === "text/html" && part.body?.data) {
+                        sentHtml = Buffer.from(part.body.data, "base64url").toString("utf-8")
+                      } else if (part.parts) { traverseSent(part.parts) }
+                      if (part.filename && part.body?.attachmentId && part.mimeType?.startsWith("image/")) {
+                        sentAttachments.push({
+                          filename: part.filename,
+                          mimeType: part.mimeType,
+                          size: part.body.size || 0,
+                          attachmentId: part.body.attachmentId,
+                          messageId: d.id,
+                        })
+                      }
+                    }
+                  }
+                  if (d.payload?.parts) traverseSent(d.payload.parts)
+                  else if (d.payload?.body?.data) {
+                    sentBody = Buffer.from(d.payload.body.data, "base64url").toString("utf-8")
+                  }
+
+                  for (const att of sentAttachments) {
+                    try {
+                      const attRes = await fetch(
+                        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${att.messageId}/attachments/${att.attachmentId}`,
+                        { headers: { Authorization: `Bearer ${accessToken}` } }
+                      )
+                      const attData = await attRes.json()
+                      if (attRes.ok && attData.data) {
+                        att.data = attData.data || ""
+                        delete att.attachmentId
+                        delete att.messageId
+                      }
+                    } catch (e) {
+                      console.error(`[EMAIL FETCH] Failed to fetch sent attachment ${att.filename}:`, e)
+                    }
+                  }
+
+                  sentPayloads.push({
+                    user_id: userId,
+                    connection_id: conn.id,
+                    provider: providerId,
+                    direction: "sent",
+                    from_address: getHeader("From"),
+                    to_address: getHeader("To"),
+                    subject: getHeader("Subject"),
+                    body: sentBody || sentHtml,
+                    html_body: sentHtml || null,
+                    message_id: d.id,
+                    message_id_header: getHeader("Message-ID") || null,
+                    thread_id: threadId,
+                    read: true,
+                    sent_at: new Date(parseInt(d.internalDate)).toISOString(),
+                    attachments: sentAttachments.length > 0 ? sentAttachments : [],
+                  })
+                }
+
+                if (sentPayloads.length > 0) {
+                  const { data: sentInserted } = await supabase
+                    .from("email_messages")
+                    .upsert(sentPayloads, { onConflict: "message_id,connection_id" })
+                    .select()
+                  if (sentInserted) results.push(...sentInserted)
+                  console.log(`[EMAIL FETCH] Imported ${sentPayloads.length} sent emails (no new received path)`)
+                }
+              }
+            }
+          }
+
+          return NextResponse.json({ success: true, fetched: results.length, messages: results, dropped: droppedEmails, dateRange: { from: cutoffISO, to: new Date().toISOString() }, nextPageToken })
         }
 
         // Fetch thread IDs of existing emails in DB so we can match replies to keyword threads + sent emails
@@ -447,14 +728,19 @@ async function _POST(req: NextRequest) {
         }
 
         // ── Fetch sent emails from Gmail Sent folder ──
-        // Only fetch sent emails that share a thread_id with existing emails in the DB
-        if (existingThreadEmails && existingThreadEmails.length > 0) {
-          // Include thread_ids from newly imported received emails
-          const trackedThreadIds = new Set(existingThreadEmails.map((te: any) => te.thread_id).filter(Boolean))
+        // Fetch sent emails that share a thread_id with existing or newly imported emails
+        if ((existingThreadEmails && existingThreadEmails.length > 0) || payloads.length > 0) {
+          // Include thread_ids from existing + newly imported received emails
+          const trackedThreadIds = new Set((existingThreadEmails || []).map((te: any) => te.thread_id).filter(Boolean))
           for (const p of payloads) {
             if (p.thread_id) trackedThreadIds.add(p.thread_id)
           }
-          const sentQParam = encodeURIComponent(`after:${afterTimestamp} in:sent`)
+          // Use 15-day window for sent emails (not incremental cutoff) since sent replies
+          // may be older than last_fetched_at but still belong to tracked threads
+          const sentCutoffDate = new Date()
+          sentCutoffDate.setDate(sentCutoffDate.getDate() - 15)
+          const sentAfterTimestamp = Math.floor(sentCutoffDate.getTime() / 1000)
+          const sentQParam = encodeURIComponent(`after:${sentAfterTimestamp} in:sent`)
           const sentListRes = await fetch(
             `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${sentQParam}`,
             { headers: { Authorization: `Bearer ${accessToken}` } }
