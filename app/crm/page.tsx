@@ -130,6 +130,7 @@ export default function CRMPage() {
     keptEmails: any[]
     droppedEmails: any[]
     dateRange: { from: string | null; to: string | null }
+    isInitial: boolean
   } | null>(null)
   const [emailView, setEmailView] = useState<"kanban" | "table">("kanban")
   const [messagesView, setMessagesView] = useState<"kanban" | "table">("kanban")
@@ -1042,6 +1043,7 @@ export default function CRMPage() {
             keptEmails: [],
             droppedEmails: [],
             dateRange: { from: null, to: null },
+            isInitial: true,
           })
 
           // Animate progress linearly to 95% over ~15 seconds, then wait for API
@@ -1073,6 +1075,7 @@ export default function CRMPage() {
               keptEmails: fetchedMsgs,
               droppedEmails: droppedMsgs,
               dateRange: { from: apiDateRange.from, to: apiDateRange.to },
+              isInitial: true,
             })
 
             await loadFromDB()
@@ -1122,6 +1125,7 @@ export default function CRMPage() {
         keptEmails: [],
         droppedEmails: [],
         dateRange: { from: null, to: null },
+        isInitial: false,
       })
     }
 
@@ -1160,6 +1164,7 @@ export default function CRMPage() {
           keptEmails: fetched,
           droppedEmails: droppedEmails,
           dateRange: apiDateRange,
+          isInitial: false,
         })
       }
       const merge = (prev: any[]) => {
@@ -2754,6 +2759,86 @@ export default function CRMPage() {
                             </div>
                           </div>
                         )}
+
+                        {/* Already imported emails — only on initial connection */}
+                        {emailSyncModal.isInitial && (() => {
+                          const alreadyImported = emailSyncModal.droppedEmails.filter((e: any) => e.reason === "already imported")
+                          if (alreadyImported.length === 0) return null
+                          return (
+                            <div className="mb-3">
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="h-2 w-2 rounded-full bg-sky-500/60" />
+                                <span className="text-xs font-semibold text-sky-400/80">Already imported ({alreadyImported.length})</span>
+                              </div>
+                              <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                                {alreadyImported.map((email: any, i: number) => (
+                                  <div
+                                    key={i}
+                                    className="flex items-start gap-2.5 rounded-lg border border-sky-500/10 bg-sky-500/[0.02] p-2.5 text-left animate-fade-in-up"
+                                    style={{ animationDelay: `${i * 30}ms` }}
+                                  >
+                                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500/10 text-[10px] font-bold text-sky-400/60">
+                                      {(email.from || "?").charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-medium text-muted-foreground truncate">
+                                        {email.subject || "(No subject)"}
+                                      </p>
+                                      <p className="text-[10px] text-muted-foreground/60 truncate">
+                                        {email.from || "Unknown"}
+                                      </p>
+                                    </div>
+                                    {email.date && (
+                                      <span className="text-[10px] text-muted-foreground/50 shrink-0">
+                                        {new Date(email.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })()}
+
+                        {/* Filtered out emails — only on initial connection */}
+                        {emailSyncModal.isInitial && (() => {
+                          const filtered = emailSyncModal.droppedEmails.filter((e: any) => e.reason !== "already imported")
+                          if (filtered.length === 0) return null
+                          return (
+                            <div className="mb-3">
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <div className="h-2 w-2 rounded-full bg-red-500/60" />
+                                <span className="text-xs font-semibold text-red-400/80">Filtered out ({filtered.length})</span>
+                              </div>
+                              <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                                {filtered.map((email: any, i: number) => (
+                                  <div
+                                    key={i}
+                                    className="flex items-start gap-2.5 rounded-lg border border-white/5 bg-white/[0.02] p-2.5 text-left animate-fade-in-up"
+                                    style={{ animationDelay: `${i * 40}ms` }}
+                                  >
+                                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-[10px] font-bold text-red-400/60">
+                                      {(email.from || "?").charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-medium text-muted-foreground truncate">
+                                        {email.subject || "(No subject)"}
+                                      </p>
+                                      <p className="text-[10px] text-muted-foreground/60 truncate">
+                                        {email.from || "Unknown"} · <span className="text-red-400/50">{email.reason}</span>
+                                      </p>
+                                    </div>
+                                    {email.date && (
+                                      <span className="text-[10px] text-muted-foreground/50 shrink-0">
+                                        {new Date(email.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })()}
 
                         <button
                           onClick={() => setEmailSyncModal(prev => prev ? { ...prev, visible: false } : null)}

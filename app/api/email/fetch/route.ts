@@ -449,7 +449,11 @@ async function _POST(req: NextRequest) {
         // ── Fetch sent emails from Gmail Sent folder ──
         // Only fetch sent emails that share a thread_id with existing emails in the DB
         if (existingThreadEmails && existingThreadEmails.length > 0) {
+          // Include thread_ids from newly imported received emails
           const trackedThreadIds = new Set(existingThreadEmails.map((te: any) => te.thread_id).filter(Boolean))
+          for (const p of payloads) {
+            if (p.thread_id) trackedThreadIds.add(p.thread_id)
+          }
           const sentQParam = encodeURIComponent(`after:${afterTimestamp} in:sent`)
           const sentListRes = await fetch(
             `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${sentQParam}`,

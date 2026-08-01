@@ -251,7 +251,7 @@ function ChannelsPageContent() {
     if (!smtpForm.email_address || !smtpForm.smtp_pass) { setSaveError(t('channelEmailPassRequired')); return }
     setSaving(true); setSaveError("")
     try {
-      // 1. Save connection first
+      // 1. Save connection first (as pending until SMTP test passes)
       const connPayload = {
         user_id: user.id,
         provider: modalProvider.id,
@@ -263,7 +263,7 @@ function ChannelsPageContent() {
         smtp_pass: smtpForm.smtp_pass,
         imap_host: smtpForm.imap_host,
         imap_port: parseInt(smtpForm.imap_port),
-        status: "connected",
+        status: "pending",
       }
       console.log(`[CHANNELS SAVE] Saving connection:`, { provider: connPayload.provider, email: connPayload.email_address, smtp_host: connPayload.smtp_host, imap_host: connPayload.imap_host })
       await saveEmailConnection(connPayload)
@@ -283,6 +283,8 @@ function ChannelsPageContent() {
       if (!testRes.ok) {
         const testData = await testRes.json()
         console.error(`[CHANNELS SAVE] Test failed:`, testData.error)
+        // Update connection status to error
+        await saveEmailConnection({ ...connPayload, status: "error", last_error: testData.error || "SMTP verification failed" })
         setSaveError(testData.error || "SMTP verification failed. Please check your credentials.")
         setSaving(false)
         return
@@ -706,8 +708,8 @@ function ChannelsPageContent() {
               <div className="space-y-3">
                 {EMAIL_PROVIDERS.map(provider => {
                   const conn = emailConnections[provider.id]
-                  const connected = !!conn
-                  const hasError = connected && conn.status === "error"
+                  const connected = !!conn && conn.status === "connected"
+                  const hasError = !!conn && conn.status === "error"
                   return (
                     <div key={provider.id} className={cn("flex flex-col gap-3 rounded-xl border p-3 shadow-sm transition-all duration-200 sm:flex-row sm:items-center sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5 hover:sm:-translate-y-0.5", connected ? (hasError ? "border-red-500/30 bg-[#2a3444]" : "border-emerald-500/30 bg-[#2a3444]") : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{provider.icon}</div>
