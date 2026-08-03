@@ -219,6 +219,7 @@ export default function ChatPage() {
     setKbEnabled(kb)
     setChannelsEnabled(ch)
     setWebSearchEnabled(ws)
+    loadConnectedChannels()
   }, [])
 
   // Load KB docs and their contents on mount if toggle is enabled
@@ -794,9 +795,9 @@ export default function ChatPage() {
         console.log("[WEB SEARCH] Skipped — enabled:", webSearchEnabled, "internal:", userAsksAboutInternal)
       }
 
-      // Fetch email/calendar context if Channels toggle is enabled
+      // Fetch email/calendar context only if user asks about channels-related topics
       let emailCalendarContext = ""
-      if (channelsEnabled && user) {
+      if (channelsEnabled && user && userAsksAboutEmailOrCalendar) {
         try {
           const ctxRes = await fetch("/api/ai/context", {
             method: "POST",
@@ -1712,17 +1713,28 @@ export default function ChatPage() {
         getTelegramUserSession(user.id),
       ])
       const channels: typeof connectedChannels = []
-      const connectedEmail = emailConns.find((c: any) => c.status === "connected")
-      const emailProviderName = connectedEmail?.provider === "gmail" ? "Gmail" :
-        connectedEmail?.provider === "outlook" ? "Outlook" :
-        connectedEmail?.provider ? (connectedEmail.provider.charAt(0).toUpperCase() + connectedEmail.provider.slice(1)) : "Email"
-      channels.push({
-        id: "email",
-        name: emailProviderName,
-        icon: <Mail className="h-3.5 w-3.5" />,
-        connected: !!connectedEmail,
-        detail: connectedEmail ? (connectedEmail.email_address || "Connected") : "Not connected",
-      })
+      const connectedEmails = emailConns.filter((c: any) => c.status === "connected")
+      for (const connectedEmail of connectedEmails) {
+        const emailProviderName = connectedEmail.provider === "gmail" ? "Gmail" :
+          connectedEmail.provider === "outlook" ? "Outlook" :
+          connectedEmail.provider ? (connectedEmail.provider.charAt(0).toUpperCase() + connectedEmail.provider.slice(1)) : "Email"
+        channels.push({
+          id: `email_${connectedEmail.provider}`,
+          name: emailProviderName,
+          icon: <Mail className="h-3.5 w-3.5" />,
+          connected: true,
+          detail: connectedEmail.email_address || "Connected",
+        })
+      }
+      if (connectedEmails.length === 0) {
+        channels.push({
+          id: "email",
+          name: "Email",
+          icon: <Mail className="h-3.5 w-3.5" />,
+          connected: false,
+          detail: "Not connected",
+        })
+      }
       const calendarConn = calConns.find((c: any) => c.provider === "google" && c.status === "connected")
       channels.push({
         id: "calendar",
@@ -2187,21 +2199,6 @@ export default function ChatPage() {
                         <Paperclip className="h-3.5 w-3.5" />
                         <span className="hidden sm:inline">{t("chatUpload")}</span>
                       </button>
-                      {driveConnected && (
-                      <button
-                        type="button"
-                        onClick={() => driveFileInputRef.current?.click()}
-                        disabled={driveChatUploading}
-                        title="Upload to Google Drive"
-                        className={cn(
-                          "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
-                          inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                        )}
-                      >
-                        <HardDrive className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">{t("chatDrive")}</span>
-                      </button>
-                      )}
                       {/* Knowledge Base button */}
                       <button
                         onClick={() => handleTabClick("knowledge")}
@@ -2777,21 +2774,6 @@ export default function ChatPage() {
                       <Paperclip className="h-3.5 w-3.5" />
                       <span className="hidden sm:inline">{t("chatUpload")}</span>
                     </button>
-                    {driveConnected && (
-                    <button
-                      type="button"
-                      onClick={() => driveFileInputRef.current?.click()}
-                      disabled={driveChatUploading}
-                      title="Upload to Google Drive"
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
-                        inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                      )}
-                    >
-                      <HardDrive className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{t("chatDrive")}</span>
-                    </button>
-                    )}
                     {/* Knowledge Base button */}
                     <button
                       onClick={() => handleTabClick("knowledge")}

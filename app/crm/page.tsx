@@ -10,7 +10,7 @@ import {
   Filter, CircleDollarSign, ChevronDown, ChevronUp, X,
   ClipboardList, FileText, Send, Inbox,
   Star, StarOff, Shield, User, Loader2, Reply, Trash2, Check, Pencil, Menu, PanelLeft, Tag,
-  LayoutDashboard, MessageSquare, Calendar, ImagePlus,
+  LayoutDashboard, MessageSquare, Calendar, ImagePlus, Video,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { NotificationBell } from "@/components/notification-bell"
@@ -135,6 +135,18 @@ export default function CRMPage() {
   const [emailView, setEmailView] = useState<"kanban" | "table">("kanban")
   const [messagesView, setMessagesView] = useState<"kanban" | "table">("kanban")
   const [calendarView, setCalendarView] = useState<"kanban" | "table">("kanban")
+  const [calendarSyncModal, setCalendarSyncModal] = useState<{
+    visible: boolean
+    step: "connecting" | "done"
+    progress: number
+    totalFetched: number
+    totalScanned: number
+    importedEvents: any[]
+    droppedEvents: any[]
+    alreadyImportedEvents: any[]
+    dateRange: { from: string | null; to: string | null }
+    isInitial: boolean
+  } | null>(null)
   const TABLE_PAGE_SIZE = 10
   const [emailTablePage, setEmailTablePage] = useState(0)
   const [msgTablePage, setMsgTablePage] = useState(0)
@@ -147,6 +159,11 @@ export default function CRMPage() {
   const [contactEmailFilter, setContactEmailFilter] = useState<string | null>(null)
   const [keywordFilter, setKeywordFilter] = useState<string | null>(null)
   const [keywordFilterOpen, setKeywordFilterOpen] = useState(false)
+
+  // Calendar search + filter
+  const [calSearch, setCalSearch] = useState("")
+  const [calFilterOpen, setCalFilterOpen] = useState(false)
+  const [calFilter, setCalFilter] = useState<{ range: "all" | "today" | "week" | "upcoming" }>({ range: "all" })
   const EMAIL_KEYWORDS = [
     "proposal", "invoice", "contract", "quote", "purchase order",
     "payment", "receipt", "agreement", "deal", "billing", "estimate",
@@ -166,7 +183,7 @@ export default function CRMPage() {
   // Reset table pages when filters/search/channel change
   useEffect(() => { setEmailTablePage(0) }, [emailSearch, emailFilter, contactEmailFilter, keywordFilter, activeChannel])
   useEffect(() => { setMsgTablePage(0) }, [activeChannel])
-  useEffect(() => { setCalTablePage(0) }, [activeChannel])
+  useEffect(() => { setCalTablePage(0) }, [activeChannel, calSearch, calFilter])
 
   // Email kanban state
   const [emailKanbanCols, setEmailKanbanCols] = useState<KanbanCol[]>([
@@ -203,6 +220,7 @@ export default function CRMPage() {
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const emailSyncShownRef = useRef(false)
   const emailFetchingRef = useRef(false)
+  const tgFetchingRef = useRef(false)
 
   // Table status dropdown state
   const [emailStatusOpen, setEmailStatusOpen] = useState<string | null>(null)
@@ -326,8 +344,8 @@ export default function CRMPage() {
       if (conn.status === "connected") {
         list.push({
           id: conn.provider,
-          label: conn.provider === "gmail" ? "Gmail" : conn.provider === "outlook" ? "Outlook" : conn.email_address || conn.provider,
-          color: conn.provider === "gmail" ? "bg-red-500" : conn.provider === "outlook" ? "bg-blue-500" : "bg-slate-500",
+          label: conn.provider === "gmail" ? "Gmail" : conn.provider === "outlook" ? "Outlook" : conn.provider === "zoho" ? "Zoho Mail" : conn.provider === "icloud" ? "iCloud Mail" : conn.provider === "hostinger" ? "Hostinger Email" : conn.provider === "godaddy" ? "GoDaddy Email" : conn.email_address || conn.provider,
+          color: conn.provider === "gmail" ? "bg-red-500" : conn.provider === "outlook" ? "bg-blue-500" : conn.provider === "hostinger" ? "bg-purple-500" : conn.provider === "zoho" ? "bg-red-600" : conn.provider === "icloud" ? "bg-sky-500" : conn.provider === "godaddy" ? "bg-teal-500" : "bg-slate-500",
           type: "email",
           connected: true,
         })
@@ -340,6 +358,15 @@ export default function CRMPage() {
           label: conn.provider === "google" ? "Google Calendar" : "Calendly",
           color: conn.provider === "google" ? "bg-blue-400" : "bg-indigo-500",
           type: "calendar",
+          connected: true,
+        })
+      }
+      if (conn.status === "connected" && conn.provider === "googlemeet") {
+        list.push({
+          id: "googlemeet",
+          label: "Google Meet",
+          color: "bg-green-500",
+          type: "video",
           connected: true,
         })
       }
@@ -544,10 +571,52 @@ export default function CRMPage() {
       map.set(tid, colId)
     }
     return map
-  }, [threadedMessages])
+  }, [threadedMessages, msgCardCols])
 
-  // Upcoming calendar events count (events that haven't ended yet)
-  const upcomingEventsCount = calendarEvents.filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).length
+  // Messages unread count — count threads in the "unread" column
+  const msgUnreadCount = useMemo(() => {
+    let count = 0
+    for (const [, colId] of Array.from(threadColumnMap)) {
+      if (colId === "unread") count++
+    }
+    return count
+  }, [threadColumnMap])
+
+  // Upcoming calendar events — exclude events that have already ended
+  const upcomingCalendarEvents = useMemo(() => {
+    const now = new Date()
+    return calendarEvents
+      .filter((e: any) => e.end_time && new Date(e.end_time) > now)
+      .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+  }, [calendarEvents])
+
+  const upcomingEventsCount = upcomingCalendarEvents.length
+
+  // Filtered calendar events based on search + filter
+  const filteredCalendarEvents = useMemo(() => {
+    const now = new Date()
+    const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999)
+    const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7)
+    return upcomingCalendarEvents.filter((e: any) => {
+      if (calSearch) {
+        const q = calSearch.toLowerCase()
+        if (!e.summary?.toLowerCase().includes(q) && !e.location?.toLowerCase().includes(q)) return false
+      }
+      if (calFilter.range === "today") {
+        const t = new Date(e.start_time)
+        if (t < now || t > todayEnd) return false
+      }
+      if (calFilter.range === "week") {
+        const t = new Date(e.start_time)
+        if (t < now || t > weekEnd) return false
+      }
+      if (calFilter.range === "upcoming") {
+        const t = new Date(e.start_time)
+        if (t <= weekEnd) return false
+      }
+      return true
+    })
+  }, [upcomingCalendarEvents, calSearch, calFilter])
 
   const filtered = contacts.filter((c: Contact) =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -648,22 +717,17 @@ export default function CRMPage() {
           : (() => { setEmailMessages([]); setInboxMessages([]); setInboxFetched(false); return Promise.resolve() })(),
         calConnsRes.status === "fulfilled" && calConnsRes.value.length > 0
           ? (async () => {
-              setCalendarLoading(true)
-              try {
-                // Fetch fresh events from provider (Google or Calendly)
-                await fetch("/api/calendar/fetch", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ userId: user.id }),
-                })
-              } catch {}
-              // Then load from DB
-              try {
-                const events = await getCalendarEvents(user.id)
-                setCalendarEvents(events)
+              // Check if this is a first-time connection (no events in DB yet)
+              const existingEvents = await getCalendarEvents(user.id)
+              if (existingEvents.length === 0) {
+                // First sync — show modal
+                await fetchCalendar(true)
+              } else {
+                // Not first — load from DB, then background fetch
+                setCalendarEvents(existingEvents)
                 setCalendarFetched(true)
-              } catch {}
-              setCalendarLoading(false)
+                fetchCalendar()
+              }
             })()
           : (() => { setCalendarEvents([]); setCalendarFetched(false); return Promise.resolve() })(),
         waConnsRes.status === "fulfilled" && waConnsRes.value.length > 0
@@ -673,14 +737,14 @@ export default function CRMPage() {
             }).catch(() => {})
           : (() => { setWhatsAppMessages([]); setWhatsAppFetched(false); return Promise.resolve() })(),
         tgConnsRes.status === "fulfilled" && tgConnsRes.value
-          ? fetch("/api/telegram/user/fetch-chats", {
+          ? (tgFetchingRef.current ? Promise.resolve() : (tgFetchingRef.current = true, fetch("/api/telegram/user/fetch-chats", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ userId: user.id }),
             }).then(() => getTelegramMessages(user.id)).then((msgs: any[]) => {
               setTelegramMessages(msgs)
               setTelegramFetched(true)
-            }).catch(() => {})
+            }).catch(() => {}).finally(() => { tgFetchingRef.current = false })))
           : (() => { setTelegramMessages([]); setTelegramFetched(false); return Promise.resolve() })(),
         slConnsRes.status === "fulfilled" && slConnsRes.value.length > 0
           ? fetch("/api/slack/fetch", {
@@ -964,7 +1028,11 @@ export default function CRMPage() {
         const deduped = mRes.value.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true })
         setMsgKanbanCols(deduped)
       }
-      if (cRes.status === "fulfilled" && cRes.value.length > 0) setCalKanbanCols(cRes.value)
+      if (cRes.status === "fulfilled" && cRes.value.length > 0) {
+        const seen = new Set<string>()
+        const deduped = cRes.value.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true })
+        setCalKanbanCols(deduped)
+      }
       if (eCardRes.status === "fulfilled") setEmailCardCols(eCardRes.value)
       if (mCardRes.status === "fulfilled") setMsgCardCols(mCardRes.value)
     })
@@ -995,6 +1063,26 @@ export default function CRMPage() {
       setEmailSyncModal(null)
     }
   }, [activeTab])
+
+  // Clear calendar sync modal when leaving Calendar tab
+  useEffect(() => {
+    if (activeTab !== "Calendar" && calendarSyncModal) {
+      setCalendarSyncModal(null)
+    }
+  }, [activeTab])
+
+  // Reload calendar connections when Calendar or Overview tab is activated
+  useEffect(() => {
+    if (!user || (activeTab !== "Calendar" && activeTab !== "Overview")) return
+    getCalendarConnections(user.id).then((conns: any[]) => {
+      setCalendarConnections(conns)
+      const hasCalendarProvider = conns.some((c: any) => (c.provider === "google" || c.provider === "calendly") && c.status === "connected")
+      if (!hasCalendarProvider) {
+        setCalendarEvents([])
+        setCalendarFetched(false)
+      }
+    }).catch(() => {})
+  }, [user, activeTab])
 
   // Reload email data when Email tab is activated
   useEffect(() => {
@@ -1028,10 +1116,10 @@ export default function CRMPage() {
 
         await loadFromDB()
 
-        // Auto-fetch from Gmail in background, then reload from DB
-        const conn = conns.find((c: any) => c.status === "connected")
-        const isNewConnection = conn && !conn.last_fetched_at
-        if (conn && isNewConnection && !emailFetchingRef.current) {
+        // Auto-fetch from email provider in background, then reload from DB
+        // Find any connected provider that hasn't been fetched yet (new connection)
+        const newConn = conns.find((c: any) => c.status === "connected" && !c.last_fetched_at)
+        if (newConn && !emailFetchingRef.current) {
           emailFetchingRef.current = true
           setInboxLoading(true)
           setEmailSyncModal({
@@ -1057,7 +1145,7 @@ export default function CRMPage() {
             const fetchRes = await fetch("/api/email/fetch", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId: user.id, providerId: conn.provider, since: conn.last_fetched_at || undefined }),
+              body: JSON.stringify({ userId: user.id, providerId: newConn.provider, since: newConn.last_fetched_at || undefined }),
             })
             const fetchData = await fetchRes.json()
             const fetchedMsgs = fetchData.messages || []
@@ -1236,25 +1324,44 @@ export default function CRMPage() {
   // ── Auto-poll for calendar events every 2 minutes (client-side) ─────────────
   useEffect(() => {
     if (!user) return
-    const hasConnectedCalendar = calendarConnections.some((c: any) => c.status === "connected")
+    const hasConnectedCalendar = calendarConnections.some((c: any) => (c.provider === "google" || c.provider === "calendly") && c.status === "connected")
     if (!hasConnectedCalendar) return
-    // Auto-sync when switching to Calendar tab
-    if (activeTab === "Calendar") {
-      fetchCalendar()
-    }
+    // Only auto-poll on interval, not on tab switch (to avoid blocking manual sync)
     const interval = setInterval(() => {
       console.log("[CRM] Auto-polling calendar...")
       fetchCalendar()
     }, 120000) // 2 minutes
     return () => clearInterval(interval)
-  }, [user?.id, calendarConnections.length, activeTab])
+  }, [user?.id, calendarConnections, activeTab])
 
   // Fetch calendar events
-  const fetchCalendar = async () => {
+  const fetchCalendar = async (showSyncModal?: boolean) => {
     if (!user) return
-    const conn = calendarConnections.find((c: any) => c.status === "connected")
+    const conn = calendarConnections.find((c: any) => (c.provider === "google" || c.provider === "calendly") && c.status === "connected")
     if (!conn) return
     setCalendarLoading(true)
+
+    let progressTimer: any = null
+    if (showSyncModal) {
+      let progressVal = 0
+      progressTimer = setInterval(() => {
+        progressVal = Math.min(progressVal + 1, 95)
+        setCalendarSyncModal(prev => prev ? { ...prev, progress: Math.round(progressVal) } : null)
+      }, 100)
+      setCalendarSyncModal({
+        visible: true,
+        step: "connecting",
+        progress: 0,
+        totalFetched: 0,
+        totalScanned: 0,
+        importedEvents: [],
+        droppedEvents: [],
+        alreadyImportedEvents: [],
+        dateRange: { from: null, to: null },
+        isInitial: false,
+      })
+    }
+
     try {
       const res = await fetch("/api/calendar/fetch", {
         method: "POST",
@@ -1264,14 +1371,53 @@ export default function CRMPage() {
       const data = await res.json()
       if (!res.ok) {
         console.error("[CALENDAR FETCH]", data.error)
+        if (progressTimer) clearInterval(progressTimer)
+        if (showSyncModal) {
+          setCalendarSyncModal({
+            visible: true,
+            step: "done",
+            progress: 100,
+            totalFetched: 0,
+            totalScanned: 0,
+            importedEvents: [],
+            droppedEvents: [],
+            alreadyImportedEvents: [],
+            dateRange: { from: null, to: null },
+            isInitial: false,
+          })
+        }
         return
       }
+
       // Reload from DB
       const events = await getCalendarEvents(user.id)
       setCalendarEvents(events)
       setCalendarFetched(true)
+
+      if (showSyncModal && progressTimer) {
+        clearInterval(progressTimer)
+        const fetchedEvents = data.events || []
+        const droppedEvs = data.dropped || []
+        const apiDateRange = data.dateRange || { from: null, to: null }
+        const apiTotalScanned = data.totalScanned || (fetchedEvents.length + droppedEvs.length)
+        const alreadyImportedEvs = data.alreadyImported || []
+        setCalendarSyncModal({
+          visible: true,
+          step: "done",
+          progress: 100,
+          totalFetched: fetchedEvents.length,
+          totalScanned: apiTotalScanned,
+          importedEvents: fetchedEvents,
+          droppedEvents: droppedEvs,
+          alreadyImportedEvents: alreadyImportedEvs,
+          dateRange: { from: apiDateRange.from, to: apiDateRange.to },
+          isInitial: false,
+        })
+      }
     } catch (e) {
       console.error("[CALENDAR FETCH]", e)
+      if (progressTimer) clearInterval(progressTimer)
+      setCalendarSyncModal(null)
     } finally {
       setCalendarLoading(false)
     }
@@ -1426,6 +1572,11 @@ export default function CRMPage() {
                   {tab === "Email" && inboxFetched && unreadCount > 0 && (
                     <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
                       {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                  {tab === "Messages" && (telegramFetched || whatsappFetched || slackFetched) && msgUnreadCount > 0 && (
+                    <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
+                      {msgUnreadCount > 99 ? "99+" : msgUnreadCount}
                     </span>
                   )}
                   {tab === "Calendar" && upcomingEventsCount > 0 && (
@@ -1594,7 +1745,7 @@ export default function CRMPage() {
                 {tabs.map(tab => {
                   const label = tab === "Overview" ? t("crmOverviewTab") : tab === "Email" ? t("crmEmailTab") : tab === "Messages" ? t("crmMessages") : tab === "Calendar" ? t("crmCalendarTab") : tab
                   const Icon = tab === "Overview" ? LayoutDashboard : tab === "Email" ? Mail : tab === "Messages" ? MessageSquare : Calendar
-                  const count = tab === "Email" ? (inboxFetched ? unreadCount : 0) : tab === "Calendar" ? upcomingEventsCount : 0
+                  const count = tab === "Email" ? (inboxFetched ? unreadCount : 0) : tab === "Messages" ? (telegramFetched || whatsappFetched || slackFetched ? msgUnreadCount : 0) : tab === "Calendar" ? upcomingEventsCount : 0
                   const active = activeTab === tab
                   return (
                     <button
@@ -1674,7 +1825,7 @@ export default function CRMPage() {
             )}
 
             {/* No calendar connected — show empty state with CTA */}
-            {!channelsLoading && channels.length > 0 && activeTab === "Calendar" && !calendarConnections.find((c: any) => c.status === "connected") && (
+            {!channelsLoading && channels.length > 0 && activeTab === "Calendar" && !calendarConnections.find((c: any) => (c.provider === "google" || c.provider === "calendly") && c.status === "connected") && (
               <div className="flex flex-1 items-center justify-center p-6">
                 <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 py-16 px-6 text-center max-w-md">
                   <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
@@ -1692,12 +1843,12 @@ export default function CRMPage() {
             {/* Empty state for overview when no contact selected */}
             {activeTab === "Overview" && !contact && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-                <div className="mx-auto max-w-4xl space-y-6">
+                <div className="mx-auto max-w-5xl space-y-8">
 
                   {/* Header */}
                   <div>
-                    <h1 className="text-xl font-bold tracking-tight">{t("crmOverviewTitle")}</h1>
-                    <p className="mt-0.5 text-sm text-muted-foreground">{t("crmOverviewSubtitle")}</p>
+                    <h1 className="text-2xl font-bold tracking-tight">{t("crmOverviewTitle")}</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">{t("crmOverviewSubtitle")}</p>
                   </div>
 
                   {/* Stats */}
@@ -1715,17 +1866,17 @@ export default function CRMPage() {
                       {
                         label: "crmMessages",
                         value: whatsappMessages.length + telegramMessages.length + slackMessages.length,
-                        sub: `${whatsappMessages.filter((m: any) => !m.read && m.direction === "received").length + telegramMessages.filter((m: any) => !m.read && m.direction === "received").length + slackMessages.filter((m: any) => !m.read && m.direction === "received").length} ${t("crmUnread")}`,
-                        icon: Phone,
+                        sub: `${msgUnreadCount} ${t("crmUnread")}`,
+                        icon: MessageSquare,
                         color: "text-emerald-400",
                         bg: "bg-emerald-500/10",
                         action: () => setActiveTab("Messages"),
                       },
                       {
                         label: "crmEvents",
-                        value: calendarEvents.length,
+                        value: upcomingCalendarEvents.length,
                         sub: t("crmUpcoming"),
-                        icon: ClipboardList,
+                        icon: Calendar,
                         color: "text-amber-400",
                         bg: "bg-amber-500/10",
                         action: () => setActiveTab("Calendar"),
@@ -1758,7 +1909,10 @@ export default function CRMPage() {
 
                   {/* Connected Channels */}
                   <div>
-                    <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider">{t("crmConnectedChannels")}</h2>
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{t("crmConnectedChannels")}</h2>
+                      <Link href="/channels" className="text-xs text-emerald-400 hover:underline">Manage →</Link>
+                    </div>
                     {channels.length === 0 ? (
                       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 py-10 text-center">
                         <p className="text-sm text-muted-foreground">No channels connected yet.</p>
@@ -1767,25 +1921,28 @@ export default function CRMPage() {
                         </Link>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 min-w-0">
-                        {/* Email */}
-                        {emailConnections.find((c: any) => c.status === "connected") && (
-                          <button onClick={() => setActiveTab("Email")}
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
+                        {/* Email — one card per connected provider */}
+                        {emailConnections.filter((c: any) => c.status === "connected").map((conn: any) => {
+                          const providerLabel = conn.provider === "gmail" ? "Gmail" : conn.provider === "outlook" ? "Outlook" : conn.provider === "zoho" ? "Zoho Mail" : conn.provider === "icloud" ? "iCloud Mail" : conn.provider === "hostinger" ? "Hostinger Email" : conn.provider === "godaddy" ? "GoDaddy Email" : conn.email_address || conn.provider
+                          return (
+                          <button key={conn.provider} onClick={() => { setActiveChannel(conn.provider); setActiveTab("Email") }}
                             className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
                             <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-                              <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400" />
+                              <Mail className="h-4 w-4 sm:h-5 w-5 text-blue-400" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-semibold">Gmail</p>
-                                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
+                                <p className="text-sm font-semibold truncate">{providerLabel}</p>
+                                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 shrink-0">{t("crmConnected")}</span>
                               </div>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {unreadCount} {t("crmUnread")} · {totalThreadCount} {t("crmTotal")}
+                                {conn.email_address || ""}
                               </p>
                             </div>
                           </button>
-                        )}
+                          )
+                        })}
                         {/* WhatsApp */}
                         {whatsappConnections.length > 0 && (
                           <button onClick={() => setActiveTab("Messages")}
@@ -1840,22 +1997,40 @@ export default function CRMPage() {
                             </div>
                           </button>
                         )}
+                        {/* Google Meet */}
+                        {calendarConnections.find((c: any) => c.provider === "googlemeet" && c.status === "connected") && (
+                          <button onClick={() => setActiveTab("Calendar")}
+                            className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
+                            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-green-500/10">
+                              <Video className="h-4 w-4 sm:h-5 w-5 text-green-400" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold">Google Meet</p>
+                                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 shrink-0">{t("crmConnected")}</span>
+                              </div>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {calendarConnections.find((c: any) => c.provider === "googlemeet" && c.status === "connected")?.calendar_email || ""}
+                              </p>
+                            </div>
+                          </button>
+                        )}
                         {/* Calendar */}
-                        {calendarConnections.find((c: any) => c.status === "connected") && (() => {
-                          const nextEvent = [...calendarEvents].filter((e: any) => e.end_time && new Date(e.end_time) > new Date()).sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
+                        {calendarConnections.find((c: any) => (c.provider === "google" || c.provider === "calendly") && c.status === "connected") && (() => {
+                          const nextEvent = upcomingCalendarEvents[0]
                           return (
                             <button onClick={() => setActiveTab("Calendar")}
                               className="flex items-center gap-3 rounded-xl border bg-card p-3 sm:p-4 text-left hover:border-white/20 transition-all hover:shadow-md">
                               <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
-                                <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400" />
+                                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400" />
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <p className="text-sm font-semibold">{calendarConnections.find((c: any) => c.status === "connected")?.provider === "calendly" ? "Calendly" : "Google Calendar"}</p>
+                                  <p className="text-sm font-semibold">{calendarConnections.find((c: any) => (c.provider === "google" || c.provider === "calendly") && c.status === "connected")?.provider === "calendly" ? "Calendly" : "Google Calendar"}</p>
                                   <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">{t("crmConnected")}</span>
                                 </div>
                                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                  {nextEvent ? `${t("crmNext")} ${nextEvent.summary?.slice(0, 28) || "—"}` : `${calendarEvents.length} ${t("crmEventsCount")}`}
+                                  {nextEvent ? `${t("crmNext")} ${nextEvent.summary?.slice(0, 28) || "—"}` : `${upcomingCalendarEvents.length} ${t("crmEventsCount")}`}
                                 </p>
                               </div>
                             </button>
@@ -1869,8 +2044,11 @@ export default function CRMPage() {
                   <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     {/* Recent emails */}
                     <div className="rounded-xl border bg-card overflow-hidden">
-                      <div className="flex items-center justify-between border-b px-4 py-3">
-                        <h3 className="text-sm font-semibold">{t("crmRecentEmails")}</h3>
+                      <div className="flex items-center justify-between border-b px-4 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4 text-blue-400" />
+                          <h3 className="text-sm font-semibold">{t("crmRecentEmails")}</h3>
+                        </div>
                         <button onClick={() => setActiveTab("Email")} className="text-xs text-emerald-400 hover:underline">{t("crmViewAll")}</button>
                       </div>
                       {inboxMessages.length === 0 ? (
@@ -1899,20 +2077,21 @@ export default function CRMPage() {
 
                     {/* Upcoming events */}
                     <div className="rounded-xl border bg-card overflow-hidden">
-                      <div className="flex items-center justify-between border-b px-4 py-3">
-                        <h3 className="text-sm font-semibold">{t("crmUpcomingEvents")}</h3>
+                      <div className="flex items-center justify-between border-b px-4 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-amber-400" />
+                          <h3 className="text-sm font-semibold">{t("crmUpcomingEvents")}</h3>
+                        </div>
                         <button onClick={() => setActiveTab("Calendar")} className="text-xs text-emerald-400 hover:underline">{t("crmViewAll")}</button>
                       </div>
-                      {calendarEvents.length === 0 ? (
+                      {upcomingCalendarEvents.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center">
                           <ClipboardList className="mb-2 h-5 w-5 text-muted-foreground opacity-40" />
                           <p className="text-xs text-muted-foreground">{t("crmNoUpcomingEvents")}</p>
                         </div>
                       ) : (
                         <div className="divide-y">
-                          {[...calendarEvents].filter((e: any) => e.end_time && new Date(e.end_time) > new Date())
-                            .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-                            .slice(0, 5).map((ev: any) => (
+                          {upcomingCalendarEvents.slice(0, 5).map((ev: any) => (
                             <div key={ev.id} className="flex items-start gap-3 px-4 py-3">
                               <div className="flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-lg bg-amber-500/10 text-amber-400">
                                 <span className="text-[10px] font-bold leading-none uppercase">{new Date(ev.start_time).toLocaleDateString("en", { month: "short" })}</span>
@@ -2854,6 +3033,180 @@ export default function CRMPage() {
               document.body
             )}
 
+            {/* Calendar sync modal — rendered at outer scope so it works on Calendar tab */}
+            {mounted && calendarSyncModal?.visible && activeTab === "Calendar" && createPortal(
+              <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setCalendarSyncModal(prev => prev ? { ...prev, visible: false } : null)}>
+                <div
+                  className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#1a1f2e] shadow-2xl animate-fade-in-up overflow-hidden"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="h-1 bg-gradient-to-r from-amber-500 via-sky-500 to-amber-500 bg-[length:200%_100%] animate-[shimmer-slide_2s_ease-in-out_infinite]" />
+                  <div className="p-6 max-h-[80vh] overflow-y-auto">
+                    {calendarSyncModal.step === "connecting" && (
+                      <div className="flex flex-col items-center text-center py-4">
+                        <div className="relative mb-4">
+                          <div className="h-14 w-14 rounded-full border-2 border-amber-500/30 border-t-amber-500 animate-spin" />
+                          <Calendar className="absolute inset-0 m-auto h-6 w-6 text-amber-400" />
+                        </div>
+                        <h3 className="text-base font-semibold text-white">Syncing your calendar</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {calendarSyncModal.progress < 30
+                            ? "Connecting to your calendar provider..."
+                            : calendarSyncModal.progress < 60
+                            ? "Fetching events..."
+                            : calendarSyncModal.progress < 85
+                            ? "Filtering and categorizing events..."
+                            : "Almost done..."}
+                        </p>
+                        <div className="mt-4 w-full max-w-xs">
+                          <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-amber-500 to-sky-500 transition-[width] duration-150 ease-out"
+                              style={{ width: `${calendarSyncModal.progress}%` }}
+                            />
+                          </div>
+                          <p className="mt-1.5 text-xs font-medium text-amber-400">{calendarSyncModal.progress}%</p>
+                        </div>
+                      </div>
+                    )}
+                    {calendarSyncModal.step === "done" && (
+                      <div className="flex flex-col">
+                        <div className="flex flex-col items-center text-center mb-4">
+                          <div className="relative mb-3">
+                            <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping" />
+                            <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/20 border-2 border-amber-500/40">
+                              <Check className="h-6 w-6 text-amber-400" />
+                            </div>
+                          </div>
+                          <h3 className="text-base font-semibold text-white">
+                            {calendarSyncModal.totalFetched > 0
+                              ? `${calendarSyncModal.totalFetched} event${calendarSyncModal.totalFetched === 1 ? "" : "s"} imported`
+                              : "No new events"}
+                          </h3>
+                        </div>
+
+                        {calendarSyncModal.dateRange.from && calendarSyncModal.dateRange.to && (
+                          <div className="mb-4 flex flex-col items-center gap-1.5 rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(calendarSyncModal.dateRange.from).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                                {" → "}
+                                {new Date(calendarSyncModal.dateRange.to).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground/60">
+                              {calendarSyncModal.totalScanned} events scanned in this period
+                            </span>
+                          </div>
+                        )}
+
+                        {calendarSyncModal.importedEvents.length > 0 && (
+                          <div className="mb-3">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                              <span className="text-xs font-semibold text-emerald-400">Imported ({calendarSyncModal.totalFetched})</span>
+                            </div>
+                            <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                              {calendarSyncModal.importedEvents.map((ev: any, i: number) => (
+                                <div
+                                  key={ev.id || i}
+                                  className="flex items-start gap-2.5 rounded-lg border border-emerald-500/10 bg-emerald-500/[0.03] p-2.5 text-left animate-fade-in-up"
+                                  style={{ animationDelay: `${i * 60}ms` }}
+                                >
+                                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-[10px] font-bold text-amber-400">
+                                    <Calendar className="h-3 w-3" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-white truncate">
+                                      {ev.summary || "(No title)"}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground truncate">
+                                      {ev.start_time ? new Date(ev.start_time).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Already imported events */}
+                        {calendarSyncModal.alreadyImportedEvents.length > 0 && (
+                          <div className="mb-3">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <div className="h-2 w-2 rounded-full bg-sky-500/60" />
+                              <span className="text-xs font-semibold text-sky-400/80">Already imported ({calendarSyncModal.alreadyImportedEvents.length})</span>
+                            </div>
+                            <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                              {calendarSyncModal.alreadyImportedEvents.map((ev: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className="flex items-start gap-2.5 rounded-lg border border-sky-500/10 bg-sky-500/[0.02] p-2.5 text-left animate-fade-in-up"
+                                  style={{ animationDelay: `${i * 30}ms` }}
+                                >
+                                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500/10 text-[10px] font-bold text-sky-400/60">
+                                    <Calendar className="h-3 w-3" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-muted-foreground truncate">
+                                      {ev.summary || "(No title)"}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground/60 truncate">
+                                      {ev.start_time ? new Date(ev.start_time).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Dropped/filtered events */}
+                        {calendarSyncModal.droppedEvents.length > 0 && (
+                          <div className="mb-3">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <div className="h-2 w-2 rounded-full bg-red-500/60" />
+                              <span className="text-xs font-semibold text-red-400/80">Filtered out ({calendarSyncModal.droppedEvents.length})</span>
+                            </div>
+                            <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                              {calendarSyncModal.droppedEvents.map((ev: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className="flex items-start gap-2.5 rounded-lg border border-white/5 bg-white/[0.02] p-2.5 text-left animate-fade-in-up"
+                                  style={{ animationDelay: `${i * 40}ms` }}
+                                >
+                                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-[10px] font-bold text-red-400/60">
+                                    <Calendar className="h-3 w-3" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium text-muted-foreground truncate">
+                                      {ev.summary || "(No title)"}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground/60 truncate">
+                                      {ev.start_time ? new Date(ev.start_time).toLocaleString(undefined, { month: "short", day: "numeric" }) : ""} · <span className="text-red-400/50">{ev.reason}</span>
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => setCalendarSyncModal(prev => prev ? { ...prev, visible: false } : null)}
+                          className="mx-auto mt-2 rounded-lg bg-white/5 px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-white/10 hover:text-white transition-colors"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
+
             {/* ── MESSAGES ── */}
             {activeTab === "Messages" && channels.length > 0 && (whatsappConnections.length > 0 || telegramConnections.length > 0 || slackConnections.length > 0) && (
               <div className="flex flex-1 flex-col min-h-0">
@@ -2910,11 +3263,11 @@ export default function CRMPage() {
                       try {
                         const [waMsgs, tgRes, slMsgs] = await Promise.allSettled([
                           getWhatsAppMessages(user.id),
-                          fetch("/api/telegram/user/fetch-chats", {
+                          tgFetchingRef.current ? Promise.resolve([]) : (tgFetchingRef.current = true, fetch("/api/telegram/user/fetch-chats", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ userId: user.id }),
-                          }).then(r => r.json()).then(() => getTelegramMessages(user.id)),
+                          }).then(r => r.json()).then(() => getTelegramMessages(user.id)).finally(() => { tgFetchingRef.current = false })),
                           fetch("/api/slack/fetch", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
@@ -2980,7 +3333,7 @@ export default function CRMPage() {
                                 const firstMsg = msgs[0]
                                 return (
                                 <div key={tid} draggable
-                                  onDragStart={e => { dragMsgId.current = firstMsg.id; e.dataTransfer.effectAllowed = "move" }}
+                                  onDragStart={e => { dragMsgId.current = lastMsg.id; e.dataTransfer.effectAllowed = "move" }}
                                   onClick={() => { setActiveThread(tid); setWaReplyTo(msgReplyTarget(lastMsg)); setReplySource(lastMsg._source); setWaReplyBody(""); setSendingWaReply(false) }}
                                   className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-pointer active:cursor-grabbing active:opacity-60 active:scale-95"
                                 >
@@ -3332,7 +3685,7 @@ export default function CRMPage() {
             )}
 
             {/* ── CALENDAR ── */}
-            {activeTab === "Calendar" && channels.length > 0 && calendarConnections.find((c: any) => c.status === "connected") && (
+            {activeTab === "Calendar" && channels.length > 0 && calendarConnections.find((c: any) => (c.provider === "google" || c.provider === "calendly") && c.status === "connected") && (
               <div className="flex flex-1 flex-col min-h-0">
                 {/* Calendar Toolbar */}
                 <div className="flex flex-col gap-2 border-b bg-card/50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
@@ -3342,20 +3695,87 @@ export default function CRMPage() {
                       <button onClick={() => setCalendarView("kanban")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", calendarView === "kanban" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{t("crmKanban")}</button>
                       <button onClick={() => setCalendarView("table")} className={cn("px-2 py-1 text-[11px] font-medium rounded-md transition-colors sm:px-3 sm:py-1.5 sm:text-xs", calendarView === "table" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{t("crmTable")}</button>
                     </div>
-                    {channels.filter(c => c.type === "calendar").map(ch => (
-                      <span key={ch.id} className="hidden sm:flex items-center gap-1.5 rounded-full border border-white/10 bg-muted/50 px-3 py-1.5 text-xs font-medium">
-                        <span className={cn("h-2 w-2 rounded-full", ch.color)} />
-                        {ch.label}
-                      </span>
-                    ))}
+                    {/* Channel selector */}
+                    {channels.filter(c => c.type === "calendar").length > 0 && (
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowChannelMenu(v => !v)}
+                          className="flex items-center gap-1.5 rounded-full border border-white/10 bg-muted/50 px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                        >
+                          <span className={cn("h-2 w-2 rounded-full", (tabChannels.find(c => c.id === activeChannel) || tabChannels[0])?.color || "bg-slate-500")} />
+                          <span className="text-foreground">{(tabChannels.find(c => c.id === activeChannel) || tabChannels[0])?.label || "Calendar"}</span>
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </button>
+                        {showChannelMenu && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setShowChannelMenu(false)} />
+                            <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                              {channels.filter(c => c.type === "calendar").map(ch => (
+                                <button
+                                  key={ch.id}
+                                  onClick={() => { setActiveChannel(ch.id); setShowChannelMenu(false) }}
+                                  className={cn("flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs hover:bg-emerald-600/10 transition-colors", activeChannel === ch.id && "text-emerald-400")}
+                                >
+                                  <span className={cn("h-2 w-2 rounded-full", ch.color)} />
+                                  <span className="flex-1 truncate">{ch.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center justify-end gap-2 sm:gap-3">
-                    <button className="flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium hover:bg-accent transition-colors sm:px-3">
-                      <Filter className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{t("crmFilter")}</span>
-                    </button>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={calSearch}
+                        onChange={e => setCalSearch(e.target.value)}
+                        className="w-full rounded-lg border bg-background py-1.5 pl-8 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30 sm:w-48"
+                        placeholder={t("crmSearchEmails")}
+                      />
+                    </div>
+                    <div className="relative">
+                      <button
+                        onClick={() => setCalFilterOpen(v => !v)}
+                        className={cn("flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors sm:px-3", calFilterOpen || calFilter.range !== "all" ? "bg-emerald-600/10 border-emerald-500/30 text-emerald-400" : "hover:bg-accent")}
+                      >
+                        <Filter className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">{t("crmFilter")}</span>
+                        {calFilter.range !== "all" && (
+                          <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">1</span>
+                        )}
+                      </button>
+                      {calFilterOpen && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setCalFilterOpen(false)} />
+                          <div className="absolute right-0 top-full z-40 mt-1 w-52 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl p-3 space-y-3">
+                            <div>
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Time</p>
+                              <div className="grid grid-cols-2 gap-1">
+                                {(["all", "today", "week", "upcoming"] as const).map(r => (
+                                  <button key={r} onClick={() => setCalFilter(f => ({ ...f, range: r }))}
+                                    className={cn("rounded-lg py-1.5 text-[11px] font-medium border transition-colors", calFilter.range === r ? "bg-emerald-600/20 border-emerald-500/40 text-emerald-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}>
+                                    {r === "all" ? "All" : r === "today" ? "Today" : r === "week" ? "This Week" : "Later"}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {(calSearch || calFilter.range !== "all") && (
+                              <button onClick={() => { setCalSearch(""); setCalFilter({ range: "all" }); setCalFilterOpen(false) }}
+                                className="w-full rounded-lg border border-white/10 py-1.5 text-[11px] font-medium text-muted-foreground hover:bg-white/5 transition-colors">
+                                Clear filters
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                     <button
-                      onClick={fetchCalendar}
-                      disabled={calendarLoading || calendarConnections.length === 0}
+                      onClick={() => fetchCalendar(true)}
+                      disabled={calendarLoading || !calendarConnections.find((c: any) => (c.provider === "google" || c.provider === "calendly") && c.status === "connected")}
                       className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
                     >
                       {calendarLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ClipboardList className="h-3.5 w-3.5" />}
@@ -3378,7 +3798,7 @@ export default function CRMPage() {
                           return "upcoming"
                         }
                         const getColId = (ev: any) => calCardCols[ev.id] || naturalCol(ev)
-                        const items = calendarEvents.filter(ev => getColId(ev) === col.id)
+                        const items = filteredCalendarEvents.filter(ev => getColId(ev) === col.id)
                         return (
                           <div key={col.id}
                             className={cn("group flex w-80 shrink-0 flex-col h-full rounded-xl transition-all", dragOverCalCol === col.id && "ring-2 ring-emerald-500/40 bg-emerald-500/5")}
@@ -3432,52 +3852,53 @@ export default function CRMPage() {
                 ) : (
                   <div className="flex-1 min-h-0 overflow-y-auto p-6">
                   <div className="mx-auto max-w-5xl">
-                {calendarConnections.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
-                    <ClipboardList className="mb-2 h-6 w-6 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">{t("crmNotConnected")}</p>
-                    <Link href="/channels" className="mt-2 text-xs text-emerald-400 hover:underline">{t("crmGoToChannels")} →</Link>
-                  </div>
-                ) : calendarEvents.length === 0 ? (
+                {filteredCalendarEvents.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-12 text-center">
                     <ClipboardList className="mb-2 h-6 w-6 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">{calendarFetched ? t("crmNoUpcomingEvents") : t("crmSyncCalendar")}</p>
                   </div>
                 ) : calendarView === "table" ? (
-                  <div className="rounded-xl border overflow-x-auto" onClick={() => setCalStatusOpen(null)}>
+                  <div className="rounded-xl border overflow-hidden">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b bg-muted/50">
-                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Event</th>
-                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Date &amp; Time</th>
-                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Location</th>
-                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-32">Status</th>
-                          <th className="px-4 py-2.5 text-left font-medium text-muted-foreground w-20">Type</th>
+                          <th className="px-3 py-2.5 text-left font-medium text-muted-foreground sm:px-4">Event</th>
+                          <th className="px-3 py-2.5 text-left font-medium text-muted-foreground sm:px-4">Date &amp; Time</th>
+                          <th className="hidden sm:table-cell px-4 py-2.5 text-left font-medium text-muted-foreground">Location</th>
+                          <th className="px-3 py-2.5 text-left font-medium text-muted-foreground sm:px-4">Status</th>
+                          <th className="hidden md:table-cell px-4 py-2.5 text-left font-medium text-muted-foreground">Type</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {calendarEvents.slice(calTablePage * TABLE_PAGE_SIZE, (calTablePage + 1) * TABLE_PAGE_SIZE).map((ev: any) => {
+                        {filteredCalendarEvents.slice(calTablePage * TABLE_PAGE_SIZE, (calTablePage + 1) * TABLE_PAGE_SIZE).map((ev: any) => {
                           const now = new Date(); const todayEnd = new Date(now); todayEnd.setHours(23,59,59,999)
                           const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7)
                           const natural = (e: any) => { if (!e.start_time) return "upcoming"; const t = new Date(e.start_time); if (t >= now && t <= todayEnd) return "today"; if (t > todayEnd && t <= weekEnd) return "week"; return "upcoming" }
                           const colId = calCardCols[ev.id] || natural(ev)
                           const col = calKanbanCols.find(c => c.id === colId) || calKanbanCols[0]
+                          const evDate = ev.start_time ? new Date(ev.start_time) : null
                           return (
                           <tr key={ev.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
-                            <td className="px-4 py-2.5 font-medium truncate max-w-[200px]">
-                              <a href={ev.event_link || "#"} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors">{ev.summary}</a>
+                            <td className="px-3 py-3 sm:px-4">
+                              <a href={ev.event_link || "#"} target="_blank" rel="noopener noreferrer" className="font-medium truncate max-w-[140px] sm:max-w-[200px] block hover:text-emerald-400 transition-colors">{ev.summary}</a>
+                              <span className="sm:hidden text-[10px] text-muted-foreground mt-0.5 block">
+                                {evDate ? evDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
+                                {ev.is_online && " · Online"}
+                              </span>
                             </td>
-                            <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
-                              {ev.start_time ? new Date(ev.start_time).toLocaleDateString() : ""} {ev.start_time ? new Date(ev.start_time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
+                            <td className="px-3 py-3 text-muted-foreground whitespace-nowrap sm:px-4">
+                              {evDate ? evDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}
+                              <span className="hidden sm:inline">{evDate ? " " + evDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
                             </td>
-                            <td className="px-4 py-2.5 text-muted-foreground truncate max-w-[140px]">{ev.location || "—"}</td>
-                            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                            <td className="hidden sm:table-cell px-4 py-3 text-muted-foreground truncate max-w-[140px]">{ev.location || "—"}</td>
+                            <td className="px-3 py-3 sm:px-4" onClick={e => e.stopPropagation()}>
                               <div className="relative">
                                 <button
                                   onClick={e => { e.stopPropagation(); setCalStatusOpen(calStatusOpen === ev.id ? null : ev.id) }}
-                                  className={cn("w-full rounded-lg px-3 py-1.5 text-[11px] font-semibold flex items-center justify-between gap-1.5 border transition-all hover:brightness-110", col?.color)}
+                                  className={cn("rounded-lg px-2.5 py-1.5 text-[11px] font-semibold flex items-center gap-1 border transition-all hover:brightness-110", col?.color)}
                                 >
-                                  <span>{col?.label}</span>
+                                  <span className="hidden sm:inline">{col?.label}</span>
+                                  <span className="sm:hidden">{col?.label?.[0]}</span>
                                   <ChevronDown className={cn("h-3 w-3 transition-transform", calStatusOpen === ev.id && "rotate-180")} />
                                 </button>
                                 {calStatusOpen === ev.id && (
@@ -3511,8 +3932,8 @@ export default function CRMPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-2.5">
-                              {ev.is_online ? <span className="rounded-full bg-emerald-600/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">Online</span> : <span className="text-muted-foreground">In-person</span>}
+                            <td className="hidden md:table-cell px-4 py-3">
+                              {ev.is_online ? <span className="rounded-full bg-emerald-600/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">Online</span> : <span className="text-muted-foreground text-[10px]">In-person</span>}
                             </td>
                           </tr>
                           )
@@ -3520,7 +3941,7 @@ export default function CRMPage() {
                       </tbody>
                     </table>
                     {(() => {
-                      const totalItems = calendarEvents.length
+                      const totalItems = filteredCalendarEvents.length
                       const totalPages = Math.ceil(totalItems / TABLE_PAGE_SIZE)
                       if (totalPages <= 1) return null
                       const pages: number[] = []

@@ -49,6 +49,7 @@ async function _POST(req: NextRequest) {
       .select("*")
       .eq("user_id", userId)
       .eq("status", "connected")
+      .in("provider", ["google", "calendly"])
 
     if (error || !connections || connections.length === 0) {
       return NextResponse.json({ error: "Calendar connection not found" }, { status: 404 })
@@ -56,6 +57,12 @@ async function _POST(req: NextRequest) {
 
     let totalFetched = 0
     const allResults: any[] = []
+    const droppedEvents: any[] = []
+    const nowISO = new Date().toISOString()
+    let totalScanned = 0
+    let startOfDay = new Date()
+    let timeMax = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+    const alreadyImported: any[] = []
 
     for (const conn of connections) {
 
@@ -178,6 +185,7 @@ async function _POST(req: NextRequest) {
     }
 
     // Google Calendar fetch
+    try {
     const accessToken = await refreshIfNeeded(conn)
 
     // Delete past events from DB (end_time < now)
@@ -190,10 +198,10 @@ async function _POST(req: NextRequest) {
       .lt("end_time", nowIso)
 
     // Fetch events from start of today to 14 days from now (15 days total)
-    const startOfDay = new Date()
+    startOfDay = new Date()
     startOfDay.setHours(0, 0, 0, 0)
     const timeMin = startOfDay.toISOString()
-    const timeMax = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+    timeMax = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
 
     const calendarRes = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&maxResults=50&orderBy=startTime&singleEvents=true`,
@@ -201,6 +209,20 @@ async function _POST(req: NextRequest) {
     )
     const calendarData = await calendarRes.json()
     if (!calendarRes.ok) throw new Error(calendarData.error?.message || "Calendar API failed")
+
+    // Total events scanned from API
+    totalScanned = (calendarData.items || []).length
+    console.log(`[CALENDAR FETCH] === SYNC START for connection ${conn.id} (${conn.provider}) ===`)
+    console.log(`[CALENDAR FETCH] Date range: ${startOfDay.toISOString()} → ${timeMax}`)
+    console.log(`[CALENDAR FETCH] Total events scanned from Google API: ${totalScanned}`)
+    if (totalScanned > 0) {
+      console.log(`[CALENDAR FETCH] Scanned events:`)
+      ;(calendarData.items || []).forEach((ev: any, i: number) => {
+        const start = ev.start?.dateTime || ev.start?.date
+        const end = ev.end?.dateTime || ev.end?.date
+        console.log(`[CALENDAR FETCH]   ${i + 1}. id=${ev.id} | summary="${ev.summary}" | start=${start} | end=${end} | eventType=${ev.eventType || "none"} | organizer=${ev.organizer?.email || "none"}`)
+      })
+    }
 
     // Filter out birthday and holiday events
     const BIRTHDAY_PATTERNS = [
@@ -218,15 +240,32 @@ async function _POST(req: NextRequest) {
 
     const events = (calendarData.items || []).filter((ev: any) => {
       // Filter by event type
-      if (ev.eventType === "birthday" || ev.eventType === "holiday") return false
+      if (ev.eventType === "birthday" || ev.eventType === "holiday") {
+        droppedEvents.push({ summary: ev.summary || "(Untitled)", start_time: ev.start?.dateTime || ev.start?.date, reason: ev.eventType })
+        return false
+      }
       // Filter by organizer email
       const organizerEmail = ev.organizer?.email || ""
-      if (BIRTHDAY_ORGANIZERS.some(o => organizerEmail.toLowerCase() === o)) return false
+      if (BIRTHDAY_ORGANIZERS.some(o => organizerEmail.toLowerCase() === o)) {
+        droppedEvents.push({ summary: ev.summary || "(Untitled)", start_time: ev.start?.dateTime || ev.start?.date, reason: "holiday/birthday calendar" })
+        return false
+      }
       // Filter by summary pattern
       const summary = ev.summary || ""
-      if (BIRTHDAY_PATTERNS.some(p => p.test(summary))) return false
+      if (BIRTHDAY_PATTERNS.some(p => p.test(summary))) {
+        droppedEvents.push({ summary: ev.summary || "(Untitled)", start_time: ev.start?.dateTime || ev.start?.date, reason: "birthday/holiday pattern" })
+        return false
+      }
       return true
     })
+
+    console.log(`[CALENDAR FETCH] After filter: ${events.length} kept, ${droppedEvents.length} dropped`)
+    if (droppedEvents.length > 0) {
+      console.log(`[CALENDAR FETCH] Dropped events:`)
+      droppedEvents.forEach((ev: any, i: number) => {
+        console.log(`[CALENDAR FETCH]   ${i + 1}. summary="${ev.summary}" | start=${ev.start_time} | reason=${ev.reason}`)
+      })
+    }
 
     // Batch check: get all existing event IDs + their data in one query
     const allEventIds = events.map((ev: any) => ev.id).filter(Boolean)
@@ -235,10 +274,30 @@ async function _POST(req: NextRequest) {
       .select("event_id, start_time, end_time, summary")
       .eq("user_id", userId)
       .eq("connection_id", conn.id)
-      .in("event_id", allEventIds)
     const existingMap = new Map<string, any>()
     for (const r of existingRows || []) {
       existingMap.set(r.event_id, r)
+    }
+
+    // Delete events from DB that are no longer in Google Calendar (user removed them)
+    const apiEventIds = new Set(allEventIds)
+    const staleEventIds: string[] = []
+    for (const r of existingRows || []) {
+      if (!apiEventIds.has(r.event_id)) {
+        staleEventIds.push(r.event_id)
+      }
+    }
+    if (staleEventIds.length > 0) {
+      console.log(`[CALENDAR FETCH] Deleting ${staleEventIds.length} events removed from Google Calendar`)
+      const { error: delErr } = await supabase
+        .from("calendar_events")
+        .delete()
+        .eq("user_id", userId)
+        .eq("connection_id", conn.id)
+        .in("event_id", staleEventIds)
+      if (delErr) {
+        console.error("[CALENDAR FETCH] Stale event deletion failed:", delErr.message)
+      }
     }
 
     // Build payloads for new events + updates for changed events
@@ -275,6 +334,8 @@ async function _POST(req: NextRequest) {
               is_online: ev.conferenceData?.conferenceSolution?.name?.toLowerCase().includes("meet") || false,
             }
           })
+        } else {
+          alreadyImported.push({ summary, start_time: startIso, end_time: endIso, reason: "already imported" })
         }
         continue
       }
@@ -296,6 +357,19 @@ async function _POST(req: NextRequest) {
 
     // Batch insert all new events in one query
     let results: any[] = []
+    console.log(`[CALENDAR FETCH] DB comparison: ${payloads.length} new, ${updates.length} updated, ${alreadyImported.length} already imported`)
+    if (payloads.length > 0) {
+      console.log(`[CALENDAR FETCH] New events to import:`)
+      payloads.forEach((ev: any, i: number) => {
+        console.log(`[CALENDAR FETCH]   ${i + 1}. summary="${ev.summary}" | start=${ev.start_time} | end=${ev.end_time}`)
+      })
+    }
+    if (alreadyImported.length > 0) {
+      console.log(`[CALENDAR FETCH] Already imported events:`)
+      alreadyImported.forEach((ev: any, i: number) => {
+        console.log(`[CALENDAR FETCH]   ${i + 1}. summary="${ev.summary}" | start=${ev.start_time}`)
+      })
+    }
     if (payloads.length > 0) {
       const { data: inserted, error: insertErr } = await supabase
         .from("calendar_events")
@@ -327,9 +401,21 @@ async function _POST(req: NextRequest) {
     totalFetched += results.length
     allResults.push(...results)
     console.log(`[CALENDAR FETCH] Google: imported ${results.length} events`)
+    console.log(`[CALENDAR FETCH] === SYNC SUMMARY ===`)
+    console.log(`[CALENDAR FETCH]   Scanned: ${totalScanned}`)
+    console.log(`[CALENDAR FETCH]   New imports: ${results.length}`)
+    console.log(`[CALENDAR FETCH]   Already imported: ${alreadyImported.length}`)
+    console.log(`[CALENDAR FETCH]   Updated: ${updates.length}`)
+    console.log(`[CALENDAR FETCH]   Dropped (filtered): ${droppedEvents.length}`)
+    console.log(`[CALENDAR FETCH]   Stale deleted: ${staleEventIds.length}`)
+    console.log(`[CALENDAR FETCH] === SYNC END ===`)
+    } catch (googleErr: any) {
+      console.error(`[CALENDAR FETCH] Google Calendar error for connection ${conn.id}:`, googleErr?.message)
+      continue
+    }
     } // end for loop over connections
 
-    return NextResponse.json({ success: true, fetched: totalFetched, events: allResults })
+    return NextResponse.json({ success: true, fetched: totalFetched, events: allResults, dropped: droppedEvents, alreadyImported, totalScanned: totalScanned, dateRange: { from: startOfDay.toISOString(), to: timeMax } })
   } catch (err: any) {
     console.error("[CALENDAR FETCH]", err)
     return NextResponse.json({ error: err?.message || "Failed to fetch calendar events" }, { status: 500 })
