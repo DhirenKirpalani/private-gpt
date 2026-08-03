@@ -1218,6 +1218,18 @@ export async function getTelegramUserSession(userId: string): Promise<any | null
   return data
 }
 
+export async function markMessageAsRead(source: "whatsapp" | "telegram" | "slack", messageId: string): Promise<void> {
+  try {
+    await fetch("/api/messages/mark-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source, messageId }),
+    })
+  } catch (err) {
+    console.error(`[markMessageAsRead] ${source} failed:`, err)
+  }
+}
+
 export async function getTelegramMessages(userId: string): Promise<TelegramMessage[]> {
   const { data, error } = await supabase
     .from("telegram_messages")
@@ -1716,6 +1728,8 @@ export async function saveSlackConnection(conn: Omit<SlackConnection, "id" | "cr
 
 export async function deleteSlackConnection(userId: string): Promise<void> {
   await supabase.from("slack_messages").delete().eq("user_id", userId)
+  const { error: contactError } = await supabase.from("contacts").delete().eq("user_id", userId).eq("source", "slack_import")
+  if (contactError) console.error("[deleteSlackConnection] Failed to delete contacts:", contactError.message)
   await supabase.from("slack_connections").delete().eq("user_id", userId)
 }
 
@@ -1731,16 +1745,10 @@ export async function getSlackMessages(userId: string): Promise<SlackMessage[]> 
 }
 
 export async function saveSlackMessage(msg: Omit<SlackMessage, "id">): Promise<void> {
-  const { data: existing } = await supabase
+  const { error } = await supabase
     .from("slack_messages")
-    .select("id")
-    .eq("user_id", msg.user_id)
-    .eq("slack_ts", msg.slack_ts)
-    .maybeSingle()
-  if (existing) return
-
-  const { error } = await supabase.from("slack_messages").insert(msg)
-  if (error) console.error("[SLACK] Save message failed:", error.message)
+    .upsert(msg, { onConflict: "user_id,slack_ts" })
+  if (error && error.code !== "23505") console.error("[SLACK] Save message failed:", error.message)
 }
 
 export async function importContactsFromSlack(userId: string): Promise<number> {

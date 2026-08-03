@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { deleteSlackConnection } from "@/lib/supabase"
 import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
@@ -22,8 +21,11 @@ async function _POST(req: NextRequest) {
       .eq("user_id", userId)
       .single()
 
-    // Delete from DB
-    await deleteSlackConnection(userId)
+    // Delete from DB using admin client (bypasses RLS)
+    await supabase.from("slack_messages").delete().eq("user_id", userId)
+    const { error: contactError } = await supabase.from("contacts").delete().eq("user_id", userId).eq("source", "slack_import")
+    if (contactError) console.error("[SLACK DISCONNECT] Failed to delete contacts:", contactError.message)
+    await supabase.from("slack_connections").delete().eq("user_id", userId)
 
     // Optionally revoke token
     if (conn?.bot_access_token) {
