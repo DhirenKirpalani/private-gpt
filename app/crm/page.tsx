@@ -22,7 +22,7 @@ import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
-import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramUserSession, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, getKanbanCardCols, setKanbanCardCol, createNotification } from "@/lib/supabase"
+import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, markMessageAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramUserSession, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, getKanbanCardCols, setKanbanCardCol, createNotification } from "@/lib/supabase"
 import { formatTelegramSender } from "@/lib/telegram"
 
 /* ─── real data ─── */
@@ -3334,7 +3334,16 @@ export default function CRMPage() {
                                 return (
                                 <div key={tid} draggable
                                   onDragStart={e => { dragMsgId.current = lastMsg.id; e.dataTransfer.effectAllowed = "move" }}
-                                  onClick={() => { setActiveThread(tid); setWaReplyTo(msgReplyTarget(lastMsg)); setReplySource(lastMsg._source); setWaReplyBody(""); setSendingWaReply(false) }}
+                                  onClick={() => {
+                                    setActiveThread(tid); setWaReplyTo(msgReplyTarget(lastMsg)); setReplySource(lastMsg._source); setWaReplyBody(""); setSendingWaReply(false)
+                                    if (!lastMsg.read && lastMsg.direction === "received" && lastMsg._source && user) {
+                                      const src = lastMsg._source as "whatsapp" | "telegram" | "slack"
+                                      markMessageAsRead(src, lastMsg.id).catch(() => {})
+                                      if (src === "whatsapp") setWhatsAppMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
+                                      if (src === "telegram") setTelegramMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
+                                      if (src === "slack") setSlackMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
+                                    }
+                                  }}
                                   className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-pointer active:cursor-grabbing active:opacity-60 active:scale-95"
                                 >
                                   <div className="flex items-center justify-between mb-1">
@@ -3391,7 +3400,16 @@ export default function CRMPage() {
                           return (
                           <tr
                             key={tid}
-                            onClick={() => { setActiveThread(tid); setWaReplyTo(msgReplyTarget(lastMsg)); setReplySource(lastMsg._source); setWaReplyBody(""); setSendingWaReply(false) }}
+                            onClick={() => {
+                              setActiveThread(tid); setWaReplyTo(msgReplyTarget(lastMsg)); setReplySource(lastMsg._source); setWaReplyBody(""); setSendingWaReply(false)
+                              if (!lastMsg.read && lastMsg.direction === "received" && lastMsg._source && user) {
+                                const src = lastMsg._source as "whatsapp" | "telegram" | "slack"
+                                markMessageAsRead(src, lastMsg.id).catch(() => {})
+                                if (src === "whatsapp") setWhatsAppMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
+                                if (src === "telegram") setTelegramMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
+                                if (src === "slack") setSlackMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
+                              }
+                            }}
                             className={cn("border-b last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors", lastMsg.direction === "received" && !lastMsg.read && "bg-emerald-500/5")}
                           >
                             <td className="px-4 py-2.5 font-medium">
