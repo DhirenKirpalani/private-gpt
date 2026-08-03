@@ -118,11 +118,18 @@ async function _POST(req: NextRequest) {
 
       const chatTitle = dialog.title || dialog.name || entity.title || `${entity.firstName || ""} ${entity.lastName || ""}`.trim() || entity.username || "Unknown"
 
+      // Get unread count for this dialog
+      const unreadCount = (dialog as any).unreadCount || 0
+
       // Fetch last few messages from this dialog
       try {
         const messages = await client.getMessages(entity, { limit: 20 })
         let mediaDownloadCount = 0
         const MAX_MEDIA_PER_DIALOG = 3
+
+        // Track how many unread received messages we've seen (messages come newest first)
+        let unreadRemaining = unreadCount
+
         for (const msg of messages) {
           // Skip if no text AND no media
           if (!msg.message && !msg.media) continue
@@ -131,16 +138,41 @@ async function _POST(req: NextRequest) {
           const direction = msg.out ? "sent" : "received"
           const timestamp = new Date((msg.date || 0) * 1000).toISOString()
 
+          // Determine read status: sent messages are always read;
+          // for received messages, mark as unread if within the unread count
+          let isRead: boolean
+          if (direction === "sent") {
+            isRead = true
+          } else {
+            if (unreadRemaining > 0) {
+              isRead = false
+              unreadRemaining--
+            } else {
+              isRead = true
+            }
+          }
+
           // Dedup by tg_message_id + chat_id — use limit(1) instead of single() to handle existing duplicates
           const { data: existing } = await supabase
             .from("telegram_messages")
-            .select("id")
+            .select("id, read")
             .eq("user_id", userId)
             .eq("tg_message_id", parseInt(msgId))
             .eq("chat_id", chatId)
             .limit(1)
 
-          if (existing && existing.length > 0) continue
+          if (existing && existing.length > 0) {
+            // Update read status for existing messages if changed
+            if (existing[0].read !== isRead) {
+              await supabase
+                .from("telegram_messages")
+                .update({ read: isRead })
+                .eq("user_id", userId)
+                .eq("tg_message_id", parseInt(msgId))
+                .eq("chat_id", chatId)
+            }
+            continue
+          }
 
           // Download media if present — disabled during bulk fetch to avoid 429 rate limiting
           // Media is fetched on-demand when viewing a conversation
@@ -174,7 +206,7 @@ async function _POST(req: NextRequest) {
             media_type: mediaType,
             caption: msg.message && mediaUrl ? null : (mediaUrl ? (msg.message || "") : null),
             timestamp,
-            read: true, // historical messages are already read
+            read: isRead,
           })
 
           if (!error) imported++

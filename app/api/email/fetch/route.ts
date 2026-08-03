@@ -1017,12 +1017,42 @@ async function _POST(req: NextRequest) {
         for (const keyword of BUSINESS_KEYWORDS) {
           try {
             const results = await connection.search([["SINCE", imapDate], ["SUBJECT", keyword]], { bodies: "", struct: true })
-            for (const msg of results) {
-              if (msg.attributes?.uid) matchingUids.add(msg.attributes.uid)
+            if (results.length > 0) {
+              console.log(`[IMAP FETCH] Keyword "${keyword}" matched ${results.length} messages`)
+              for (const msg of results) {
+                if (msg.attributes?.uid) matchingUids.add(msg.attributes.uid)
+              }
             }
           } catch (e: any) {
             console.warn(`[IMAP FETCH] Keyword search "${keyword}" failed:`, e?.message)
           }
+        }
+
+        // Log total emails in inbox for context + collect dropped emails for modal
+        try {
+          const allMsgs = await connection.search([["SINCE", imapDate]], { bodies: "", struct: true })
+          console.log(`[IMAP FETCH] Total emails in INBOX since ${imapDate}: ${allMsgs.length}, matched: ${matchingUids.size}, dropped: ${allMsgs.length - matchingUids.size}`)
+          for (const msg of allMsgs) {
+            const uid = msg.attributes?.uid
+            if (!matchingUids.has(uid)) {
+              const raw = msg.parts?.find((p: any) => p.which === "")
+              let subject = "(unknown)"
+              let from = "Unknown"
+              let date = null
+              if (raw) {
+                try {
+                  const parsed = await simpleParser.simpleParser(raw.body)
+                  subject = parsed.subject || "(no subject)"
+                  from = parsed.from?.text || parsed.from?.value?.[0]?.address || "Unknown"
+                  date = parsed.date?.toISOString() || null
+                } catch {}
+              }
+              console.log(`[IMAP FETCH] DROPPED uid=${uid} — subject="${subject}"`)
+              droppedEmails.push({ subject, from, reason: "no keyword match", date })
+            }
+          }
+        } catch (e: any) {
+          console.warn(`[IMAP FETCH] Could not fetch all messages for drop logging:`, e?.message)
         }
 
         // 2. Fetch thread IDs of existing emails in DB for keyword + sent thread matching
@@ -1088,7 +1118,17 @@ async function _POST(req: NextRequest) {
         }
 
         console.log(`[IMAP FETCH] Fetching full bodies for ${uidsToFetch.length} messages...`)
-        const messages = await connection.search([["UID", uidsToFetch.join(",")]], fetchOptions)
+        const messages: any[] = []
+        for (const uid of uidsToFetch) {
+          try {
+            const results = await connection.search([["UID", String(uid)]], fetchOptions)
+            for (const m of results) {
+              if (m.attributes?.uid === uid) messages.push(m)
+            }
+          } catch (e: any) {
+            console.warn(`[IMAP FETCH] Failed to fetch uid=${uid}:`, e?.message)
+          }
+        }
         console.log(`[IMAP FETCH] Retrieved ${messages.length} messages`)
 
         // Batch check existing messages in one query
