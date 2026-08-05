@@ -121,21 +121,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(newUser)
       setLoading(false)
       if (newUser) {
-        loadProfile(newUser.id)
-        loadSubscription(newUser.id)
-        // Send welcome email only on first signup (account created within last 5 min)
-        if (event === "SIGNED_IN" && newUser.created_at) {
-          const createdAt = new Date(newUser.created_at)
-          const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000)
-          if (createdAt > fiveMinAgo) {
-            const fullName = newUser.user_metadata?.full_name || ""
-            fetch("/api/email/welcome", {
+        // Start trial and send welcome email on first signup (server-side gate via isNew flag)
+        if (event === "SIGNED_IN") {
+          try {
+            const trialRes = await fetch("/api/subscriptions/start-trial", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email: newUser.email, name: fullName }),
-            }).catch(() => {})
-          }
+              body: JSON.stringify({ userId: newUser.id }),
+            })
+            const trialData = trialRes.ok ? await trialRes.json() : null
+            const sub = trialData?.subscription
+            // Only send welcome email when subscription is first created (isNew === true)
+            if (trialData?.isNew && newUser.email) {
+              const fullName = newUser.user_metadata?.full_name || ""
+              const planName = sub?.plan ? sub.plan.charAt(0).toUpperCase() + sub.plan.slice(1) : "Solo"
+              const trialEnd = sub?.status === "trialing" ? sub.current_period_end : undefined
+              fetch("/api/email/welcome", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: newUser.email, name: fullName, planName, trialEnd }),
+              }).catch(() => {})
+            }
+          } catch {}
+          loadSubscription(newUser.id)
+        } else {
+          loadSubscription(newUser.id)
         }
+        loadProfile(newUser.id)
       } else {
         setProfile(null)
         setRole(null)

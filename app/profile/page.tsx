@@ -650,6 +650,20 @@ export default function ProfilePage() {
                       onChange={handleAvatarUpload}
                     />
                   </label>
+                  {form.avatarUrl && (
+                    <button
+                      type="button"
+                      title="Remove photo"
+                      onClick={async () => {
+                        setForm(f => ({ ...f, avatarUrl: "" }))
+                        await upsertProfile({ user_id: user!.id, avatar_url: "" })
+                        await refreshProfile()
+                      }}
+                      className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500/80 text-white hover:bg-red-500 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
                 <div className="flex-1 text-center sm:text-left">
                   <h2 className="text-xl font-bold text-white">{form.fullName}</h2>
@@ -1308,14 +1322,27 @@ export default function ProfilePage() {
                   </div>
                   {form.logoUrl && (
                     <div className="mb-2 flex items-center gap-3">
-                      <Image
-                        src={form.logoUrl}
-                        alt={t("profileCompanyLogo")}
-                        width={160}
-                        height={40}
-                        className="h-10 w-auto max-w-[160px] rounded object-contain"
-                        onError={e => { (e.target as HTMLImageElement).style.display = "none" }}
-                      />
+                      <div className="relative inline-flex">
+                        <Image
+                          src={form.logoUrl}
+                          alt={t("profileCompanyLogo")}
+                          width={160}
+                          height={40}
+                          className="h-10 w-auto max-w-[160px] rounded object-contain"
+                          onError={e => { (e.target as HTMLImageElement).style.display = "none" }}
+                        />
+                        <button
+                          type="button"
+                          title="Remove logo"
+                          onClick={async () => {
+                            setForm(f => ({ ...f, logoUrl: "" }))
+                            await upsertProfile({ user_id: user!.id, logo_url: "" })
+                          }}
+                          className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500/80 text-white hover:bg-red-500 transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
                   )}
                   <label className="flex cursor-pointer items-center gap-3 rounded-md border border-white/10 bg-[#2a3444] px-3 py-2.5 text-sm transition-colors hover:border-emerald-500/30">

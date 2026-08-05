@@ -6,11 +6,11 @@ export const dynamic = "force-dynamic"
 
 async function _POST(req: NextRequest) {
   try {
-    const { email, name } = await req.json()
+    const { email, name, planName, trialEnd } = await req.json()
     if (!email) {
       return NextResponse.json({ error: "Missing email" }, { status: 400 })
     }
-    await sendWelcomeEmail(email, name || undefined)
+    await sendWelcomeEmail(email, name || undefined, planName || undefined, trialEnd || undefined)
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error("[Welcome Email] Error:", err)

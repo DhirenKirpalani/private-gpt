@@ -21,8 +21,29 @@ async function send(to: string, subject: string, html: string) {
   }
 }
 
-export async function sendWelcomeEmail(email: string, name?: string) {
+export async function sendWelcomeEmail(email: string, name?: string, planName?: string, trialEnd?: string) {
   const firstName = name || email.split("@")[0]
+  const plan = planName || "Solo"
+  const trialEndDateText = trialEnd
+    ? new Date(trialEnd).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+    : null
+
+  const trialSection = trialEndDateText
+    ? `
+      <div style="background:#1a2235;border-radius:8px;padding:16px;margin:20px 0;">
+        <p style="margin:0 0 8px;font-size:13px;color:#9ca3af;">Your Plan</p>
+        <p style="margin:0;font-size:16px;font-weight:600;color:#34d399;">${plan} Plan — Free Trial</p>
+        <p style="margin:8px 0 0;font-size:13px;color:#cbd5e1;">Your free trial ends on <strong style="color:#e2e8f0;">${trialEndDateText}</strong>. No credit card required during the trial.</p>
+      </div>
+      <a href="${APP_URL}/pricing" style="display:inline-block;margin-top:16px;background:transparent;border:1px solid #34d399;color:#34d399;font-weight:600;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;">
+        View Plans & Upgrade
+      </a>`
+    : `
+      <div style="background:#1a2235;border-radius:8px;padding:16px;margin:20px 0;">
+        <p style="margin:0;font-size:13px;color:#9ca3af;">Your Plan</p>
+        <p style="margin:0;font-size:16px;font-weight:600;color:#34d399;">${plan} Plan</p>
+      </div>`
+
   const html = `
     <div style="${BASE_STYLE}">
       ${LOGO_HTML}
@@ -39,6 +60,7 @@ export async function sendWelcomeEmail(email: string, name?: string) {
           <li>Schedule meetings with calendar integration</li>
         </ul>
       </div>
+      ${trialSection}
       <a href="${APP_URL}/channels" style="display:inline-block;margin-top:20px;background:#34d399;color:#0f1520;font-weight:600;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:14px;">
         Connect Your Channels
       </a>
