@@ -67,27 +67,18 @@ export function planName(sub: Subscription | null): string {
 }
 
 export async function startTrial(userId: string): Promise<void> {
-  const now = new Date()
-
-  // Check for per-user override in profiles.trial_days
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("trial_days")
-    .eq("user_id", userId)
-    .single()
-
-  const days = profile?.trial_days ?? await getTrialDays()
-  const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
-  const { error } = await supabase.from("subscriptions").upsert(
-    {
-      user_id: userId,
-      status: "trialing",
-      current_period_start: now.toISOString(),
-      current_period_end: end.toISOString(),
-      plan: "solo",
-      updated_at: now.toISOString(),
-    },
-    { onConflict: "user_id" }
-  )
-  if (error) throw error
+  try {
+    const res = await fetch("/api/subscriptions/start-trial", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || "Failed to start trial")
+    }
+  } catch (err: any) {
+    console.error("[startTrial] Error:", err.message)
+    throw err
+  }
 }

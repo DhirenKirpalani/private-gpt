@@ -16,6 +16,16 @@ const nextConfig = {
         hostname: "supabase.co",
         pathname: "/storage/v1/object/public/**",
       },
+      {
+        protocol: "https",
+        hostname: "exploro-os.com",
+        pathname: "/assets/**",
+      },
+      {
+        protocol: "https",
+        hostname: "www.exploro-os.com",
+        pathname: "/assets/**",
+      },
     ],
     formats: ["image/avif", "image/webp"],
   },

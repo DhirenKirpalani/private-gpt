@@ -84,7 +84,7 @@ const sections = {
     {
       icon: KeyRound,
       title: "16. Google API Services User Data Policy",
-      body: `Exploro OS complies with the Google API Services User Data Policy, including the Limited Use requirements. This section explains how our application accesses, uses, stores, shares, and protects Google user data.`,
+      body: `Exploro OS complies with the Google API Services User Data Policy, including the Limited Use requirements. The use of raw or derived user data received from Workspace APIs will adhere to the Google User Data Policy, including the Limited Use requirements. This section explains how our application accesses, uses, stores, shares, and protects Google user data.`,
     },
     {
       icon: Database,
@@ -206,7 +206,7 @@ const sections = {
     {
       icon: KeyRound,
       title: "16. Política de Datos de Usuario de Google API Services",
-      body: `Exploro OS cumple con la Política de Datos de Usuario de Google API Services, incluyendo los requisitos de Uso Limitado. Esta sección explica cómo nuestra aplicación accede, usa, almacena, comparte y protege los datos de usuario de Google.`,
+      body: `Exploro OS cumple con la Política de Datos de Usuario de Google API Services, incluyendo los requisitos de Uso Limitado. El uso de datos de usuario sin procesar o derivados recibidos de las APIs de Workspace cumplirá con la Política de Datos de Usuario de Google, incluyendo los requisitos de Uso Limitado. Esta sección explica cómo nuestra aplicación accede, usa, almacena, comparte y protege los datos de usuario de Google.`,
     },
     {
       icon: Database,
