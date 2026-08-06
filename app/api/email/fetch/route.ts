@@ -291,11 +291,7 @@ async function _POST(req: NextRequest) {
                   if (!d) continue
                   const threadId = d.threadId || d.id
                   const subj = (d.payload?.headers || []).find((h: any) => h.name === "Subject")?.value || "(no subject)"
-                  if (!trackedThreadIds.has(threadId)) {
-                    console.log(`[SENT FETCH] SKIP thread_id=${threadId} not in tracked set — subject="${subj}"`)
-                    continue
-                  }
-                  console.log(`[SENT FETCH] MATCH thread_id=${threadId} — subject="${subj}"`)
+                  console.log(`[SENT FETCH] IMPORT thread_id=${threadId} — subject="${subj}"`)
 
                   const headers = d.payload?.headers || []
                   const getHeader = (name: string) => headers.find((h: any) => h.name === name)?.value || ""
@@ -491,11 +487,7 @@ async function _POST(req: NextRequest) {
                   if (!d) continue
                   const threadId = d.threadId || d.id
                   const subj = (d.payload?.headers || []).find((h: any) => h.name === "Subject")?.value || "(no subject)"
-                  if (!trackedThreadIds.has(threadId)) {
-                    console.log(`[SENT FETCH] SKIP thread_id=${threadId} not in tracked set — subject="${subj}"`)
-                    continue
-                  }
-                  console.log(`[SENT FETCH] MATCH thread_id=${threadId} — subject="${subj}"`)
+                  console.log(`[SENT FETCH] IMPORT thread_id=${threadId} — subject="${subj}"`)
 
                   const headers = d.payload?.headers || []
                   const getHeader = (name: string) => headers.find((h: any) => h.name === name)?.value || ""

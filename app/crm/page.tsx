@@ -180,6 +180,15 @@ export default function CRMPage() {
     "invite", "invitation", "podcast", "speaker", "guest",
   ]
 
+  // Refresh emailMessages from DB when Email tab becomes active (catches emails sent from other pages)
+  useEffect(() => {
+    if (activeTab === "Email" && user) {
+      getEmailMessages(user.id).then((msgs: any[]) => {
+        if (msgs.length > 0) setEmailMessages(msgs)
+      }).catch(() => {})
+    }
+  }, [activeTab, user])
+
   // Reset table pages when filters/search/channel change
   useEffect(() => { setEmailTablePage(0) }, [emailSearch, emailFilter, contactEmailFilter, keywordFilter, activeChannel])
   useEffect(() => { setMsgTablePage(0) }, [activeChannel])
@@ -220,6 +229,7 @@ export default function CRMPage() {
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const emailSyncShownRef = useRef(false)
   const emailFetchingRef = useRef(false)
+  const [silentFetching, setSilentFetching] = useState(false)
   const tgFetchingRef = useRef(false)
 
   // Table status dropdown state
@@ -1117,8 +1127,24 @@ export default function CRMPage() {
         await loadFromDB()
 
         // Auto-fetch from email provider in background, then reload from DB
-        // Find any connected provider that hasn't been fetched yet (new connection)
+        // Trigger for new connections (no last_fetched_at) OR returning to Email tab (silent refresh)
         const newConn = conns.find((c: any) => c.status === "connected" && !c.last_fetched_at)
+        const existingConn = !newConn && conns.find((c: any) => c.status === "connected")
+        if (existingConn && !emailFetchingRef.current) {
+          emailFetchingRef.current = true
+          setSilentFetching(true)
+          try {
+            const res = await fetch("/api/email/fetch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: user.id, providerId: existingConn.provider, since: existingConn.last_fetched_at || undefined }),
+            })
+            if (res.ok) await loadFromDB()
+          } catch {} finally {
+            emailFetchingRef.current = false
+            setSilentFetching(false)
+          }
+        }
         if (newConn && !emailFetchingRef.current) {
           emailFetchingRef.current = true
           setInboxLoading(true)
@@ -2372,31 +2398,31 @@ export default function CRMPage() {
                         console.log("[FETCH EMAILS] Manual fetch — last_fetched_at:", conn?.last_fetched_at || "none (full 15-day)", "→ now:", new Date().toISOString())
                         fetchInbox(undefined, true)
                       }}
-                      disabled={inboxLoading}
+                      disabled={inboxLoading || silentFetching}
                       className={cn(
                         "relative overflow-hidden flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-300 disabled:cursor-not-allowed",
                         fetchStep === "done"
                           ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-300"
-                          : inboxLoading
+                          : (inboxLoading || silentFetching)
                           ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
                           : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:text-emerald-300"
                       )}
                     >
                       {/* animated shimmer bar while loading */}
-                      {inboxLoading && (
+                      {(inboxLoading || silentFetching) && (
                         <span className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-[shimmer_1.2s_ease-in-out_infinite]" />
                       )}
                       {fetchStep === "done" ? (
                         <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none">
                           <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
-                      ) : inboxLoading ? (
+                      ) : (inboxLoading || silentFetching) ? (
                         <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                       ) : (
                         <Mail className="h-3.5 w-3.5 shrink-0" />
                       )}
                       <span className="whitespace-nowrap">
-                        {fetchStep === "scanning" && "Scanning inbox..."}
+                        {fetchStep === "scanning" && "Scanning inbox & sent..."}
                         {fetchStep === "filtering" && "Filtering emails..."}
                         {fetchStep === "importing" && "Importing contacts..."}
                         {fetchStep === "done" && `Done · ${fetchedCount} new`}
@@ -2845,12 +2871,12 @@ export default function CRMPage() {
                           <div className="h-14 w-14 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
                           <Mail className="absolute inset-0 m-auto h-6 w-6 text-emerald-400" />
                         </div>
-                        <h3 className="text-base font-semibold text-white">Syncing your inbox</h3>
+                        <h3 className="text-base font-semibold text-white">Syncing inbox &amp; sent</h3>
                         <p className="mt-1 text-sm text-muted-foreground">
                           {emailSyncModal.progress < 20
                             ? "Connecting to your email provider..."
                             : emailSyncModal.progress < 50
-                            ? "Fetching emails from the last 15 days..."
+                            ? "Fetching inbox & sent emails from the last 15 days..."
                             : emailSyncModal.progress < 80
                             ? "Filtering and categorizing emails..."
                             : "Almost done..."}
