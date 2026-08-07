@@ -32,7 +32,7 @@ async function _POST(req: NextRequest) {
     const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
     let { data: events, error: calErr } = await supabase
       .from("calendar_events")
-      .select("summary, description, start_time, end_time, location, attendees")
+      .select("event_id, summary, description, start_time, end_time, location, attendees")
       .eq("user_id", userId)
       .gt("end_time", now)
       .lte("start_time", twoWeeksLater)
@@ -53,7 +53,7 @@ async function _POST(req: NextRequest) {
           console.log("[AI CONTEXT] Calendar sync triggered, re-querying...")
           const requery = await supabase
             .from("calendar_events")
-            .select("summary, description, start_time, end_time, location, attendees")
+            .select("event_id, summary, description, start_time, end_time, location, attendees")
             .eq("user_id", userId)
             .gt("end_time", now)
             .lte("start_time", twoWeeksLater)
@@ -102,7 +102,7 @@ async function _POST(req: NextRequest) {
         const start = e.start_time ? new Date(e.start_time).toLocaleString() : ""
         const end = e.end_time ? new Date(e.end_time).toLocaleString() : ""
         const attendees = Array.isArray(e.attendees) ? e.attendees.join(", ") : ""
-        return `${i + 1}. ${e.summary || "Untitled"}\n   When: ${start}${end ? " - " + end : ""}\n   Where: ${e.location || "(no location)"}\n   Attendees: ${attendees || "(none)"}\n   Description: ${(e.description || "").slice(0, 100)}`
+        return `${i + 1}. ${e.summary || "Untitled"} [event_id: ${e.event_id || "unknown"}]\n   When: ${start}${end ? " - " + end : ""}\n   Where: ${e.location || "(no location)"}\n   Attendees: ${attendees || "(none)"}\n   Description: ${(e.description || "").slice(0, 100)}`
       }).join("\n\n")
     }
 
@@ -128,7 +128,7 @@ async function _POST(req: NextRequest) {
     if (slackErr) console.error("[AI CONTEXT] Slack fetch error:", slackErr.message)
 
     // Fetch recent Telegram messages (last 10)
-    const { data: tgMsgs, error: tgErr } = await supabase
+    let { data: tgMsgs, error: tgErr } = await supabase
       .from("telegram_messages")
       .select("from_first_name, from_username, chat_title, chat_id, body, direction, timestamp")
       .eq("user_id", userId)
@@ -136,6 +136,37 @@ async function _POST(req: NextRequest) {
       .limit(10)
 
     if (tgErr) console.error("[AI CONTEXT] Telegram fetch error:", tgErr.message)
+
+    // Auto-sync Telegram if no messages in DB
+    if ((!tgMsgs || tgMsgs.length === 0) && !tgErr) {
+      console.log("[AI CONTEXT] No Telegram messages in DB, attempting auto-sync...")
+      try {
+        const tgSyncRes = await fetch(
+          `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/telegram/user/fetch-chats`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) }
+        )
+        if (tgSyncRes.ok) {
+          console.log("[AI CONTEXT] Telegram sync triggered, re-querying...")
+          const requery = await supabase
+            .from("telegram_messages")
+            .select("from_first_name, from_username, chat_title, chat_id, body, direction, timestamp")
+            .eq("user_id", userId)
+            .order("timestamp", { ascending: false })
+            .limit(10)
+          if (requery.data) tgMsgs = requery.data
+        }
+      } catch (syncErr: any) {
+        console.error("[AI CONTEXT] Telegram sync failed:", syncErr.message)
+      }
+    }
+
+    // Fetch all distinct Telegram chats for a contacts directory (name → chatId map)
+    const { data: tgAllChats } = await supabase
+      .from("telegram_messages")
+      .select("chat_id, chat_title, from_first_name, from_last_name, from_username, direction")
+      .eq("user_id", userId)
+      .order("timestamp", { ascending: false })
+      .limit(200)
 
     // Format Slack context
     let slackContext = ""
@@ -151,12 +182,28 @@ async function _POST(req: NextRequest) {
     // Format Telegram context
     let telegramContext = ""
     if (tgMsgs && tgMsgs.length > 0) {
-      telegramContext = tgMsgs.map((m, i) => {
-        const date = m.timestamp ? new Date(m.timestamp).toLocaleString() : ""
-        const dir = m.direction === "sent" ? "→" : "←"
-        const name = m.direction === "sent" ? (m.chat_title || m.chat_id || "Telegram") : (m.from_first_name || m.from_username || "Unknown")
-        return `${i + 1}. ${dir} ${name} (chatId: ${m.chat_id})\n   Time: ${date}\n   Message: ${m.body || ""}`
-      }).join("\n\n")
+      // Build a contacts directory from all known chats
+      const chatDirectory: Record<string, string> = {}
+      if (tgAllChats) {
+        for (const m of tgAllChats) {
+          if (!m.chat_id) continue
+          const name = m.chat_title || (m.from_first_name ? `${m.from_first_name}${m.from_last_name ? " " + m.from_last_name : ""}` : null) || m.from_username || null
+          if (name && !chatDirectory[m.chat_id]) {
+            chatDirectory[m.chat_id] = name
+          }
+        }
+      }
+      const directoryLines = Object.entries(chatDirectory)
+        .map(([chatId, name]) => `  - ${name}: chatId=${chatId}`)
+        .join("\n")
+
+      telegramContext = `## Telegram Contacts & Chats Directory\nUse the chatId values below to send messages to the correct person or group:\n${directoryLines}\n\n## Recent Telegram Messages\n` +
+        tgMsgs.map((m, i) => {
+          const date = m.timestamp ? new Date(m.timestamp).toLocaleString() : ""
+          const dir = m.direction === "sent" ? "→" : "←"
+          const name = m.direction === "sent" ? (m.chat_title || m.chat_id || "Telegram") : (m.from_first_name || m.from_username || "Unknown")
+          return `${i + 1}. ${dir} ${name} (chatId: ${m.chat_id})\n   Time: ${date}\n   Message: ${m.body || ""}`
+        }).join("\n\n")
     }
 
     // Append Calendly scheduling URL to calendar context

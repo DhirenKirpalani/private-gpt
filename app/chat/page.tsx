@@ -7,7 +7,7 @@ import {
   Bot, Copy, RefreshCw, Share2, Sparkles,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, User, Paperclip, File, CheckCircle2, ChevronDown,
   Mail, Phone, CalendarDays, Check, Loader2, Menu, Edit2, AlertCircle,
-  HardDrive, Video, Eye, Lock, Zap,
+  HardDrive, Video, Eye, Lock, Zap, Trash2,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { NotificationBell } from "@/components/notification-bell"
@@ -45,6 +45,7 @@ interface Message {
   confidence?: "high" | "medium" | "low"
   timestamp: Date
   action?: { type: string; [key: string]: any }
+  action2?: { type: string; [key: string]: any }
 }
 
 function getInitials(name: string): string {
@@ -479,7 +480,7 @@ export default function ChatPage() {
     }
     const userAsksAboutInternal = isInternalQuery(content)
 
-    // Detect if user is asking about emails or calendar
+    // Detect if user is asking about any connected channel (email, calendar, Telegram, WhatsApp, Slack)
     function isEmailOrCalendarQuery(query: string): boolean {
       const lower = query.toLowerCase()
       const signals = [
@@ -488,6 +489,9 @@ export default function ChatPage() {
         "upcoming", "my meetings", "my emails", "check email",
         "draft email", "write email", "reply to", "respond to",
         "busy", "free time", "available", "book a meeting",
+        "telegram", "whatsapp", "slack", "message", "messages",
+        "send a message", "send message", "recent messages", "my messages",
+        "chat", "chats", "conversation", "conversations",
       ]
       return signals.some(s => lower.includes(s))
     }
@@ -647,10 +651,27 @@ export default function ChatPage() {
         `- The "body" field MUST contain ONLY the email body text. Do NOT include the <!--ACTION:...--> block inside the body field. Do NOT include any metadata, instructions, or action blocks in the body.`,
         ``,
         `# CRITICAL: CALENDAR EVENT PROTOCOL`,
-        `Similarly, you CANNOT create calendar events yourself. When the user asks to create an event, draft it and append:`,
+        `Similarly, you CANNOT create calendar events yourself. When the user asks to create an event, ALWAYS write a brief summary first (title, date/time, attendees, Meet link if requested), THEN append the action block at the very end. NEVER output only the action block with no text.`,
         `<!--ACTION:{"type":"create_event","title":"Event Title","start":"2026-06-19T14:00:00Z","end":"2026-06-19T15:00:00Z","attendees":["a@b.com"],"location":"Zoom"}-->`,
         `If the user wants a Google Meet link attached, include "addGoogleMeet":true:`,
         `<!--ACTION:{"type":"create_event","title":"Event Title","start":"2026-06-19T14:00:00Z","end":"2026-06-19T15:00:00Z","attendees":["a@b.com"],"addGoogleMeet":true}-->`,
+        `- ALWAYS write the event details (title, date, time, attendees) as readable text BEFORE the action block.`,
+        ``,
+        `# CRITICAL: MULTI-ACTION PROTOCOL`,
+        `When the user asks you to do TWO things in one message (e.g. "create a calendar event AND send a confirmation email"), you MUST output BOTH action blocks — one right after the other at the end of your response. The first <!--ACTION:--> block is the primary action (e.g. send_email), the second <!--ACTION:--> block is the secondary action (e.g. create_event). The user will see two separate buttons to confirm each action independently.`,
+        `Example — user asks to create a meeting AND send a confirmation email:`,
+        `[Your summary text here]`,
+        `<!--ACTION:{"type":"send_email","to":"attendee@example.com","subject":"Meeting Confirmation","body":"Hi, just confirming our meeting on Wednesday at 12pm."  }-->`,
+        `<!--ACTION:{"type":"create_event","title":"Strategy Meeting","start":"2026-08-12T12:00:00Z","end":"2026-08-12T13:00:00Z","attendees":["attendee@example.com"],"addGoogleMeet":true}-->`,
+        `NEVER merge both actions into one block. ALWAYS use two separate <!--ACTION:--> blocks.`,
+        ``,
+        `# CRITICAL: DELETE CALENDAR EVENT PROTOCOL`,
+        `When the user asks to delete or cancel a calendar event, look up its event_id from the calendar context provided, then output:`,
+        `<!--ACTION:{"type":"delete_event","eventId":"THE_EVENT_ID_FROM_CONTEXT","title":"Event Title"}-->`,
+        `If the user also wants to notify attendees by email, output a second action block after the delete block:`,
+        `<!--ACTION:{"type":"delete_event","eventId":"abc123","title":"Strategy Meeting"}-->`,
+        `<!--ACTION:{"type":"send_email","to":"attendee@example.com","subject":"Meeting Cancelled","body":"Hi, the meeting has been cancelled."}-->`,
+        `NEVER delete an event without confirming the event_id from context. If the event is not in context, tell the user to first fetch their calendar.`,
         ``,
         `# CRITICAL: GOOGLE DRIVE UPLOAD PROTOCOL`,
         `You CANNOT upload files to Google Drive yourself. When the user asks you to generate a document and save it to Google Drive, write the document content and append:`,
@@ -1009,15 +1030,19 @@ export default function ChatPage() {
         if (currentConvIdRef.current !== convId) return prev
         return prev.map(m =>
           m.id === assistantMsgId
-            ? { ...m, content: extracted.content, action: extracted.action }
+            ? { ...m, content: extracted.content, action: extracted.action, action2: extracted.action2 }
             : m
         )
       })
 
       // Save assistant message to DB
-      const contentToSave = extracted.action
-        ? `${extracted.content}\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(extracted.action))))}-->`
-        : extracted.content
+      let contentToSave = extracted.content
+      if (extracted.action) {
+        contentToSave += `\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(extracted.action))))}-->`
+      }
+      if (extracted.action2) {
+        contentToSave += `\n<!--ACTION2_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(extracted.action2))))}-->`
+      }
       saveMessage(convId, "assistant", contentToSave, assistantMsg.sources, streamUsage
         ? { prompt_tokens: streamUsage.prompt_tokens ?? 0, completion_tokens: streamUsage.completion_tokens ?? 0, total_tokens: streamUsage.total_tokens ?? 0 }
         : undefined)
@@ -1237,28 +1262,43 @@ export default function ChatPage() {
     } catch (e) { console.error("[CHAT] Failed to generate title:", e) }
   }
 
-  // Detect AI action blocks (<!--ACTION:{...}-->) and return stripped content + action data
-  function extractAiAction(content: string, userMessage?: string): { content: string; action?: { type: string; [key: string]: any } } {
-    // Broad regex: match <!--ACTION: ... --> even if JSON is malformed (starts with { or ( )
-    const broadMatch = content.match(/<!--ACTION:[\s\S]*?-->/)
-    // Strict regex: only match well-formed JSON objects
-    const strictMatch = content.match(/<!--ACTION:({[\s\S]+?})-->/)
+  // Detect AI action blocks (<!--ACTION:{...}-->) and return stripped content + up to two action objects
+  function extractAiAction(content: string, userMessage?: string): { content: string; action?: { type: string; [key: string]: any }; action2?: { type: string; [key: string]: any } } {
+    // Find ALL strict action blocks
+    const allStrict = [...content.matchAll(/<!--ACTION:({[\s\S]+?})-->/g)]
     let action: { type: string; [key: string]: any } | undefined
+    let action2: { type: string; [key: string]: any } | undefined
     let strippedContent = content
 
-    if (strictMatch) {
+    if (allStrict[0]) {
       try {
-        action = JSON.parse(strictMatch[1])
-        strippedContent = content.replace(strictMatch[0], "").trim()
-        console.log("[AI ACTION] Extracted action:", action!.type, "to:", action!.to)
+        action = JSON.parse(allStrict[0][1])
+        console.log("[AI ACTION] Extracted action:", action!.type)
       } catch (e: any) {
-        console.error("[AI ACTION] Failed to parse action JSON:", e?.message, "raw:", strictMatch[1])
+        console.error("[AI ACTION] Failed to parse action JSON:", e?.message)
+      }
+    }
+    if (allStrict[1]) {
+      try {
+        action2 = JSON.parse(allStrict[1][1])
+        console.log("[AI ACTION] Extracted action2:", action2!.type)
+      } catch (e: any) {
+        console.error("[AI ACTION] Failed to parse action2 JSON:", e?.message)
       }
     }
 
-    // Always strip any ACTION block from content, even if JSON was malformed
-    if (broadMatch) {
-      strippedContent = strippedContent.replace(/<!--ACTION:[\s\S]*?-->/g, "").trim()
+    // Strip all ACTION blocks from content
+    strippedContent = strippedContent.replace(/<!--ACTION:[\s\S]*?-->/g, "").trim()
+
+    // If the AI only output ACTION block(s) with no human text, provide a friendly fallback
+    if ((action || action2) && !strippedContent) {
+      const fallbacks: Record<string, string> = {
+        send_email: `I'll send that email for you. Please review and confirm below.`,
+        create_event: `I'll create that calendar event for you. Please review and confirm below.`,
+        upload_drive: `I'll upload that to Google Drive. Please review and confirm below.`,
+      }
+      const primaryType = action?.type || action2?.type || ""
+      strippedContent = fallbacks[primaryType] || `I'll take care of that for you. Please review and confirm below.`
     }
 
     // If no valid action was extracted, try fallback email draft detection
@@ -1293,7 +1333,6 @@ export default function ChatPage() {
             .replace(/Por favor (?:revisa|haz clic)[\s\S]*$/i, "")
             .trim()
         } else {
-          // No "Body:" label — extract everything after the Subject line
           const subjectIdx = strippedContent.search(/Subject:\s*.+/i)
           if (subjectIdx >= 0) {
             const afterSubject = strippedContent.slice(subjectIdx)
@@ -1329,7 +1368,7 @@ export default function ChatPage() {
       action.body = action.body.replace(/<!--ACTION:[\s\S]*?-->/g, "").trim()
     }
 
-    return { content: strippedContent, action }
+    return { content: strippedContent, action, action2 }
   }
 
   async function executeAiAction(action: { type: string; [key: string]: any }): Promise<string> {
@@ -1393,6 +1432,21 @@ export default function ChatPage() {
       return calRes.ok
         ? `*(Event "${action.title}" created)*`
         : `*(Event failed: ${calData.error || "Unknown error"})*`
+    }
+    if (action.type === "delete_event" && user) {
+      const delRes = await fetch("/api/calendar/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, eventId: action.eventId }),
+      })
+      const delData = await delRes.json()
+      if (delRes.ok) {
+        toast({ title: "Event deleted", description: `"${action.title || action.eventId}" removed from your calendar`, variant: "success" })
+        return `*(Event "${action.title || action.eventId}" deleted from Google Calendar)*`
+      } else {
+        toast({ title: "Delete failed", description: delData.error || "Unknown error", variant: "error" })
+        return `*(Delete failed: ${delData.error || "Unknown error"})*`
+      }
     }
     if (action.type === "upload_drive" && user) {
       const fileName = action.fileName || "document.md"
@@ -1558,16 +1612,24 @@ export default function ChatPage() {
       }).map((m: any) => {
         const rawContent = m.content || ""
         const actionMatch = rawContent.match(/<!--ACTION_B64:([A-Za-z0-9+/=]+)-->/)
+        const action2Match = rawContent.match(/<!--ACTION2_B64:([A-Za-z0-9+/=]+)-->/)
         let action: { type: string; [key: string]: any } | undefined
+        let action2: { type: string; [key: string]: any } | undefined
         let cleanContent = rawContent
         if (actionMatch) {
           try {
             action = JSON.parse(decodeURIComponent(escape(atob(actionMatch[1]))))
-            cleanContent = rawContent.replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
-          } catch {
-            cleanContent = rawContent.replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
-          }
+          } catch {}
         }
+        if (action2Match) {
+          try {
+            action2 = JSON.parse(decodeURIComponent(escape(atob(action2Match[1]))))
+          } catch {}
+        }
+        cleanContent = rawContent
+          .replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "")
+          .replace(/<!--ACTION2_B64:[A-Za-z0-9+/=]+-->/g, "")
+          .trim()
         return {
           id: m.id,
           role: m.role,
@@ -1575,6 +1637,7 @@ export default function ChatPage() {
           sources: m.sources || undefined,
           timestamp: new Date(m.created_at),
           action,
+          action2,
         }
       })
       // If switching back to a conversation with an active stream, append the in-flight assistant message
@@ -1594,6 +1657,7 @@ export default function ChatPage() {
             content: displayContent,
             sources: undefined,
             action: undefined,
+            action2: undefined,
             timestamp: new Date(),
           })
         }
@@ -1614,16 +1678,20 @@ export default function ChatPage() {
         }).map((m: any) => {
           const rawContent = m.content || ""
           const actionMatch = rawContent.match(/<!--ACTION_B64:([A-Za-z0-9+/=]+)-->/)
+          const action2Match = rawContent.match(/<!--ACTION2_B64:([A-Za-z0-9+/=]+)-->/)
           let action: { type: string; [key: string]: any } | undefined
+          let action2: { type: string; [key: string]: any } | undefined
           let cleanContent = rawContent
           if (actionMatch) {
-            try {
-              action = JSON.parse(decodeURIComponent(escape(atob(actionMatch[1]))))
-              cleanContent = rawContent.replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
-            } catch {
-              cleanContent = rawContent.replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").trim()
-            }
+            try { action = JSON.parse(decodeURIComponent(escape(atob(actionMatch[1])))) } catch {}
           }
+          if (action2Match) {
+            try { action2 = JSON.parse(decodeURIComponent(escape(atob(action2Match[1])))) } catch {}
+          }
+          cleanContent = rawContent
+            .replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "")
+            .replace(/<!--ACTION2_B64:[A-Za-z0-9+/=]+-->/g, "")
+            .trim()
           return {
             id: m.id,
             role: m.role,
@@ -1631,6 +1699,7 @@ export default function ChatPage() {
             sources: m.sources || undefined,
             timestamp: new Date(m.created_at),
             action,
+            action2,
           }
         })
         setMessages(refreshedDeduped)
@@ -2485,6 +2554,8 @@ export default function ChatPage() {
                               ? "bg-green-600/20 text-green-400 border border-green-500/30 hover:bg-green-600/30"
                               : msg.action!.type === "send_telegram"
                               ? "bg-sky-600/20 text-sky-400 border border-sky-500/30 hover:bg-sky-600/30"
+                              : msg.action!.type === "delete_event"
+                              ? "bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600/30"
                               : "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30",
                             executingActions.has(msg.id) && "opacity-50 cursor-not-allowed"
                           )}
@@ -2492,12 +2563,12 @@ export default function ChatPage() {
                           {executingActions.has(msg.id) ? (
                             <>
                               <Loader2 className="h-3 w-3 animate-spin" />
-                              {msg.action!.type === "send_email" ? "Sending..." : msg.action!.type === "send_whatsapp" ? "Sending..." : msg.action!.type === "send_telegram" ? "Sending..." : "Creating..."}
+                              {msg.action!.type === "send_email" ? "Sending..." : msg.action!.type === "send_whatsapp" ? "Sending..." : msg.action!.type === "send_telegram" ? "Sending..." : msg.action!.type === "delete_event" ? "Deleting..." : "Creating..."}
                             </>
                           ) : (
                             <>
-                              {msg.action!.type === "send_email" ? <Send className="h-3 w-3" /> : msg.action!.type === "send_whatsapp" ? <MessageSquare className="h-3 w-3" /> : msg.action!.type === "send_telegram" ? <Send className="h-3 w-3" /> : <CalendarDays className="h-3 w-3" />}
-                              {msg.action!.type === "send_email" ? "Send Email" : msg.action!.type === "send_whatsapp" ? "Send WhatsApp" : msg.action!.type === "send_telegram" ? "Send Telegram" : "Create Event"}
+                              {msg.action!.type === "send_email" ? <Send className="h-3 w-3" /> : msg.action!.type === "send_whatsapp" ? <MessageSquare className="h-3 w-3" /> : msg.action!.type === "send_telegram" ? <Send className="h-3 w-3" /> : msg.action!.type === "delete_event" ? <Trash2 className="h-3 w-3" /> : <CalendarDays className="h-3 w-3" />}
+                              {msg.action!.type === "send_email" ? "Send Email" : msg.action!.type === "send_whatsapp" ? "Send WhatsApp" : msg.action!.type === "send_telegram" ? "Send Telegram" : msg.action!.type === "delete_event" ? "Delete Event" : "Create Event"}
                             </>
                           )}
                         </button>
@@ -2509,6 +2580,27 @@ export default function ChatPage() {
                           >
                             <Edit2 className="h-3 w-3" />
                             Edit
+                          </button>
+                        )}
+                        {msg.action2 && (
+                          <button
+                            onClick={() => handleExecuteAction(msg.id + "_a2", msg.action2!)}
+                            disabled={executingActions.has(msg.id + "_a2")}
+                            className={cn(
+                              "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                              msg.action2.type === "create_event"
+                                ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30"
+                                : msg.action2.type === "send_email"
+                                ? "bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30"
+                                : "bg-purple-600/20 text-purple-400 border border-purple-500/30 hover:bg-purple-600/30",
+                              executingActions.has(msg.id + "_a2") && "opacity-50 cursor-not-allowed"
+                            )}
+                          >
+                            {executingActions.has(msg.id + "_a2") ? (
+                              <><Loader2 className="h-3 w-3 animate-spin" />{msg.action2.type === "create_event" ? "Creating..." : "Sending..."}</>
+                            ) : (
+                              <>{msg.action2.type === "create_event" ? <CalendarDays className="h-3 w-3" /> : <Send className="h-3 w-3" />}{msg.action2.type === "create_event" ? "Create Event" : msg.action2.type === "send_email" ? "Send Email" : "Execute"}</>
+                            )}
                           </button>
                         )}
                       </div>

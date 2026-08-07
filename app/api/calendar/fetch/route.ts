@@ -321,6 +321,9 @@ async function _POST(req: NextRequest) {
         const existingStart = existing.start_time ? new Date(existing.start_time).toISOString() : null
         const existingEnd = existing.end_time ? new Date(existing.end_time).toISOString() : null
         if (existingStart !== startIso || existingEnd !== endIso || existing.summary !== summary) {
+          const meetLinkUpdate = ev.hangoutLink
+            || ev.conferenceData?.entryPoints?.find((ep: any) => ep.entryPointType === "video")?.uri
+            || null
           updates.push({
             event_id: ev.id,
             data: {
@@ -330,8 +333,8 @@ async function _POST(req: NextRequest) {
               end_time: endIso,
               attendees,
               location: ev.location || null,
-              event_link: ev.htmlLink || null,
-              is_online: ev.conferenceData?.conferenceSolution?.name?.toLowerCase().includes("meet") || false,
+              event_link: meetLinkUpdate || ev.htmlLink || null,
+              is_online: !!meetLinkUpdate || ev.conferenceData?.conferenceSolution?.name?.toLowerCase().includes("meet") || false,
             }
           })
         } else {
@@ -340,6 +343,9 @@ async function _POST(req: NextRequest) {
         continue
       }
 
+      const meetLink = ev.hangoutLink
+        || ev.conferenceData?.entryPoints?.find((ep: any) => ep.entryPointType === "video")?.uri
+        || null
       payloads.push({
         user_id: userId,
         connection_id: conn.id,
@@ -350,8 +356,8 @@ async function _POST(req: NextRequest) {
         end_time: end ? new Date(end).toISOString() : null,
         attendees: attendees,
         location: ev.location || null,
-        event_link: ev.htmlLink || null,
-        is_online: ev.conferenceData?.conferenceSolution?.name?.toLowerCase().includes("meet") || false,
+        event_link: meetLink || ev.htmlLink || null,
+        is_online: !!meetLink || ev.conferenceData?.conferenceSolution?.name?.toLowerCase().includes("meet") || false,
       })
     }
 
