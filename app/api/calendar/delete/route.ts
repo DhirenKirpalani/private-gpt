@@ -51,7 +51,7 @@ async function _DELETE(req: NextRequest) {
     const accessToken = await refreshIfNeeded(conn)
 
     const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?sendUpdates=all`,
       { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
     )
 
