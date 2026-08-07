@@ -37,6 +37,12 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { toast, Toaster } from "@/components/ui/toast"
 
+// Module-level singleton — survives component unmount/remount so in-flight streams
+// continue streaming even when the user navigates away and comes back.
+const _globalStream: {
+  inflight: { convId: string; assistantMsgId: string; content: string } | null
+} = { inflight: null }
+
 interface Message {
   id: string
   role: "user" | "assistant"
@@ -193,7 +199,6 @@ export default function ChatPage() {
   const sendingRef = useRef(false)
   const savedAssistantIdRef = useRef<string | null>(null)
   const currentConvIdRef = useRef<string | null>(null)
-  const inflightStreamRef = useRef<{ convId: string; assistantMsgId: string; content: string } | null>(null)
   const [failedMessageId, setFailedMessageId] = useState<string | null>(null)
   const [previewDoc, setPreviewDoc] = useState<{ name: string; content: string; category: string } | null>(null)
 
@@ -238,6 +243,29 @@ export default function ChatPage() {
     loadConversations()
     if (kbEnabled) loadKbDocs()
   }, [currentWorkspace?.id])
+
+  // Reconnect to in-flight stream when returning to the chat page (after navigating away)
+  useEffect(() => {
+    const inflight = _globalStream.inflight
+    if (!inflight) return
+    // If there's an active stream for the current conversation, show loading and partial content
+    setLoading(true)
+    setCurrentConversationId(inflight.convId)
+    currentConvIdRef.current = inflight.convId
+    if (inflight.content) {
+      const displayContent = inflight.content
+        .replace(/<!--ACTION:[\s\S]*?-->/g, "")
+        .replace(/<!--ACTION:[\s\S]*$/g, "")
+        .replace(/<!--AC[\s\S]*$/g, "")
+        .trim()
+      if (displayContent) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === inflight.assistantMsgId)) return prev
+          return [...prev, { id: inflight.assistantMsgId, role: "assistant", content: displayContent, timestamp: new Date() }]
+        })
+      }
+    }
+  }, [])
 
   // Reload KB docs when tab becomes visible or regains focus
   // (user may have deleted/added docs in another tab or navigated away and back)
@@ -657,13 +685,19 @@ export default function ChatPage() {
         `<!--ACTION:{"type":"create_event","title":"Event Title","start":"2026-06-19T14:00:00Z","end":"2026-06-19T15:00:00Z","attendees":["a@b.com"],"addGoogleMeet":true}-->`,
         `- ALWAYS write the event details (title, date, time, attendees) as readable text BEFORE the action block.`,
         ``,
-        `# CRITICAL: MULTI-ACTION PROTOCOL`,
-        `When the user asks you to do TWO things in one message (e.g. "create a calendar event AND send a confirmation email"), you MUST output BOTH action blocks — one right after the other at the end of your response. The first <!--ACTION:--> block is the primary action (e.g. send_email), the second <!--ACTION:--> block is the secondary action (e.g. create_event). The user will see two separate buttons to confirm each action independently.`,
-        `Example — user asks to create a meeting AND send a confirmation email:`,
-        `[Your summary text here]`,
-        `<!--ACTION:{"type":"send_email","to":"attendee@example.com","subject":"Meeting Confirmation","body":"Hi, just confirming our meeting on Wednesday at 12pm."  }-->`,
-        `<!--ACTION:{"type":"create_event","title":"Strategy Meeting","start":"2026-08-12T12:00:00Z","end":"2026-08-12T13:00:00Z","attendees":["attendee@example.com"],"addGoogleMeet":true}-->`,
-        `NEVER merge both actions into one block. ALWAYS use two separate <!--ACTION:--> blocks.`,
+        `# CRITICAL: MULTI-ACTION PROTOCOL — MANDATORY`,
+        `When the user asks you to BOTH create a calendar event AND send an email in the same message, you MUST output EXACTLY TWO <!--ACTION:--> blocks at the very end of your response — no exceptions.`,
+        `Block 1 (email): <!--ACTION:{"type":"send_email","to":"a@b.com,c@d.com","subject":"...","body":"..."}-->`,
+        `Block 2 (calendar): <!--ACTION:{"type":"create_event","title":"...","start":"ISO8601","end":"ISO8601","attendees":["a@b.com"],"addGoogleMeet":true}-->`,
+        `RULES:`,
+        `- Output BOTH blocks even if the user only said "create the meeting" — if they also asked to send an email, BOTH blocks are required.`,
+        `- The blocks must appear consecutively at the very end of your message, after all readable text.`,
+        `- NEVER write "A calendar invitation has been sent" or similar — you cannot send anything. The USER clicks buttons to confirm each action.`,
+        `- NEVER omit the second block. If you only output one block, the second action will never happen.`,
+        `Example (user asks to create meeting AND send email):`,
+        `[Your summary here]`,
+        `<!--ACTION:{"type":"send_email","to":"a@b.com","subject":"Meeting Confirmation - Title","body":"Hi, confirming our meeting on DATE at TIME."}-->`,
+        `<!--ACTION:{"type":"create_event","title":"Meeting Title","start":"2026-08-12T17:00:00Z","end":"2026-08-12T18:00:00Z","attendees":["a@b.com"],"addGoogleMeet":true}-->`,
         ``,
         `# CRITICAL: DELETE CALENDAR EVENT PROTOCOL`,
         `When the user asks to delete or cancel a calendar event, look up its event_id from the calendar context provided, then output:`,
@@ -872,7 +906,7 @@ export default function ChatPage() {
 
       // Set preliminary inflight ref so switching back during API wait shows loading state
       const preliminaryAssistantId = (Date.now() + 1).toString()
-      inflightStreamRef.current = { convId, assistantMsgId: preliminaryAssistantId, content: "" }
+      _globalStream.inflight = { convId, assistantMsgId: preliminaryAssistantId, content: "" }
 
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -980,8 +1014,8 @@ export default function ChatPage() {
               // Normal delta content
               if (parsed.content) {
                 streamedContent += parsed.content
-                if (inflightStreamRef.current?.assistantMsgId === assistantMsgId) {
-                  inflightStreamRef.current.content = streamedContent
+                if (_globalStream.inflight?.assistantMsgId === assistantMsgId) {
+                  _globalStream.inflight.content = streamedContent
                 }
                 // Update the assistant message progressively (strip complete and partial action tags)
                 let displayContent = streamedContent
@@ -1055,7 +1089,7 @@ export default function ChatPage() {
               return prev.map(m => m.id === assistantMsgId ? { ...m, id: saved.id } : m)
             })
           }
-          inflightStreamRef.current = null
+          _globalStream.inflight = null
         })
         .catch((e) => console.error("[CHAT] Failed to save assistant message:", e))
       // Generate title from AI after first exchange
@@ -1079,7 +1113,7 @@ export default function ChatPage() {
         }).catch(e => console.error("[MEMORY] Extraction failed:", e))
       }
     } catch (err: any) {
-      inflightStreamRef.current = null
+      _globalStream.inflight = null
       if (err?.name === "AbortError") return // Aborted by new request, don't show error
       // Skip error banner if quota exceeded modal is already shown
       if (err?.message === "__QUOTA_EXCEEDED__") return
@@ -1536,29 +1570,45 @@ export default function ChatPage() {
       if (!finalDbId) {
         console.warn("[AI ACTION] No DB ID available after retry — message may not be saved yet")
       }
+      // Determine if this is the primary action (action) or secondary action (action2)
+      const isAction2 = msgId.endsWith("_a2")
+      const primaryMsgId = isAction2 ? msgId.slice(0, -3) : msgId
+
       setMessages(prev => {
         const allIds = prev.map(m => `${m.role}:${m.id}`).join(", ")
         console.log("[AI ACTION] Current message IDs:", allIds)
         return prev.map(m => {
-        if (m.id !== msgId && m.id !== finalDbId) return m
-        const updatedContent = m.content + "\n\n" + resultText
-        const updateId = finalDbId || m.id
-        console.log("[AI ACTION] Updating message in DB:", { updateId, currentMsgId: m.id, hasAction: !isFailure })
-        if (!isFailure) {
-          // On success, save WITHOUT the ACTION_B64 block so button doesn't reappear on reload
-          updateMessageContent(updateId, updatedContent).then(() => {
-            console.log("[AI ACTION] DB update SUCCESS — message saved without action block")
-          }).catch((e) => {
-            console.error("[AI ACTION] Failed to update message in DB:", e?.message || e)
-          })
-        } else {
-          // On failure, keep the action block so user can retry
-          const contentWithAction = updatedContent + `\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(action))))}-->`
-          updateMessageContent(updateId, contentWithAction).catch((e) => {
-            console.error("[AI ACTION] Failed to update message in DB:", e)
-          })
-        }
-        return { ...m, content: updatedContent, action: isFailure ? m.action : undefined }
+          if (m.id !== primaryMsgId && m.id !== finalDbId) return m
+          const updatedContent = m.content + "\n\n" + resultText
+          const updateId = finalDbId || m.id
+          console.log("[AI ACTION] Updating message in DB:", { updateId, currentMsgId: m.id, isAction2, isFailure })
+
+          // Determine remaining actions after this execution
+          const remainingAction = isAction2 ? m.action : (isFailure ? m.action : undefined)
+          const remainingAction2 = isAction2 ? (isFailure ? m.action2 : undefined) : m.action2
+
+          if (!isFailure) {
+            // On success, persist any remaining action blocks to DB so buttons survive reload
+            let dbContent = updatedContent
+            if (remainingAction) dbContent += `\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(remainingAction))))}-->`
+            if (remainingAction2) dbContent += `\n<!--ACTION2_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(remainingAction2))))}-->`
+            updateMessageContent(updateId, dbContent).then(() => {
+              console.log("[AI ACTION] DB update SUCCESS")
+            }).catch((e) => {
+              console.error("[AI ACTION] Failed to update message in DB:", e?.message || e)
+            })
+          } else {
+            // On failure, keep the failed action block so user can retry
+            const failedBlock = isAction2
+              ? `\n<!--ACTION2_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(action))))}-->`
+              : `\n<!--ACTION_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(action))))}-->`
+            const dbContent = updatedContent + failedBlock
+              + (remainingAction2 && !isAction2 ? `\n<!--ACTION2_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(remainingAction2))))}-->` : "")
+            updateMessageContent(updateId, dbContent).catch((e) => {
+              console.error("[AI ACTION] Failed to update message in DB:", e)
+            })
+          }
+          return { ...m, content: updatedContent, action: remainingAction, action2: remainingAction2 }
         })
       })
     } catch (err: any) {
@@ -1641,7 +1691,7 @@ export default function ChatPage() {
         }
       })
       // If switching back to a conversation with an active stream, append the in-flight assistant message
-      const inflight = inflightStreamRef.current
+      const inflight = _globalStream.inflight
       console.log("[CHAT SWITCH] convId:", convId, "dbMessages:", deduped.length, "inflight:", inflight ? { convId: inflight.convId, contentLen: inflight.content.length } : null)
       if (inflight && inflight.convId === convId) {
         // Stream still active — only append if there's content, otherwise loading indicator handles it
@@ -1667,7 +1717,7 @@ export default function ChatPage() {
       // Now that messages are loaded, update currentConvIdRef so stream updates can flow
       currentConvIdRef.current = convId
       // If stream just finished while we were loading, reload to get the assistant message from DB
-      if (!inflightStreamRef.current && deduped.length > 0 && deduped[deduped.length - 1].role === "user") {
+      if (!_globalStream.inflight && deduped.length > 0 && deduped[deduped.length - 1].role === "user") {
         const refreshed = await getMessages(convId)
         const refreshedDeduped = refreshed.filter((m: any, i: number) => {
           if (i === 0) return true
@@ -1710,12 +1760,12 @@ export default function ChatPage() {
   async function handleDeleteConversation(e: React.MouseEvent, convId: string) {
     e.stopPropagation()
     // If deleting the conversation with an active stream, abort it
-    if (inflightStreamRef.current?.convId === convId) {
+    if (_globalStream.inflight?.convId === convId) {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
         abortControllerRef.current = null
       }
-      inflightStreamRef.current = null
+      _globalStream.inflight = null
     }
     try {
       await deleteConversation(convId)
@@ -2384,20 +2434,20 @@ export default function ChatPage() {
                       <img src="/assets/images/exploro-icon.svg" alt="" className="h-8 w-8 object-contain" />
                     )}
                   </div>
-                  <div className={cn("max-w-[72%] space-y-2", msg.role === "user" && "flex flex-col items-end")}>
+                  <div className={cn("max-w-[72%] min-w-0 space-y-2", msg.role === "user" && "flex flex-col items-end")}>
                     <div
                       data-bubble
                       className={cn(
-                        "group relative rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                        "group relative rounded-2xl px-4 py-3 text-sm leading-relaxed break-words",
                         msg.role === "user"
-                          ? "rounded-tr-sm text-white"
+                          ? "rounded-tr-sm text-white mt-3"
                           : "rounded-tl-sm border border-white/15 shadow-xl"
                       )}
                       style={msg.role === "user"
                         ? { backgroundColor: themePrimary, color: "#fff" }
                         : { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.15)", color: "#f1f5f9", boxShadow: "0 2px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)" }
                       }>
-                      {msg.role === "user" && !loading && editingMsgId !== msg.id && (
+                      {msg.role === "user" && editingMsgId !== msg.id && (
                         <button
                           onClick={(e) => {
                             const bubble = e.currentTarget.closest('[data-bubble]') as HTMLElement
@@ -2540,9 +2590,10 @@ export default function ChatPage() {
                     <div className={cn("text-[10px] text-muted-foreground/50 px-1", msg.role === "user" && "text-right")}>
                       {formatMessageTime(msg.timestamp)}
                     </div>
-                    {/* Inline action buttons */}
-                    {msg.role === "assistant" && msg.action && editingActionMsgId !== msg.id && (
+                    {/* Inline action buttons — always clickable, even during in-flight requests */}
+                    {msg.role === "assistant" && (msg.action || msg.action2) && editingActionMsgId !== msg.id && (
                       <div className="mt-2 flex items-center gap-2">
+                        {msg.action && (
                         <button
                           onClick={() => handleExecuteAction(msg.id, msg.action!)}
                           disabled={executingActions.has(msg.id)}
@@ -2572,7 +2623,8 @@ export default function ChatPage() {
                             </>
                           )}
                         </button>
-                        {(msg.action!.type === "send_email" || msg.action!.type === "send_whatsapp" || msg.action!.type === "send_telegram") && (
+                        )}
+                        {msg.action && (msg.action.type === "send_email" || msg.action.type === "send_whatsapp" || msg.action.type === "send_telegram") && (
                           <button
                             onClick={() => setEditingActionMsgId(msg.id)}
                             disabled={executingActions.has(msg.id)}
@@ -2740,7 +2792,7 @@ export default function ChatPage() {
               </div>
               )
             })}
-              {loading && (!messages.length || messages[messages.length - 1].role !== "assistant" || (!messages[messages.length - 1].content && !inflightStreamRef.current)) && (
+              {loading && (!messages.length || messages[messages.length - 1].role !== "assistant" || (!messages[messages.length - 1].content && !_globalStream.inflight)) && (
                 <div className="flex gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent overflow-hidden">
                     <img src="/assets/images/exploro-icon.svg" alt="" className="h-8 w-8 object-contain" />

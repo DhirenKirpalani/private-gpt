@@ -76,7 +76,7 @@ async function _POST(req: NextRequest) {
       }
     }
 
-    const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1", {
+    const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
