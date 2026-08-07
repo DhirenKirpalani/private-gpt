@@ -189,6 +189,28 @@ export default function CRMPage() {
     }
   }, [activeTab, user])
 
+  // Auto-sync Telegram when Messages tab becomes active
+  useEffect(() => {
+    if (activeTab !== "Messages" || !user) return
+    // Load from DB first (instant display)
+    getTelegramMessages(user.id).then((msgs: any[]) => {
+      if (msgs.length > 0) { setTelegramMessages(msgs); setTelegramFetched(true) }
+    }).catch(() => {})
+    // Then trigger live sync in background — show spinner on Fetch Messages button
+    if (!tgFetchingRef.current) {
+      tgFetchingRef.current = true
+      setTelegramLoading(true)
+      fetch("/api/telegram/user/fetch-chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      }).then(() => getTelegramMessages(user.id)).then((msgs: any[]) => {
+        setTelegramMessages(msgs)
+        setTelegramFetched(true)
+      }).catch(() => {}).finally(() => { tgFetchingRef.current = false; setTelegramLoading(false) })
+    }
+  }, [activeTab, user])
+
   // Reset table pages when filters/search/channel change
   useEffect(() => { setEmailTablePage(0) }, [emailSearch, emailFilter, contactEmailFilter, keywordFilter, activeChannel])
   useEffect(() => { setMsgTablePage(0) }, [activeChannel])
@@ -747,14 +769,23 @@ export default function CRMPage() {
             }).catch(() => {})
           : (() => { setWhatsAppMessages([]); setWhatsAppFetched(false); return Promise.resolve() })(),
         tgConnsRes.status === "fulfilled" && tgConnsRes.value
-          ? (tgFetchingRef.current ? Promise.resolve() : (tgFetchingRef.current = true, fetch("/api/telegram/user/fetch-chats", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId: user.id }),
-            }).then(() => getTelegramMessages(user.id)).then((msgs: any[]) => {
-              setTelegramMessages(msgs)
-              setTelegramFetched(true)
-            }).catch(() => {}).finally(() => { tgFetchingRef.current = false })))
+          ? (() => {
+              // Load from DB immediately, then sync live in background
+              return getTelegramMessages(user.id).then((cached: any[]) => {
+                if (cached.length > 0) { setTelegramMessages(cached); setTelegramFetched(true) }
+                if (!tgFetchingRef.current) {
+                  tgFetchingRef.current = true
+                  fetch("/api/telegram/user/fetch-chats", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ userId: user.id }),
+                  }).then(() => getTelegramMessages(user.id)).then((msgs: any[]) => {
+                    setTelegramMessages(msgs)
+                    setTelegramFetched(true)
+                  }).catch(() => {}).finally(() => { tgFetchingRef.current = false })
+                }
+              }).catch(() => {})
+            })()
           : (() => { setTelegramMessages([]); setTelegramFetched(false); return Promise.resolve() })(),
         slConnsRes.status === "fulfilled" && slConnsRes.value.length > 0
           ? fetch("/api/slack/fetch", {
@@ -1448,6 +1479,14 @@ export default function CRMPage() {
       setCalendarLoading(false)
     }
   }
+
+  // Auto-sync Calendar when Calendar tab becomes active
+  useEffect(() => {
+    if (activeTab !== "Calendar" || !user) return
+    const hasConn = calendarConnections.some((c: any) => (c.provider === "google" || c.provider === "calendly") && c.status === "connected")
+    if (!hasConn) return
+    fetchCalendar()
+  }, [activeTab, user, calendarConnections])
 
   // Send email
   const handleSendEmail = async () => {
@@ -2422,11 +2461,12 @@ export default function CRMPage() {
                         <Mail className="h-3.5 w-3.5 shrink-0" />
                       )}
                       <span className="whitespace-nowrap">
-                        {fetchStep === "scanning" && "Scanning inbox & sent..."}
-                        {fetchStep === "filtering" && "Filtering emails..."}
-                        {fetchStep === "importing" && "Importing contacts..."}
+                        {fetchStep === "scanning" && "Fetching Emails..."}
+                        {fetchStep === "filtering" && "Fetching Emails..."}
+                        {fetchStep === "importing" && "Fetching Emails..."}
                         {fetchStep === "done" && `Done · ${fetchedCount} new`}
-                        {!fetchStep && t("crmFetchEmails")}
+                        {!fetchStep && silentFetching && "Fetching Emails..."}
+                        {!fetchStep && !silentFetching && t("crmFetchEmails")}
                       </span>
                     </button>
                   </div>
@@ -3316,11 +3356,18 @@ export default function CRMPage() {
                       finally { setWhatsAppLoading(false); setTelegramLoading(false); setSlackLoading(false) }
                     }}
                     disabled={whatsappLoading || telegramLoading || slackLoading || (whatsappConnections.length === 0 && telegramConnections.length === 0 && slackConnections.length === 0)}
-                    className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
+                    className={cn(
+                      "relative overflow-hidden flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-300 disabled:cursor-not-allowed",
+                      (whatsappLoading || telegramLoading || slackLoading)
+                        ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                        : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:text-emerald-300"
+                    )}
                   >
-                    {whatsappLoading || telegramLoading || slackLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />}
-                    <span className="hidden sm:inline">{whatsappLoading || telegramLoading || slackLoading ? t("crmRefreshing") : t("crmRefresh")}</span>
-                    <span className="sm:hidden">{whatsappLoading || telegramLoading || slackLoading ? "..." : t("crmRefresh")}</span>
+                    {(whatsappLoading || telegramLoading || slackLoading) && (
+                      <span className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-[shimmer_1.2s_ease-in-out_infinite]" />
+                    )}
+                    {(whatsappLoading || telegramLoading || slackLoading) ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <Phone className="h-3.5 w-3.5 shrink-0" />}
+                    <span className="whitespace-nowrap">{whatsappLoading || telegramLoading || slackLoading ? t("crmRefreshing") : t("crmRefresh")}</span>
                   </button>
                   </div>
                 </div>
@@ -3820,11 +3867,18 @@ export default function CRMPage() {
                     <button
                       onClick={() => fetchCalendar(true)}
                       disabled={calendarLoading || !calendarConnections.find((c: any) => (c.provider === "google" || c.provider === "calendly") && c.status === "connected")}
-                      className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-xs font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300 disabled:opacity-40 sm:px-3"
+                      className={cn(
+                        "relative overflow-hidden flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-300 disabled:cursor-not-allowed",
+                        calendarLoading
+                          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:text-emerald-300"
+                      )}
                     >
-                      {calendarLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ClipboardList className="h-3.5 w-3.5" />}
-                      <span className="hidden sm:inline">{calendarLoading ? t("crmSyncing") : t("crmSyncCalendarBtn")}</span>
-                      <span className="sm:hidden">{calendarLoading ? "..." : t("crmSyncShort")}</span>
+                      {calendarLoading && (
+                        <span className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-[shimmer_1.2s_ease-in-out_infinite]" />
+                      )}
+                      {calendarLoading ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <ClipboardList className="h-3.5 w-3.5 shrink-0" />}
+                      <span className="whitespace-nowrap">{calendarLoading ? t("crmFetchingCalendar") : t("crmFetchCalendar")}</span>
                     </button>
                   </div>
                 </div>

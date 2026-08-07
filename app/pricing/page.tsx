@@ -60,7 +60,7 @@ function usePricingData() {
     { feature: t("pricingCompareFeatureChat"), solo: true, team: true, enterprise: true },
     { feature: t("pricingCompareFeatureWhatsApp"), solo: false, team: true, enterprise: true },
     { feature: t("pricingCompareFeatureEmail"), solo: true, team: true, enterprise: true },
-    { feature: t("pricingCompareFeatureTelegram"), solo: false, team: true, enterprise: true },
+    { feature: t("pricingCompareFeatureTelegram"), solo: true, team: true, enterprise: true },
     { feature: t("pricingCompareFeatureAnalytics"), solo: false, team: true, enterprise: true },
     { feature: t("pricingCompareFeatureCollaboration"), solo: false, team: true, enterprise: true },
     { feature: t("pricingCompareFeaturePrioritySupport"), solo: false, team: true, enterprise: true },
