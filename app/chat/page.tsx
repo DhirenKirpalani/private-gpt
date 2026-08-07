@@ -1265,7 +1265,7 @@ export default function ChatPage() {
   // Detect AI action blocks (<!--ACTION:{...}-->) and return stripped content + up to two action objects
   function extractAiAction(content: string, userMessage?: string): { content: string; action?: { type: string; [key: string]: any }; action2?: { type: string; [key: string]: any } } {
     // Find ALL strict action blocks
-    const allStrict = [...content.matchAll(/<!--ACTION:({[\s\S]+?})-->/g)]
+    const allStrict = Array.from(content.matchAll(/<!--ACTION:({[\s\S]+?})-->/g))
     let action: { type: string; [key: string]: any } | undefined
     let action2: { type: string; [key: string]: any } | undefined
     let strippedContent = content
