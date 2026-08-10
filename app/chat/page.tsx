@@ -1834,7 +1834,7 @@ export default function ChatPage() {
       const next = new Set(prev)
       if (next.has(convId)) next.delete(convId)
       else next.add(convId)
-      try { localStorage.setItem("exploro_pinned_convs", JSON.stringify([...next])) } catch {}
+      try { localStorage.setItem("exploro_pinned_convs", JSON.stringify(Array.from(next))) } catch {}
       return next
     })
     setConvMenuId(null)
