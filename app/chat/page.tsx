@@ -41,7 +41,8 @@ import { toast, Toaster } from "@/components/ui/toast"
 // continue streaming even when the user navigates away and comes back.
 const _globalStream: {
   inflight: { convId: string; assistantMsgId: string; content: string } | null
-} = { inflight: null }
+  controller: AbortController | null
+} = { inflight: null, controller: null }
 
 interface Message {
   id: string
@@ -294,27 +295,106 @@ export default function ChatPage() {
     if (kbEnabled) loadKbDocs()
   }, [currentWorkspace?.id])
 
-  // Reconnect to in-flight stream when returning to the chat page (after navigating away)
+  // Reconnect to in-flight stream when returning to the chat page (after navigating away).
+  // Loads full DB history + partial assistant content so the UI is complete on remount.
   useEffect(() => {
     const inflight = _globalStream.inflight
     if (!inflight) return
-    // If there's an active stream for the current conversation, show loading and partial content
     setLoading(true)
+    setLoadingText("Generating response…")
+    if (_globalStream.controller) abortControllerRef.current = _globalStream.controller
     setCurrentConversationId(inflight.convId)
     currentConvIdRef.current = inflight.convId
-    if (inflight.content) {
+    // Load full conversation history from DB so user messages are visible
+    getMessages(inflight.convId).then(dbMessages => {
+      const mapped = dbMessages.map((m: any) => {
+        const rawContent = m.content || ""
+        const actionMatch = rawContent.match(/<!--ACTION_B64:([A-Za-z0-9+/=]+)-->/)
+        const action2Match = rawContent.match(/<!--ACTION2_B64:([A-Za-z0-9+/=]+)-->/)
+        let action: any; let action2: any
+        try { if (actionMatch) action = JSON.parse(decodeURIComponent(escape(atob(actionMatch[1])))) } catch {}
+        try { if (action2Match) action2 = JSON.parse(decodeURIComponent(escape(atob(action2Match[1])))) } catch {}
+        return {
+          id: m.id, role: m.role,
+          content: rawContent.replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").replace(/<!--ACTION2_B64:[A-Za-z0-9+/=]+-->/g, "").trim(),
+          sources: m.sources || undefined,
+          timestamp: new Date(m.created_at),
+          action, action2,
+        }
+      })
+      // Append partial streaming content if stream is still active
+      const currentInflight = _globalStream.inflight
+      if (currentInflight && currentInflight.convId === inflight.convId) {
+        const displayContent = currentInflight.content
+          .replace(/<!--ACTION:[\s\S]*?-->/g, "")
+          .replace(/<!--ACTION:[\s\S]*$/g, "")
+          .replace(/<!--AC[\s\S]*$/g, "")
+          .trim()
+        if (displayContent && !mapped.some((m: any) => m.id === currentInflight.assistantMsgId)) {
+          mapped.push({ id: currentInflight.assistantMsgId, role: "assistant", content: displayContent, timestamp: new Date(), sources: undefined, action: undefined, action2: undefined })
+        }
+      }
+      setMessages(mapped)
+      currentConvIdRef.current = inflight.convId
+    }).catch(() => {})
+  }, [])
+
+  // Poll _globalStream.inflight every 80ms to keep messages in sync while streaming.
+  // Also detects stream completion and reloads from DB to get final saved message.
+  useEffect(() => {
+    let wasStreaming = !!_globalStream.inflight
+    const interval = setInterval(() => {
+      const inflight = _globalStream.inflight
+      const isStreaming = !!inflight
+
+      // Stream just finished — reload from DB and clear loading state
+      if (wasStreaming && !isStreaming) {
+        wasStreaming = false
+        const convId = currentConvIdRef.current
+        if (convId) {
+          setLoading(false)
+          setLoadingText("")
+          getMessages(convId).then(dbMessages => {
+            const mapped = dbMessages.map((m: any) => {
+              const rawContent = m.content || ""
+              const actionMatch = rawContent.match(/<!--ACTION_B64:([A-Za-z0-9+/=]+)-->/)
+              const action2Match = rawContent.match(/<!--ACTION2_B64:([A-Za-z0-9+/=]+)-->/)
+              let action: any; let action2: any
+              try { if (actionMatch) action = JSON.parse(decodeURIComponent(escape(atob(actionMatch[1])))) } catch {}
+              try { if (action2Match) action2 = JSON.parse(decodeURIComponent(escape(atob(action2Match[1])))) } catch {}
+              return {
+                id: m.id, role: m.role,
+                content: rawContent.replace(/<!--ACTION_B64:[A-Za-z0-9+/=]+-->/g, "").replace(/<!--ACTION2_B64:[A-Za-z0-9+/=]+-->/g, "").trim(),
+                sources: m.sources || undefined,
+                timestamp: new Date(m.created_at),
+                action, action2,
+              }
+            })
+            setMessages(mapped)
+          }).catch(() => {})
+        }
+        return
+      }
+      wasStreaming = isStreaming
+
+      if (!inflight) return
+      if (inflight.convId !== currentConvIdRef.current) return
       const displayContent = inflight.content
         .replace(/<!--ACTION:[\s\S]*?-->/g, "")
         .replace(/<!--ACTION:[\s\S]*$/g, "")
         .replace(/<!--AC[\s\S]*$/g, "")
         .trim()
-      if (displayContent) {
-        setMessages(prev => {
-          if (prev.some(m => m.id === inflight.assistantMsgId)) return prev
-          return [...prev, { id: inflight.assistantMsgId, role: "assistant", content: displayContent, timestamp: new Date() }]
-        })
-      }
-    }
+      if (!displayContent) return
+      setMessages(prev => {
+        const existing = prev.find(m => m.id === inflight.assistantMsgId)
+        if (existing) {
+          if (existing.content === displayContent) return prev
+          return prev.map(m => m.id === inflight.assistantMsgId ? { ...m, content: displayContent } : m)
+        }
+        return [...prev, { id: inflight.assistantMsgId, role: "assistant", content: displayContent, timestamp: new Date() }]
+      })
+    }, 80)
+    return () => clearInterval(interval)
   }, [])
 
   // Reload KB docs when tab becomes visible or regains focus
@@ -511,11 +591,16 @@ export default function ChatPage() {
     setFailedMessageId(null)
 
     // Abort any in-flight request
+    if (_globalStream.controller) {
+      _globalStream.controller.abort()
+      _globalStream.controller = null
+    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
     const controller = new AbortController()
     abortControllerRef.current = controller
+    _globalStream.controller = controller
 
     setLoading(true)
 
@@ -1140,6 +1225,7 @@ export default function ChatPage() {
             })
           }
           _globalStream.inflight = null
+          _globalStream.controller = null
         })
         .catch((e) => console.error("[CHAT] Failed to save assistant message:", e))
       // Generate title from AI after first exchange
@@ -1164,6 +1250,7 @@ export default function ChatPage() {
       }
     } catch (err: any) {
       _globalStream.inflight = null
+      _globalStream.controller = null
       if (err?.name === "AbortError") return // Aborted by new request, don't show error
       // Skip error banner if quota exceeded modal is already shown
       if (err?.message === "__QUOTA_EXCEEDED__") return
@@ -2333,28 +2420,29 @@ export default function ChatPage() {
                     )}
 
                     {/* ── RECENTS ── */}
-                    <div>
-                      <button
-                        onClick={() => setRecentsCollapsed(p => !p)}
-                        className="mb-1 flex w-full items-center gap-1.5 px-2 py-0.5 group"
-                      >
-                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-white transition-colors duration-150">{t("chatRecent")}</span>
-                        <ChevronDown className={cn("h-3 w-3 text-muted-foreground group-hover:text-white transition-transform duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]", recentsCollapsed && "-rotate-90")} />
-                      </button>
-                      {/* Grid-rows trick: animates actual height smoothly with no glitch */}
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateRows: recentsCollapsed ? "0fr" : "1fr",
-                          transition: "grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease",
-                          opacity: recentsCollapsed ? 0 : 1,
-                        }}
-                      >
-                        <div style={{ overflow: "hidden" }}>
-                          {recents.map(conv => <ConvItem key={conv.id} conv={conv} isPinned={false} />)}
+                    {recents.length > 0 && (
+                      <div>
+                        <button
+                          onClick={() => setRecentsCollapsed(p => !p)}
+                          className="mb-1 flex w-full items-center gap-1.5 px-2 py-0.5 group"
+                        >
+                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-white transition-colors duration-150">{t("chatRecent")}</span>
+                          <ChevronDown className={cn("h-3 w-3 text-muted-foreground group-hover:text-white transition-transform duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]", recentsCollapsed && "-rotate-90")} />
+                        </button>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateRows: recentsCollapsed ? "0fr" : "1fr",
+                            transition: "grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease",
+                            opacity: recentsCollapsed ? 0 : 1,
+                          }}
+                        >
+                          <div style={{ overflow: "hidden" }}>
+                            {recents.map(conv => <ConvItem key={conv.id} conv={conv} isPinned={false} />)}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </>
                 )
               })()}

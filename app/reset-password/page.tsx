@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { supabase, updatePassword, signOut } from "@/lib/supabase"
+import { PasswordStrength } from "@/components/password-strength"
 
 function ResetPasswordContent() {
   const router = useRouter()
@@ -21,6 +22,7 @@ function ResetPasswordContent() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [recoveryReady, setRecoveryReady] = useState(false)
+
 
   // detectSessionInUrl: true creates a valid session from the recovery token.
   // We keep the session alive (needed to call updateUser for password change)
@@ -124,6 +126,8 @@ function ResetPasswordContent() {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+
+            <PasswordStrength password={password} />
           </div>
 
           <div className="space-y-1.5">
