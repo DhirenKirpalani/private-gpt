@@ -5,9 +5,9 @@ import Link from "next/link"
 import {
   Plus, MessageSquare, Search, Send, BookOpen, Globe, Radio,
   Bot, Copy, RefreshCw, Share2, Sparkles,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, User, Paperclip, File, CheckCircle2, ChevronDown,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, User, Paperclip, File, CheckCircle2, ChevronDown, ChevronUp,
   Mail, Phone, CalendarDays, Check, Loader2, Menu, Edit2, AlertCircle,
-  HardDrive, Video, Eye, Lock, Zap, Trash2,
+  HardDrive, Video, Eye, Lock, Zap, Trash2, Pin, PinOff, MoreHorizontal,
 } from "lucide-react"
 import { NavRail } from "@/components/nav-rail"
 import { NotificationBell } from "@/components/notification-bell"
@@ -171,6 +171,16 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [conversationsLoading, setConversationsLoading] = useState(false)
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
+  const [recentsCollapsed, setRecentsCollapsed] = useState(false)
+  const [showSearchDrawer, setShowSearchDrawer] = useState(false)
+  const [searchDrawerQuery, setSearchDrawerQuery] = useState("")
+  const [convMenuId, setConvMenuId] = useState<string | null>(null)
+  const [convMenuPos, setConvMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const convMenuRef = useRef<HTMLDivElement>(null)
+  const [renamingConvId, setRenamingConvId] = useState<string | null>(null)
+  const [renamingTitle, setRenamingTitle] = useState("")
+  const [shareModal, setShareModal] = useState<{ convId: string; title: string; preview: string } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const kbPanelRef = useRef<HTMLDivElement>(null)
@@ -227,6 +237,46 @@ export default function ChatPage() {
     setWebSearchEnabled(ws)
     loadConnectedChannels()
   }, [])
+
+  // Load pinned conversation IDs from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("exploro_pinned_convs")
+      if (stored) setPinnedIds(new Set(JSON.parse(stored)))
+    } catch {}
+  }, [])
+
+  // ⌘K / Ctrl+K opens search drawer
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+        setShowSearchDrawer(v => !v)
+        setSearchDrawerQuery("")
+      }
+      if (e.key === "Escape") setShowSearchDrawer(false)
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [])
+
+  // Close context menu on outside click or scroll
+  useEffect(() => {
+    if (!convMenuId) return
+    function handleClick(e: MouseEvent) {
+      if (convMenuRef.current && !convMenuRef.current.contains(e.target as Node)) {
+        setConvMenuId(null)
+        setConvMenuPos(null)
+      }
+    }
+    function handleScroll() { setConvMenuId(null); setConvMenuPos(null) }
+    document.addEventListener("mousedown", handleClick)
+    document.addEventListener("scroll", handleScroll, true)
+    return () => {
+      document.removeEventListener("mousedown", handleClick)
+      document.removeEventListener("scroll", handleScroll, true)
+    }
+  }, [convMenuId])
 
   // Load KB docs and their contents on mount if toggle is enabled
   useEffect(() => {
@@ -1779,6 +1829,41 @@ export default function ChatPage() {
     } catch { /* silent */ }
   }
 
+  function togglePin(convId: string) {
+    setPinnedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(convId)) next.delete(convId)
+      else next.add(convId)
+      try { localStorage.setItem("exploro_pinned_convs", JSON.stringify([...next])) } catch {}
+      return next
+    })
+    setConvMenuId(null)
+  }
+
+  async function handleRenameConversation(convId: string, newTitle: string) {
+    if (!newTitle.trim()) return
+    try {
+      await updateConversationTitle(convId, newTitle.trim())
+      setConversations(prev => prev.map(c => c.id === convId ? { ...c, title: newTitle.trim() } : c))
+    } catch {}
+    setRenamingConvId(null)
+  }
+
+  async function handleShareConversation(convId: string) {
+    setConvMenuId(null)
+    setConvMenuPos(null)
+    const conv = conversations.find(c => c.id === convId)
+    let preview = ""
+    try {
+      const msgs = await getMessages(convId)
+      const firstAssistant = msgs.find(m => m.role === "assistant")
+      if (firstAssistant) {
+        preview = firstAssistant.content.replace(/<!--ACTION[^>]*-->/g, "").replace(/<!--ACTION2_B64[^>]*-->/g, "").trim().slice(0, 300)
+      }
+    } catch {}
+    setShareModal({ convId, title: conv?.title || "Conversation", preview })
+  }
+
   useEffect(() => {
     if (!showKbPanel) return
     function handleClick(e: MouseEvent) {
@@ -1985,13 +2070,14 @@ export default function ChatPage() {
           </Link>
         </div>
         <div className="hidden flex-1 justify-center md:flex">
-          <div className="relative w-full max-w-lg">
+          <button
+            onClick={() => { setShowSearchDrawer(true); setSearchDrawerQuery("") }}
+            className="relative flex w-full max-w-lg items-center gap-2 rounded-full border border-white/10 bg-muted/50 py-2 pl-10 pr-4 text-sm text-muted-foreground hover:bg-muted/70 hover:border-white/20 transition-all text-left"
+          >
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              className="w-full rounded-full border bg-muted/50 py-2 pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-              placeholder={t("chatSearchPlaceholder")}
-            />
-          </div>
+            {t("chatSearchPlaceholder")}
+            <span className="ml-auto text-[10px] border border-white/10 rounded px-1.5 py-0.5 text-muted-foreground/50">⌘K</span>
+          </button>
         </div>
         <div className="flex flex-1 justify-end items-center gap-1.5 sm:gap-2 md:gap-3 md:flex-none">
           {/* Language toggle */}
@@ -2153,35 +2239,125 @@ export default function ChatPage() {
                 <ChevronsLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-3 pb-4">
-              <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("chatRecent")}</p>
+            <div className="flex-1 overflow-y-auto px-3 pb-4 relative">
               {conversationsLoading && <ConversationSkeleton />}
               {!conversationsLoading && conversations.length === 0 && (
                 <p className="px-2 py-4 text-xs text-muted-foreground text-center">No conversations yet.</p>
               )}
-              {!conversationsLoading && conversations.map((conv, i) => (
-                <button
-                  key={conv.id}
-                  onClick={() => handleSelectConversation(conv.id)}
-                  style={{ animationDelay: `${i * 20}ms` }}
-                  className={cn(
-                    "animate-fade-in group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors",
-                    currentConversationId === conv.id ? "bg-emerald-600/10" : "hover:bg-muted/50"
-                  )}
-                >
-                  <MessageSquare className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", currentConversationId === conv.id ? "text-emerald-400" : "text-muted-foreground")} />
-                  <div className="min-w-0 flex-1">
-                    <div className={cn("truncate text-sm font-medium", currentConversationId === conv.id ? "text-emerald-400" : "text-white")}>
-                      {conv.title || "New conversation"}
-                    </div>
-                    <div className="text-xs text-muted-foreground">{timeAgo(conv.created_at)}</div>
+
+              {/* ── CONV ITEM RENDERER (shared) ── */}
+              {(() => {
+                const ConvItem = ({ conv, isPinned }: { conv: ChatConversation; isPinned: boolean }) => (
+                  <div key={conv.id} className="relative group/item">
+                    {renamingConvId === conv.id ? (
+                      <form
+                        onSubmit={e => { e.preventDefault(); handleRenameConversation(conv.id, renamingTitle) }}
+                        className="flex items-center gap-1 px-2 py-1.5"
+                      >
+                        <input
+                          autoFocus
+                          value={renamingTitle}
+                          onChange={e => setRenamingTitle(e.target.value)}
+                          onBlur={() => handleRenameConversation(conv.id, renamingTitle)}
+                          onKeyDown={e => e.key === "Escape" && setRenamingConvId(null)}
+                          className="flex-1 min-w-0 rounded-md border border-white/15 bg-white/5 px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500/50"
+                        />
+                        <button type="submit" className="text-emerald-400 hover:text-emerald-300">
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button type="button" onClick={() => setRenamingConvId(null)} className="text-muted-foreground hover:text-white">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        onClick={() => handleSelectConversation(conv.id)}
+                        className={cn(
+                          "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-all duration-150 pr-14",
+                          currentConversationId === conv.id ? "bg-emerald-600/10" : "hover:bg-muted/50"
+                        )}
+                      >
+                        {isPinned
+                          ? <Pin className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", currentConversationId === conv.id ? "text-emerald-400" : "text-muted-foreground")} />
+                          : <MessageSquare className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", currentConversationId === conv.id ? "text-emerald-400" : "text-muted-foreground")} />
+                        }
+                        <div className="min-w-0 flex-1">
+                          <div className={cn("truncate text-sm font-medium", currentConversationId === conv.id ? "text-emerald-400" : "text-white")}>
+                            {conv.title || "New conversation"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">{timeAgo(conv.created_at)}</div>
+                        </div>
+                      </button>
+                    )}
+                    {/* Inline action buttons: pin + three-dots */}
+                    {renamingConvId !== conv.id && (
+                      <div className="absolute right-1 top-1.5 flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity duration-150">
+                        <button
+                          onClick={e => { e.stopPropagation(); togglePin(conv.id) }}
+                          title={isPinned ? "Unpin" : "Pin"}
+                          className="flex h-5 w-5 items-center justify-center rounded hover:bg-white/10 transition-colors"
+                        >
+                          {isPinned
+                            ? <PinOff className="h-3 w-3 text-muted-foreground" />
+                            : <Pin className="h-3 w-3 text-muted-foreground" />
+                          }
+                        </button>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            if (convMenuId === conv.id) { setConvMenuId(null); setConvMenuPos(null); return }
+                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                            setConvMenuPos({ x: rect.right, y: rect.bottom + 4 })
+                            setConvMenuId(conv.id)
+                          }}
+                          className="flex h-5 w-5 items-center justify-center rounded hover:bg-white/10 transition-colors"
+                        >
+                          <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <X
-                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400"
-                    onClick={e => handleDeleteConversation(e, conv.id)}
-                  />
-                </button>
-              ))}
+                )
+
+                const pinned = conversations.filter(c => pinnedIds.has(c.id))
+                const recents = conversations.filter(c => !pinnedIds.has(c.id))
+
+                return (
+                  <>
+                    {/* ── PINNED ── */}
+                    {pinned.length > 0 && (
+                      <div className="mb-3">
+                        <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pinned</p>
+                        {pinned.map(conv => <ConvItem key={conv.id} conv={conv} isPinned />)}
+                      </div>
+                    )}
+
+                    {/* ── RECENTS ── */}
+                    <div>
+                      <button
+                        onClick={() => setRecentsCollapsed(p => !p)}
+                        className="mb-1 flex w-full items-center gap-1.5 px-2 py-0.5 group"
+                      >
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-white transition-colors duration-150">{t("chatRecent")}</span>
+                        <ChevronDown className={cn("h-3 w-3 text-muted-foreground group-hover:text-white transition-transform duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]", recentsCollapsed && "-rotate-90")} />
+                      </button>
+                      {/* Grid-rows trick: animates actual height smoothly with no glitch */}
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateRows: recentsCollapsed ? "0fr" : "1fr",
+                          transition: "grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease",
+                          opacity: recentsCollapsed ? 0 : 1,
+                        }}
+                      >
+                        <div style={{ overflow: "hidden" }}>
+                          {recents.map(conv => <ConvItem key={conv.id} conv={conv} isPinned={false} />)}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
             </div>
           </aside>
         )}
@@ -3258,6 +3434,216 @@ export default function ChatPage() {
       )}
 
       <Toaster />
+
+      {/* ── CONVERSATION CONTEXT MENU (fixed portal, escapes overflow containers) ── */}
+      {convMenuId && convMenuPos && (() => {
+        const conv = conversations.find(c => c.id === convMenuId)
+        if (!conv) return null
+        const isPinned = pinnedIds.has(conv.id)
+        return (
+          <div
+            ref={convMenuRef}
+            style={{ position: "fixed", left: convMenuPos.x - 192, top: convMenuPos.y, zIndex: 9999, width: 192 }}
+            className="rounded-xl border border-white/10 bg-[#1a1f2e] shadow-2xl py-1 text-sm"
+          >
+            <button onClick={() => handleShareConversation(conv.id)} className="flex w-full items-center gap-2.5 px-3 py-2 hover:bg-white/5 text-left text-white/80 hover:text-white transition-colors">
+              <Share2 className="h-3.5 w-3.5 text-muted-foreground" /> Share
+            </button>
+            <button onClick={() => { setRenamingConvId(conv.id); setRenamingTitle(conv.title || ""); setConvMenuId(null); setConvMenuPos(null) }} className="flex w-full items-center gap-2.5 px-3 py-2 hover:bg-white/5 text-left text-white/80 hover:text-white transition-colors">
+              <Edit2 className="h-3.5 w-3.5 text-muted-foreground" /> Rename
+            </button>
+            <button onClick={() => { togglePin(conv.id); setConvMenuPos(null) }} className="flex w-full items-center gap-2.5 px-3 py-2 hover:bg-white/5 text-left text-white/80 hover:text-white transition-colors">
+              {isPinned ? <PinOff className="h-3.5 w-3.5 text-muted-foreground" /> : <Pin className="h-3.5 w-3.5 text-muted-foreground" />}
+              {isPinned ? "Unpin" : "Pin chat"}
+            </button>
+            <div className="my-1 border-t border-white/5" />
+            <button onClick={e => { handleDeleteConversation(e, conv.id); setConvMenuId(null); setConvMenuPos(null) }} className="flex w-full items-center gap-2.5 px-3 py-2 hover:bg-red-500/10 text-left text-red-400 transition-colors">
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </button>
+          </div>
+        )
+      })()}
+
+      {/* ── SHARE MODAL ── */}
+      {shareModal && (() => {
+        const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/share/${shareModal.convId}`
+        return (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" onClick={() => setShareModal(null)}>
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
+            <div
+              className="relative w-full max-w-md rounded-3xl shadow-[0_32px_80px_rgba(0,0,0,0.6)] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+              style={{ background: "linear-gradient(160deg,#101828 0%,#0c1520 100%)", border: "1px solid rgba(255,255,255,0.08)" }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Emerald glow top accent */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-500/60 to-transparent" />
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 pt-6 pb-3">
+                <img src="/assets/images/exploro-logo.png" alt="Exploro" className="h-7 w-auto object-contain" />
+                <button
+                  onClick={() => setShareModal(null)}
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-white/6 text-muted-foreground hover:bg-white/12 hover:text-white transition-all"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Title */}
+              <div className="px-6 pb-4">
+                <h2 className="text-base font-semibold text-white leading-snug">{shareModal.title}</h2>
+                <p className="mt-0.5 text-xs text-emerald-400/70">Shareable conversation</p>
+              </div>
+
+              {/* Preview card */}
+              {shareModal.preview && (
+                <div className="mx-6 mb-4 rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)" }}>
+                  <div className="flex items-center gap-2 border-b border-white/5 px-4 py-2.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-[11px] font-medium text-emerald-400/80">AI Response Preview</span>
+                  </div>
+                  <p className="px-4 py-3 text-[13px] text-white/60 leading-relaxed line-clamp-3">{shareModal.preview}</p>
+                </div>
+              )}
+
+              {/* URL bar with inline copy */}
+              <div className="mx-6 mb-5 flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)" }}>
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-emerald-500/60" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <span className="flex-1 truncate text-[11px] text-muted-foreground font-mono">{shareUrl}</span>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(shareUrl); toast({ title: "Copied!", variant: "success" }) }}
+                  className="shrink-0 rounded-lg bg-emerald-600/20 border border-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-400 hover:bg-emerald-600/35 transition-colors"
+                >
+                  Copy
+                </button>
+              </div>
+
+              {/* Social share buttons */}
+              <div className="grid grid-cols-3 gap-3 px-6 pb-2">
+                {[
+                  {
+                    label: "Share on X",
+                    icon: <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.845L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>,
+                    onClick: () => window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareModal.title)}`, "_blank"),
+                    color: "hover:border-white/20 hover:bg-white/8",
+                  },
+                  {
+                    label: "LinkedIn",
+                    icon: <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>,
+                    onClick: () => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`, "_blank"),
+                    color: "hover:border-[#0077b5]/40 hover:bg-[#0077b5]/10 hover:text-[#0077b5]",
+                  },
+                  {
+                    label: "Reddit",
+                    icon: <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>,
+                    onClick: () => window.open(`https://reddit.com/submit?url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(shareModal.title)}`, "_blank"),
+                    color: "hover:border-[#ff4500]/40 hover:bg-[#ff4500]/10 hover:text-[#ff4500]",
+                  },
+                ].map(btn => (
+                  <button
+                    key={btn.label}
+                    onClick={btn.onClick}
+                    className={cn("flex items-center justify-center gap-2 rounded-xl border border-white/8 bg-white/4 px-3 py-2.5 text-[12px] font-medium text-white/60 transition-all duration-150", btn.color)}
+                  >
+                    {btn.icon}
+                    <span>{btn.label.split(" on ").pop()}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Footer note */}
+              <p className="px-6 py-4 text-center text-[11px] text-muted-foreground/40">
+                Anyone with the link can view · no account required
+              </p>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── SEARCH DRAWER ── */}
+      {showSearchDrawer && (
+        <div className="fixed inset-0 z-[200] flex items-start justify-center pt-16 px-4" onClick={() => setShowSearchDrawer(false)}>
+          <div
+            className="w-full max-w-xl rounded-2xl border border-white/10 shadow-2xl overflow-hidden"
+            style={{ backgroundColor: "rgba(15,20,35,0.97)", backdropFilter: "blur(20px)" }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Search input */}
+            <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <input
+                autoFocus
+                value={searchDrawerQuery}
+                onChange={e => setSearchDrawerQuery(e.target.value)}
+                placeholder="Search chats..."
+                className="flex-1 bg-transparent text-sm text-white placeholder:text-muted-foreground focus:outline-none"
+              />
+              <button onClick={() => setShowSearchDrawer(false)} className="text-muted-foreground hover:text-white transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Results */}
+            <div className="max-h-[60vh] overflow-y-auto py-2">
+              {(() => {
+                const q = searchDrawerQuery.toLowerCase().trim()
+                const pinned = conversations.filter(c => pinnedIds.has(c.id) && (!q || (c.title || "").toLowerCase().includes(q)))
+                const recents = conversations.filter(c => !pinnedIds.has(c.id) && (!q || (c.title || "").toLowerCase().includes(q)))
+                const noResults = pinned.length === 0 && recents.length === 0
+                if (noResults) return (
+                  <p className="px-4 py-8 text-center text-sm text-muted-foreground">No chats found.</p>
+                )
+                return (
+                  <>
+                    {pinned.length > 0 && (
+                      <div className="mb-1">
+                        <p className="px-4 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pinned</p>
+                        {pinned.map(conv => (
+                          <button
+                            key={conv.id}
+                            onClick={() => { handleSelectConversation(conv.id); setShowSearchDrawer(false) }}
+                            className={cn(
+                              "flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/5 transition-colors",
+                              currentConversationId === conv.id && "bg-emerald-600/10"
+                            )}
+                          >
+                            <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-white">{conv.title || "New conversation"}</p>
+                              <p className="text-xs text-muted-foreground">{timeAgo(conv.created_at)}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {recents.length > 0 && (
+                      <div>
+                        <p className="px-4 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent chats</p>
+                        {recents.map(conv => (
+                          <button
+                            key={conv.id}
+                            onClick={() => { handleSelectConversation(conv.id); setShowSearchDrawer(false) }}
+                            className={cn(
+                              "flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/5 transition-colors",
+                              currentConversationId === conv.id && "bg-emerald-600/10"
+                            )}
+                          >
+                            <MessageSquare className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-white">{conv.title || "New conversation"}</p>
+                              <p className="text-xs text-muted-foreground">{timeAgo(conv.created_at)}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
