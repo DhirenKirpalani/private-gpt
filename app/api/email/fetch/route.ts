@@ -153,6 +153,17 @@ async function getKnownContactEmails(userId: string): Promise<Set<string>> {
   return set
 }
 
+async function getUserKeywords(userId: string): Promise<string[] | null> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("email_keywords")
+    .eq("user_id", userId)
+    .maybeSingle()
+  const kw = data?.email_keywords
+  if (!kw || !Array.isArray(kw) || kw.length === 0) return null
+  return kw.map((k: string) => k.toLowerCase().trim()).filter(Boolean)
+}
+
 function extractEmail(address: string): string {
   const m = address.match(/<([^>]+)>/)
   return (m ? m[1] : address).toLowerCase().trim()
@@ -168,6 +179,27 @@ async function _POST(req: NextRequest) {
     // Pre-load known CRM contacts so their emails always pass the keyword filter
     const knownContactEmails = await getKnownContactEmails(userId)
 
+    // Load user's custom keywords; if set, they replace BUSINESS_KEYWORDS
+    const userKeywords = await getUserKeywords(userId)
+    const activeKeywords = userKeywords || BUSINESS_KEYWORDS
+    const matchesKeywords = (text: string) => {
+      const lower = text.toLowerCase()
+      return activeKeywords.some(k => {
+        if (k.includes(" ")) return lower.includes(k)
+        return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(lower)
+      })
+    }
+    const getMatchedKw = (text: string) => {
+      const lower = text.toLowerCase()
+      return activeKeywords.filter(k => {
+        if (k.includes(" ")) return lower.includes(k)
+        return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(lower)
+      })
+    }
+    if (userKeywords) {
+      console.log(`[EMAIL FETCH] Using ${userKeywords.length} custom user keywords:`, userKeywords.slice(0, 10))
+    }
+
     // Fetch the email connection
     const { data: conn, error } = await supabase
       .from("email_connections")
@@ -180,13 +212,12 @@ async function _POST(req: NextRequest) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    // Use 'since' timestamp for incremental fetch, otherwise 15-day window from connection
+    // Use 'since' for incremental fetch, falling back to 15 days from today.
     let cutoffDate: Date
     if (since) {
       cutoffDate = new Date(since)
     } else {
-      const connectionDate = new Date(conn.created_at)
-      cutoffDate = new Date(connectionDate)
+      cutoffDate = new Date()
       cutoffDate.setDate(cutoffDate.getDate() - 15)
     }
     const afterTimestamp = Math.floor(cutoffDate.getTime() / 1000)
@@ -585,7 +616,7 @@ async function _POST(req: NextRequest) {
           }
           // Also capture threads with business keywords
           const text = `${te.subject || ""}`.toLowerCase()
-          if (matchesBusinessKeywords(text)) {
+          if (matchesKeywords(text)) {
             keywordThreadIds.add(te.thread_id)
           }
         }
@@ -662,34 +693,34 @@ async function _POST(req: NextRequest) {
 
           const subject = getHeader("Subject")
           const fromAddress = getHeader("From")
-          if (isExcludedSender(fromAddress)) {
-            console.log(`[EMAIL FILTER] DROPPED (excluded sender): from="${fromAddress}" subject="${subject}"`)
-            droppedEmails.push({ subject, from: fromAddress, reason: "excluded sender", date: new Date(parseInt(d.internalDate)).toISOString() })
-            continue
-          }
-          // Skip newsletters and automated emails
-          if (isNewsletter(body || html, headers)) {
-            console.log(`[EMAIL FILTER] DROPPED (newsletter): from="${fromAddress}" subject="${subject}"`)
-            droppedEmails.push({ subject, from: fromAddress, reason: "newsletter", date: new Date(parseInt(d.internalDate)).toISOString() })
-            continue
-          }
-          // Always import emails from known CRM contacts
           const senderEmail = extractEmail(fromAddress)
           const isKnownContact = knownContactEmails.has(senderEmail)
-          // Skip emails sent by the user themselves (safety check)
           const userEmail = (conn.email_address || conn.smtp_user || "").toLowerCase()
           if (userEmail && senderEmail.toLowerCase() === userEmail) {
             console.log(`[EMAIL FILTER] SKIPPED (own sent email): subject="${subject}"`)
             continue
           }
-          // Otherwise require a business keyword in the subject
-          const matchedKeywords = getMatchedKeywords(subject)
+          // If user has custom keywords and subject matches → always keep (user explicitly opted in)
+          const matchedKeywords = getMatchedKw(subject)
+          const customKeywordMatch = userKeywords && matchedKeywords.length > 0
+          if (!customKeywordMatch) {
+            if (isExcludedSender(fromAddress)) {
+              console.log(`[EMAIL FILTER] DROPPED (excluded sender): from="${fromAddress}" subject="${subject}"`)
+              droppedEmails.push({ subject, from: fromAddress, reason: "excluded sender", date: new Date(parseInt(d.internalDate)).toISOString() })
+              continue
+            }
+            if (isNewsletter(body || html, headers)) {
+              console.log(`[EMAIL FILTER] DROPPED (newsletter): from="${fromAddress}" subject="${subject}"`)
+              droppedEmails.push({ subject, from: fromAddress, reason: "newsletter", date: new Date(parseInt(d.internalDate)).toISOString() })
+              continue
+            }
+          }
           if (!isKnownContact && matchedKeywords.length === 0) {
             console.log(`[EMAIL FILTER] DROPPED (no keyword match): subject="${subject}"`)
             droppedEmails.push({ subject, from: fromAddress, reason: "no keyword match", date: new Date(parseInt(d.internalDate)).toISOString() })
             continue
           }
-          console.log(`[EMAIL FILTER] KEPT: subject="${subject}" knownContact=${isKnownContact} matchedKeywords=[${matchedKeywords.join(", ")}]`)
+          console.log(`[EMAIL FILTER] KEPT: subject="${subject}" knownContact=${isKnownContact} customKeyword=${customKeywordMatch} matchedKeywords=[${matchedKeywords.join(", ")}]`)
 
           payloads.push({
             user_id: userId,
@@ -905,7 +936,7 @@ async function _POST(req: NextRequest) {
             sentThreadIds.add(te.thread_id)
           }
           const text = `${te.subject || ""}`.toLowerCase()
-          if (matchesBusinessKeywords(text)) {
+          if (matchesKeywords(text)) {
             keywordThreadIds.add(te.thread_id)
           }
         }
@@ -915,31 +946,32 @@ async function _POST(req: NextRequest) {
         for (const msg of newMsgs) {
           const fromAddr = msg.from?.emailAddress?.address || ""
           const msgSubject = msg.subject || ""
-          if (isExcludedSender(fromAddr)) {
-            console.log(`[EMAIL FILTER] DROPPED (excluded sender): from="${fromAddr}" subject="${msgSubject}"`)
-            continue
-          }
-          // Skip newsletters
-          const msgBody = msg.bodyPreview || msg.body?.content || ""
-          if (isNewsletter(msgBody, [])) {
-            console.log(`[EMAIL FILTER] DROPPED (newsletter): from="${fromAddr}" subject="${msgSubject}"`)
-            continue
-          }
-          // Always import emails from known CRM contacts
           const senderEmail = extractEmail(fromAddr)
           const isKnownContact = knownContactEmails.has(senderEmail)
-          // Skip emails sent by the user themselves (safety check)
           const userEmail = (conn.email_address || conn.smtp_user || "").toLowerCase()
           if (userEmail && senderEmail.toLowerCase() === userEmail) {
             console.log(`[EMAIL FILTER] SKIPPED (own sent email): subject="${msgSubject}"`)
             continue
           }
-          const matchedKeywords = getMatchedKeywords(msgSubject)
+          // If user has custom keywords and subject matches → always keep
+          const matchedKeywords = getMatchedKw(msgSubject)
+          const customKeywordMatch = userKeywords && matchedKeywords.length > 0
+          const msgBody = msg.bodyPreview || msg.body?.content || ""
+          if (!customKeywordMatch) {
+            if (isExcludedSender(fromAddr)) {
+              console.log(`[EMAIL FILTER] DROPPED (excluded sender): from="${fromAddr}" subject="${msgSubject}"`)
+              continue
+            }
+            if (isNewsletter(msgBody, [])) {
+              console.log(`[EMAIL FILTER] DROPPED (newsletter): from="${fromAddr}" subject="${msgSubject}"`)
+              continue
+            }
+          }
           if (!isKnownContact && matchedKeywords.length === 0) {
             console.log(`[EMAIL FILTER] DROPPED (no keyword match): subject="${msgSubject}"`)
             continue
           }
-          console.log(`[EMAIL FILTER] KEPT: subject="${msgSubject}" knownContact=${isKnownContact} matchedKeywords=[${matchedKeywords.join(", ")}]`)
+          console.log(`[EMAIL FILTER] KEPT: subject="${msgSubject}" knownContact=${isKnownContact} customKeyword=${customKeywordMatch} matchedKeywords=[${matchedKeywords.join(", ")}]`)
           payloads.push({
             user_id: userId,
             connection_id: conn.id,

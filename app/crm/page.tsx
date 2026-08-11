@@ -22,7 +22,7 @@ import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
-import { getProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, markMessageAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramUserSession, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, getKanbanCardCols, setKanbanCardCol, createNotification } from "@/lib/supabase"
+import { getProfile, upsertProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, markMessageAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramUserSession, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, getKanbanCardCols, setKanbanCardCol, createNotification, deleteEmailMessagesByIds } from "@/lib/supabase"
 import { formatTelegramSender } from "@/lib/telegram"
 
 /* ─── real data ─── */
@@ -160,6 +160,11 @@ export default function CRMPage() {
   const [keywordFilter, setKeywordFilter] = useState<string | null>(null)
   const [keywordFilterOpen, setKeywordFilterOpen] = useState(false)
 
+  // Fetch keyword management
+  const [fetchKeywords, setFetchKeywords] = useState<string[]>([])
+  const [fetchKeywordsInput, setFetchKeywordsInput] = useState("")
+  const [fetchKeywordsSaving, setFetchKeywordsSaving] = useState(false)
+
   // Calendar search + filter
   const [calSearch, setCalSearch] = useState("")
   const [calFilterOpen, setCalFilterOpen] = useState(false)
@@ -179,6 +184,73 @@ export default function CRMPage() {
     "presentation", "webinar", "workshop", "training",
     "invite", "invitation", "podcast", "speaker", "guest",
   ]
+
+  // Load user's custom fetch keywords from profile
+  useEffect(() => {
+    if (!user) return
+    getProfile(user.id).then(p => {
+      if (p?.email_keywords && Array.isArray(p.email_keywords) && p.email_keywords.length > 0) {
+        setFetchKeywords(p.email_keywords)
+      }
+    }).catch(() => {})
+  }, [user])
+
+  // Keyword matching mirror of backend logic
+  function kwMatches(text: string, kws: string[]) {
+    const lower = text.toLowerCase()
+    return kws.some(k => {
+      if (k.includes(" ")) return lower.includes(k)
+      return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(lower)
+    })
+  }
+
+  async function pruneEmailsByKeywords(activeKws: string[]) {
+    if (!user) return
+    const allMsgs = await getEmailMessages(user.id)
+    const toDelete = allMsgs
+      .filter(m => m.direction === "received")
+      .filter(m => !kwMatches(m.subject || "", activeKws))
+      .map(m => m.id)
+    if (toDelete.length > 0) {
+      await deleteEmailMessagesByIds(user.id, toDelete)
+      setEmailMessages(prev => prev.filter(m => !toDelete.includes(m.id)))
+    }
+  }
+
+  async function saveFetchKeywords(kws: string[]) {
+    if (!user) return
+    setFetchKeywordsSaving(true)
+    try {
+      await upsertProfile({ user_id: user.id, email_keywords: kws.length > 0 ? kws : null } as any)
+      // Prune emails that no longer match the new active keyword set
+      const activeKws = kws.length > 0 ? kws : EMAIL_KEYWORDS.map(k => k.toLowerCase())
+      await pruneEmailsByKeywords(activeKws)
+      toast({ title: "Fetch keywords saved", description: kws.length > 0 ? `Fetching emails matching ${kws.length} keyword${kws.length === 1 ? "" : "s"}` : "Using default keyword list", variant: "success" })
+      // Only trigger a new fetch if one isn't already running
+      if (!emailFetchingRef.current && !inboxLoading) {
+        setTimeout(() => fetchInbox(undefined, true, true), 100)
+      }
+    } catch {
+      toast({ title: "Failed to save", variant: "error" } as any)
+    } finally {
+      setFetchKeywordsSaving(false)
+    }
+  }
+
+  function addFetchKeyword() {
+    const kw = fetchKeywordsInput.trim().toLowerCase()
+    if (!kw || fetchKeywords.includes(kw)) { setFetchKeywordsInput(""); return }
+    const next = [...fetchKeywords, kw]
+    setFetchKeywords(next)
+    setFetchKeywordsInput("")
+    saveFetchKeywords(next)
+  }
+
+  function removeFetchKeyword(kw: string) {
+    const next = fetchKeywords.filter(k => k !== kw)
+    setFetchKeywords(next)
+    saveFetchKeywords(next)
+  }
 
   // Refresh emailMessages from DB when Email tab becomes active (catches emails sent from other pages)
   useEffect(() => {
@@ -1241,7 +1313,7 @@ export default function CRMPage() {
   }, [user, activeTab])
 
   // Fetch inbox emails + auto-import contacts
-  const fetchInbox = async (pageToken?: string, showSyncModal?: boolean) => {
+  const fetchInbox = async (pageToken?: string, showSyncModal?: boolean, forceFull?: boolean) => {
     if (!user) return
     const providerId = activeChannel || emailConnections.find((c: any) => c.status === "connected")?.provider
     if (!providerId) { setFetchError("No email provider selected."); return }
@@ -1278,7 +1350,7 @@ export default function CRMPage() {
       const res = await fetch("/api/email/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, providerId, pageToken, since: !isLoadMore ? (conn as any)?.last_fetched_at || undefined : undefined }),
+        body: JSON.stringify({ userId: user.id, providerId, pageToken, since: !isLoadMore && !forceFull && fetchKeywords.length === 0 ? (conn as any)?.last_fetched_at || undefined : undefined }),
       })
       if (!isLoadMore) setFetchStep("filtering")
       const data = await res.json()
@@ -2411,23 +2483,76 @@ export default function CRMPage() {
                         {keywordFilter ? keywordFilter : t("crmKeyword")}
                       </button>
                       {keywordFilterOpen && (
-                        <div className="absolute right-0 top-full z-40 mt-1 w-56 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl p-3 space-y-2 max-h-80 overflow-y-auto">
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Filter by keyword</p>
-                          <button
-                            onClick={() => { setKeywordFilter(null); setKeywordFilterOpen(false) }}
-                            className={cn("w-full rounded-lg py-1.5 text-[11px] font-medium border transition-colors", !keywordFilter ? "bg-emerald-600/20 border-emerald-500/40 text-emerald-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}
-                          >
-                            All keywords
-                          </button>
-                          {EMAIL_KEYWORDS.map(kw => (
+                        <div className="absolute right-0 top-full z-40 mt-1 w-72 rounded-xl border border-white/10 bg-[#1e2533] shadow-2xl overflow-hidden">
+                          {/* View filter section */}
+                          <div className="p-3 space-y-1 max-h-56 overflow-y-auto">
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Filter view by keyword</p>
                             <button
-                              key={kw}
-                              onClick={() => { setKeywordFilter(kw); setKeywordFilterOpen(false) }}
-                              className={cn("w-full rounded-lg py-1.5 text-[11px] font-medium capitalize border transition-colors text-left px-2.5", keywordFilter === kw ? "bg-amber-600/20 border-amber-500/40 text-amber-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}
+                              onClick={() => { setKeywordFilter(null); setKeywordFilterOpen(false) }}
+                              className={cn("w-full rounded-lg py-1.5 text-[11px] font-medium border transition-colors", !keywordFilter ? "bg-emerald-600/20 border-emerald-500/40 text-emerald-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}
                             >
-                              {kw}
+                              All
                             </button>
-                          ))}
+                            {fetchKeywords.length > 0 && (<>
+                              <p className="pt-1.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-400/60">Custom</p>
+                              {fetchKeywords.map(kw => (
+                                <button
+                                  key={`custom-${kw}`}
+                                  onClick={() => { setKeywordFilter(kw); setKeywordFilterOpen(false) }}
+                                  className={cn("w-full rounded-lg py-1.5 text-[11px] font-medium capitalize border transition-colors text-left px-2.5", keywordFilter === kw ? "bg-amber-600/20 border-amber-500/40 text-amber-400" : "border-emerald-500/10 hover:bg-white/5 text-emerald-300/80")}
+                                >
+                                  {kw}
+                                </button>
+                              ))}
+                              <p className="pt-1.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">Default</p>
+                            </>)}
+                            {EMAIL_KEYWORDS.map(kw => (
+                              <button
+                                key={kw}
+                                onClick={() => { setKeywordFilter(kw); setKeywordFilterOpen(false) }}
+                                className={cn("w-full rounded-lg py-1.5 text-[11px] font-medium capitalize border transition-colors text-left px-2.5", keywordFilter === kw ? "bg-amber-600/20 border-amber-500/40 text-amber-400" : "border-transparent hover:bg-white/5 text-muted-foreground")}
+                              >
+                                {kw}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Fetch keyword management section */}
+                          <div className="border-t border-white/10 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Fetch keywords</p>
+                              {fetchKeywords.length > 0 && (
+                                <button onClick={() => { setFetchKeywords([]); saveFetchKeywords([]) }} className="text-[10px] text-red-400/70 hover:text-red-400 transition-colors">Clear all</button>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground leading-relaxed">Only emails whose subject contains one of these keywords will be fetched. Leave empty to use defaults.</p>
+                            {fetchKeywords.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {fetchKeywords.map(kw => (
+                                  <span key={kw} className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 pl-2.5 pr-1.5 py-0.5 text-[11px] font-medium">
+                                    {kw}
+                                    <button onClick={() => removeFetchKeyword(kw)} className="rounded-full p-0.5 text-muted-foreground hover:text-white transition-colors"><X className="h-2.5 w-2.5" /></button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            <div className="flex gap-1.5">
+                              <input
+                                type="text"
+                                value={fetchKeywordsInput}
+                                onChange={e => setFetchKeywordsInput(e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addFetchKeyword() } }}
+                                placeholder="Add keyword…"
+                                className="h-7 flex-1 rounded-lg border border-white/10 bg-white/5 px-2.5 text-[11px] placeholder:text-muted-foreground focus:border-emerald-500/40 focus:outline-none"
+                              />
+                              <button
+                                onClick={addFetchKeyword}
+                                disabled={!fetchKeywordsInput.trim() || fetchKeywordsSaving}
+                                className="flex h-7 items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 text-[11px] font-semibold text-emerald-400 hover:bg-emerald-500/15 disabled:opacity-40 transition-colors"
+                              >
+                                {fetchKeywordsSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : "+"}
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -4269,8 +4394,9 @@ export default function CRMPage() {
                     .replace(/<img([^>]*?)>/gi, (match, attrs) => {
                       // Skip if already has loading attr
                       if (/loading=/i.test(attrs)) return match
-                      // Add loading=lazy, referrerpolicy, onerror to hide broken images, max-width style
-                      return `<img${attrs} loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" style="max-width:100%;height:auto;border-radius:6px;margin:4px 0"${/style=/i.test(attrs) ? '' : ''}>`
+                      // Add loading=lazy and max-width style; do NOT add referrerpolicy=no-referrer
+                      // as many email CDNs require a referrer to serve images
+                      return `<img${attrs} loading="lazy" onerror="this.style.display='none'" style="max-width:100%;height:auto;border-radius:6px;margin:4px 0">`
                     })
                     .trim()
                   if (msg.html_body) {
