@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
-import { getProfile, getEmailConnections, saveEmailConnection, deleteEmailConnection, type EmailConnection, getCalendarConnections, deleteCalendarConnection, getWhatsAppConnections, saveWhatsAppConnection, deleteWhatsAppConnection, getTelegramUserSession, getSlackConnections } from "@/lib/supabase"
+import { getProfile, getEmailConnections, saveEmailConnection, deleteEmailConnection, type EmailConnection, getCalendarConnections, deleteCalendarConnection, getWhatsAppConnections, saveWhatsAppConnection, deleteWhatsAppConnection, getTelegramUserSession, getSlackConnections, deleteTelegramContacts } from "@/lib/supabase"
 import { toast, Toaster } from "@/components/ui/toast"
 import { CountryCodeSelect } from "@/components/country-code-select"
 
@@ -468,6 +468,7 @@ function ChannelsPageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id }),
       })
+      await deleteTelegramContacts(user.id)
       toast({ title: "Disconnected", description: "Telegram personal account disconnected.", variant: "success" })
       setTgUserSession(null)
       await loadConnections()
@@ -488,6 +489,7 @@ function ChannelsPageContent() {
         body: JSON.stringify({ userId: user.id }),
       })
       if (!res.ok) throw new Error("Failed to disconnect")
+      await deleteTelegramContacts(user.id)
       setTgUserSession(null)
       toast({ title: "Disconnected", description: "Telegram has been disconnected.", variant: "success" })
     } catch {

@@ -75,6 +75,7 @@ export type Profile = {
   slogan: string
   doc_categories: any
   preferred_sources: any
+  email_keywords: string[] | null
   created_at: string
   updated_at: string
 }
@@ -659,6 +660,12 @@ export async function getEmailMessages(userId: string, direction?: "sent" | "rec
   const { data, error } = await query
   if (error) throw error
   return (data ?? []) as EmailMessage[]
+}
+
+export async function deleteEmailMessagesByIds(userId: string, ids: string[]): Promise<void> {
+  if (!ids.length) return
+  const { error } = await supabase.from("email_messages").delete().eq("user_id", userId).in("id", ids)
+  if (error) console.error("[deleteEmailMessagesByIds]", error.message)
 }
 
 export async function saveEmailMessage(msg: Partial<EmailMessage>): Promise<EmailMessage> {
@@ -1254,6 +1261,11 @@ export async function saveTelegramConnection(
     status: "connected",
   })
   if (error) throw error
+}
+
+export async function deleteTelegramContacts(userId: string) {
+  const { error } = await supabase.from("contacts").delete().eq("user_id", userId).eq("source", "telegram_import")
+  if (error) console.error("[deleteTelegramContacts]", error.message)
 }
 
 export async function deleteTelegramConnection(userId: string, connectionId: string) {
