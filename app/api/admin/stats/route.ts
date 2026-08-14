@@ -10,9 +10,10 @@ const PLAN_PRICE: Record<string, number> = {
   enterprise: 0,
 }
 
-// DeepSeek pricing per 1M tokens (approximate)
-const DEEPSEEK_PROMPT_PRICE = 0.14 // $/1M tokens
-const DEEPSEEK_COMPLETION_PRICE = 0.28 // $/1M tokens
+// DeepSeek pricing per 1M tokens (off-peak rates, effective Aug 16 2026)
+const DEEPSEEK_PROMPT_PRICE = 0.22 // $/1M tokens (cache miss)
+const DEEPSEEK_CACHE_HIT_PRICE = 0.007 // $/1M tokens (cache hit)
+const DEEPSEEK_COMPLETION_PRICE = 0.44 // $/1M tokens
 
 async function _GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -250,7 +251,7 @@ async function _GET(req: NextRequest) {
     supabase.from("profiles").select("*", { count: "exact", head: true }).lt("created_at", thirtyDaysAgo),
     supabase.from("profiles").select("*", { count: "exact", head: true }).lt("created_at", sixtyDaysAgo),
     supabase.from("chat_messages").select("user_id", { count: "exact", head: true }).gt("created_at", thirtyDaysAgo),
-    supabase.from("chat_messages").select("prompt_tokens, completion_tokens, total_tokens, conversation_id"),
+    supabase.from("chat_messages").select("prompt_tokens, completion_tokens, total_tokens, cache_hit_tokens, conversation_id"),
     // All-time messages per user (for power users + activation rate)
     supabase.from("chat_conversations").select("id, user_id"),
     // New subscriptions this month (for expansion MRR)
@@ -261,6 +262,7 @@ async function _GET(req: NextRequest) {
   let totalPromptTokens = 0
   let totalCompletionTokens = 0
   let totalTokensUsed = 0
+  let totalCacheHitTokens = 0
   const tokenUsageByUser: Record<string, { prompt: number; completion: number; total: number }> = {}
 
   // Fetch conversation → user_id mapping
@@ -279,9 +281,11 @@ async function _GET(req: NextRequest) {
     const pt = tokens.prompt_tokens ?? 0
     const ct = tokens.completion_tokens ?? 0
     const tt = tokens.total_tokens ?? 0
+    const cht = tokens.cache_hit_tokens ?? 0
     totalPromptTokens += pt
     totalCompletionTokens += ct
     totalTokensUsed += tt
+    totalCacheHitTokens += cht
     const userId = convUserMap[tokens.conversation_id]
     if (userId) {
       if (!tokenUsageByUser[userId]) tokenUsageByUser[userId] = { prompt: 0, completion: 0, total: 0 }
@@ -290,7 +294,7 @@ async function _GET(req: NextRequest) {
       tokenUsageByUser[userId].total += tt
     }
   }
-  console.log(`[ADMIN STATS] Token usage: total=${totalTokensUsed} prompt=${totalPromptTokens} completion=${totalCompletionTokens} users=${Object.keys(tokenUsageByUser).length}`)
+  console.log(`[ADMIN STATS] Token usage: total=${totalTokensUsed} prompt=${totalPromptTokens} completion=${totalCompletionTokens} cache_hit=${totalCacheHitTokens} users=${Object.keys(tokenUsageByUser).length}`)
 
   // ── Activation Rate & Power Users ─────────────────────────────
   // allConvs = all conversations with user_id (from batch 2)
@@ -348,7 +352,13 @@ async function _GET(req: NextRequest) {
   const funnelSignupToPaid = totalSignups > 0 ? Math.round((trialToPaid / totalSignups) * 100) : 0
 
   // ── Token Cost Economics ──────────────────────────────────────
-  const tokenCost = (totalPromptTokens / 1_000_000 * DEEPSEEK_PROMPT_PRICE) + (totalCompletionTokens / 1_000_000 * DEEPSEEK_COMPLETION_PRICE)
+  // Cache hit tokens are charged at the cheaper rate; remaining prompt tokens at full rate
+  const cacheMissTokens = Math.max(0, totalPromptTokens - totalCacheHitTokens)
+  const tokenCost = (cacheMissTokens / 1_000_000 * DEEPSEEK_PROMPT_PRICE) + (totalCacheHitTokens / 1_000_000 * DEEPSEEK_CACHE_HIT_PRICE) + (totalCompletionTokens / 1_000_000 * DEEPSEEK_COMPLETION_PRICE)
+  // What it would cost without caching
+  const tokenCostWithoutCache = (totalPromptTokens / 1_000_000 * DEEPSEEK_PROMPT_PRICE) + (totalCompletionTokens / 1_000_000 * DEEPSEEK_COMPLETION_PRICE)
+  const cacheSavings = tokenCostWithoutCache - tokenCost
+  const cacheHitRate = totalPromptTokens > 0 ? Math.round((totalCacheHitTokens / totalPromptTokens) * 100) : 0
   const costPerToken = totalTokensUsed > 0 ? tokenCost / totalTokensUsed * 1000 : 0 // $ per 1K tokens
   const revenuePerToken = totalTokensUsed > 0 && mrr > 0 ? mrr / totalTokensUsed * 1000 : 0 // $ per 1K tokens
   const grossMargin = mrr > 0 ? Math.round(((mrr - tokenCost) / mrr) * 100) : 100
@@ -439,6 +449,12 @@ async function _GET(req: NextRequest) {
     costPerToken: Math.round(costPerToken * 10000) / 10000,
     revenuePerToken: Math.round(revenuePerToken * 10000) / 10000,
     grossMargin,
+
+    // Cache stats
+    totalCacheHitTokens,
+    cacheHitRate,
+    cacheSavings: Math.round(cacheSavings * 10000) / 10000,
+    tokenCostWithoutCache: Math.round(tokenCostWithoutCache * 10000) / 10000,
   })
 }
 

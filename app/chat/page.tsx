@@ -1213,7 +1213,7 @@ export default function ChatPage() {
         contentToSave += `\n<!--ACTION2_B64:${btoa(unescape(encodeURIComponent(JSON.stringify(extracted.action2))))}-->`
       }
       saveMessage(convId, "assistant", contentToSave, assistantMsg.sources, streamUsage
-        ? { prompt_tokens: streamUsage.prompt_tokens ?? 0, completion_tokens: streamUsage.completion_tokens ?? 0, total_tokens: streamUsage.total_tokens ?? 0 }
+        ? { prompt_tokens: streamUsage.prompt_tokens ?? 0, completion_tokens: streamUsage.completion_tokens ?? 0, total_tokens: streamUsage.total_tokens ?? 0, cache_hit_tokens: streamUsage.prompt_cache_hit_tokens ?? 0 }
         : undefined)
         .then((saved) => {
           if (saved?.id) {
