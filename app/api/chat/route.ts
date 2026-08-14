@@ -135,6 +135,14 @@ async function POST_handler(req: NextRequest) {
 
                   const data = trimmed.slice(6)
                   if (data === "[DONE]") {
+                    // Log cache stats from DeepSeek usage
+                    if (usageData) {
+                      const promptTokens = usageData.prompt_tokens || 0
+                      const cachedTokens = usageData.prompt_cache_hit_tokens || 0
+                      const completionTokens = usageData.completion_tokens || 0
+                      const cacheRatio = promptTokens > 0 ? ((cachedTokens / promptTokens) * 100).toFixed(1) : "0"
+                      console.log(`[CHAT CACHE] prompt=${promptTokens} cache_hit=${cachedTokens} (${cacheRatio}%) completion=${completionTokens} total=${usageData.total_tokens || promptTokens + completionTokens}`)
+                    }
                     // Send final event with usage and full content
                     controller.enqueue(encoder.encode(`event: done\ndata: ${JSON.stringify({ usage: usageData, finishReason, content: fullContent })}\n\n`))
                     continue
@@ -205,7 +213,11 @@ async function POST_handler(req: NextRequest) {
       if (finishReason === "length") {
         console.warn("[CHAT] Response truncated (finish_reason=length) — action block may be missing. Consider increasing max_tokens.")
       }
+      const promptTokens = usageData.prompt_tokens || 0
+      const cachedTokens = usageData.prompt_cache_hit_tokens || 0
+      const cacheRatio = promptTokens > 0 ? ((cachedTokens / promptTokens) * 100).toFixed(1) : "0"
       console.log(`[CHAT] finish_reason=${finishReason} content_length=${content.length} has_action=${content.includes("<!--ACTION:")} tokens=${usageData.total_tokens} usage_check=${usage.tokensUsed}/${usage.tokenLimit} degraded=${usage.degradeToShorter}`)
+      console.log(`[CHAT CACHE] prompt=${promptTokens} cache_hit=${cachedTokens} (${cacheRatio}%) completion=${usageData.completion_tokens || 0} total=${usageData.total_tokens}`)
       return NextResponse.json({ content, usage: usageData })
   } catch (err: any) {
     if (err?.name === "TimeoutError" || err?.name === "AbortError") {

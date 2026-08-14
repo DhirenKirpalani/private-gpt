@@ -83,6 +83,11 @@ type Stats = {
   costPerToken: number
   revenuePerToken: number
   grossMargin: number
+  // Cache stats
+  totalCacheHitTokens: number
+  cacheHitRate: number
+  cacheSavings: number
+  tokenCostWithoutCache: number
 }
 
 export default function AdminPage() {
@@ -611,6 +616,10 @@ export default function AdminPage() {
       ["Completion Tokens", String(stats.totalCompletionTokens)],
       ["Total Tokens", String(stats.totalTokensUsed)],
       ["AI Cost (est.)", `$${stats.tokenCost}`],
+      ["AI Cost (without cache)", `$${stats.tokenCostWithoutCache}`],
+      ["Cache Savings", `$${stats.cacheSavings}`],
+      ["Cache Hit Rate", `${stats.cacheHitRate}%`],
+      ["Cache Hit Tokens", String(stats.totalCacheHitTokens)],
       ["Cost per 1K Tokens", `$${stats.costPerToken.toFixed(4)}`],
       ["Revenue per 1K Tokens", `$${stats.revenuePerToken.toFixed(4)}`],
       [""],
@@ -1097,9 +1106,11 @@ export default function AdminPage() {
                   { label: "Expansion MRR", value: `$${stats?.expansionMrr ?? 0}`, sub: "From upgrades this month", color: "text-emerald-400" },
                   { label: "Quick Ratio", value: stats?.quickRatio ?? 0, sub: "Growth efficiency (4+ is great)", color: (stats?.quickRatio ?? 0) >= 4 ? "text-emerald-400" : (stats?.quickRatio ?? 0) >= 2 ? "text-[#FFBF00]" : "text-red-400" },
                   { label: "Gross Margin", value: `${stats?.grossMargin ?? 100}%`, sub: "Revenue after AI costs", color: (stats?.grossMargin ?? 100) > 80 ? "text-emerald-400" : "text-[#FFBF00]" },
-                  { label: "AI Cost / Month", value: `$${stats?.tokenCost ?? 0}`, sub: "DeepSeek API spend", color: "text-muted-foreground" },
+                  { label: "AI Cost / Month", value: `$${stats?.tokenCost ?? 0}`, sub: stats?.cacheSavings ? `Saved $${stats.cacheSavings} via cache` : "DeepSeek API spend", color: "text-muted-foreground" },
                   { label: "Cost / 1K Tokens", value: `$${(stats?.costPerToken ?? 0).toFixed(4)}`, sub: "Per 1K tokens used", color: "text-blue-400" },
                   { label: "Revenue / 1K Tokens", value: `$${(stats?.revenuePerToken ?? 0).toFixed(4)}`, sub: "MRR per 1K tokens", color: "text-emerald-400" },
+                  { label: "Cache Hit Rate", value: `${stats?.cacheHitRate ?? 0}%`, sub: `${(stats?.totalCacheHitTokens ?? 0).toLocaleString()} cached tokens`, color: (stats?.cacheHitRate ?? 0) >= 50 ? "text-emerald-400" : (stats?.cacheHitRate ?? 0) > 0 ? "text-[#FFBF00]" : "text-muted-foreground" },
+                  { label: "Cache Savings", value: (stats?.cacheSavings ?? 0) < 0.01 ? `$${(stats?.cacheSavings ?? 0).toFixed(4)}` : `$${stats?.cacheSavings ?? 0}`, sub: `vs $${stats?.tokenCostWithoutCache ?? 0} without cache`, color: "text-emerald-400" },
                   { label: "LTV:CAC", value: "—", sub: "Needs ad spend data", color: "text-muted-foreground" },
                 ].map((m) => (
                   <div key={m.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
