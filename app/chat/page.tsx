@@ -174,6 +174,7 @@ export default function ChatPage() {
   const [conversationsLoading, setConversationsLoading] = useState(false)
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
   const [recentsCollapsed, setRecentsCollapsed] = useState(false)
+  const [pinnedCollapsed, setPinnedCollapsed] = useState(false)
   const [showSearchDrawer, setShowSearchDrawer] = useState(false)
   const [searchDrawerQuery, setSearchDrawerQuery] = useState("")
   const [convMenuId, setConvMenuId] = useState<string | null>(null)
@@ -181,7 +182,7 @@ export default function ChatPage() {
   const convMenuRef = useRef<HTMLDivElement>(null)
   const [renamingConvId, setRenamingConvId] = useState<string | null>(null)
   const [renamingTitle, setRenamingTitle] = useState("")
-  const [shareModal, setShareModal] = useState<{ convId: string; title: string; preview: string } | null>(null)
+  const [shareModal, setShareModal] = useState<{ convId: string; title: string; preview: string; shareUrl?: string } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const kbPanelRef = useRef<HTMLDivElement>(null)
@@ -206,6 +207,8 @@ export default function ChatPage() {
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
   const [editingMsgContent, setEditingMsgContent] = useState("")
   const [editingMsgWidth, setEditingMsgWidth] = useState<number | null>(null)
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null)
+  const [expandedMsgIds, setExpandedMsgIds] = useState<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
   const sendingRef = useRef(false)
   const savedAssistantIdRef = useRef<string | null>(null)
@@ -1228,8 +1231,8 @@ export default function ChatPage() {
           _globalStream.controller = null
         })
         .catch((e) => console.error("[CHAT] Failed to save assistant message:", e))
-      // Generate title from AI after first exchange
-      if (messages.length === 0) {
+      // Generate title from AI after first exchange (nextMessages has [userMsg] = 1 item on first send)
+      if (nextMessages.length === 1) {
         generateTitle(convId, userMsg.content, streamedContent).catch(() => {})
       }
 
@@ -1410,22 +1413,14 @@ export default function ChatPage() {
 
   async function generateTitle(convId: string, userMsg: string, assistantMsg: string) {
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch("/api/chat/title", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            { role: "user", content: userMsg },
-            { role: "assistant", content: assistantMsg },
-            { role: "user", content: "Generate a very short, concise 3-5 word title for this conversation. Only output the title, nothing else." },
-          ],
-          systemPrompt: "You are a title generator. Respond with only a short 3-5 word title. No quotes, no explanations.",
-          responseLength: "Standard",
-        }),
+        body: JSON.stringify({ userMessage: userMsg, assistantMessage: assistantMsg }),
       })
       const data = await res.json()
-      if (!res.ok || data.error) return
-      const title = (data.content || "New conversation").replace(/^["']|["']$/g, "").trim().slice(0, 40)
+      if (!res.ok || data.error || !data.title) return
+      const title = data.title.trim().slice(0, 50)
       if (title) {
         await updateConversationTitle(convId, title)
         setConversations(prev => prev.map(c => c.id === convId ? { ...c, title } : c))
@@ -1780,6 +1775,8 @@ export default function ChatPage() {
 
   async function handleSelectConversation(convId: string) {
     if (convId === currentConversationId) return
+    // Close sidebar on mobile after selecting a conversation
+    if (window.innerWidth < 768) setSidebarOpen(false)
     // Don't abort in-flight stream — let it finish in background and save to DB
     setLoading(false)
     setChatError("")
@@ -2088,6 +2085,10 @@ export default function ChatPage() {
     }
   }
 
+  function handleSourceClick(url: string) {
+    if (url) window.open(url, "_blank", "noopener,noreferrer")
+  }
+
   function handleTabClick(tab: "knowledge" | "channels" | "websearch") {
     if (tab === "knowledge") {
       const next = !kbEnabled
@@ -2139,13 +2140,20 @@ export default function ChatPage() {
       <header
         className="relative z-40 flex h-16 md:h-16 shrink-0 items-center gap-2 md:gap-4 border-b bg-background/80 backdrop-blur-md px-3 md:px-4"
       >
-        <div className="flex items-center gap-2 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           <button
-            onClick={() => setNavOpen(true)}
+            onClick={() => setNavOpen(v => !v)}
             className="flex md:hidden h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            aria-label="Open menu"
+            aria-label="Toggle menu"
           >
             <Menu className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => setSidebarOpen(v => !v)}
+            className="flex md:hidden h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Toggle conversations"
+          >
+            <MessageSquare className="h-5 w-5" />
           </button>
           <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2 overflow-hidden">
             <img
@@ -2313,7 +2321,7 @@ export default function ChatPage() {
           >
             <div className="flex items-center gap-2 p-3 pb-2">
               <button
-                onClick={handleNewConversation}
+                onClick={() => { handleNewConversation(); if (window.innerWidth < 768) setSidebarOpen(false) }}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/15 hover:border-emerald-500/40 hover:text-emerald-300"
               >
                 <Plus className="h-4 w-4" /> {t("chatNewConversation")}
@@ -2414,8 +2422,25 @@ export default function ChatPage() {
                     {/* ── PINNED ── */}
                     {pinned.length > 0 && (
                       <div className="mb-3">
-                        <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pinned</p>
-                        {pinned.map(conv => <ConvItem key={conv.id} conv={conv} isPinned />)}
+                        <button
+                          onClick={() => setPinnedCollapsed(p => !p)}
+                          className="mb-1 flex w-full items-center gap-1.5 px-2 py-0.5 group"
+                        >
+                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-white transition-colors duration-150">Pinned</span>
+                          <ChevronDown className={cn("h-3 w-3 text-muted-foreground group-hover:text-white transition-transform duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]", pinnedCollapsed && "-rotate-90")} />
+                        </button>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateRows: pinnedCollapsed ? "0fr" : "1fr",
+                            transition: "grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease",
+                            opacity: pinnedCollapsed ? 0 : 1,
+                          }}
+                        >
+                          <div style={{ overflow: "hidden" }}>
+                            {pinned.map(conv => <ConvItem key={conv.id} conv={conv} isPinned />)}
+                          </div>
+                        </div>
                       </div>
                     )}
 
@@ -2575,26 +2600,27 @@ export default function ChatPage() {
                         onClick={() => fileInputRef.current?.click()}
                         title="Upload document"
                         className={cn(
-                          "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                          "flex items-center gap-1.5 rounded-lg px-2.5 py-2 sm:px-2 sm:py-1.5 text-xs font-medium transition-colors",
                           inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                         )}
                       >
-                        <Paperclip className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">{t("chatUpload")}</span>
+                        <Paperclip className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                        <span className="text-[11px] sm:text-xs">{t("chatUpload")}</span>
                       </button>
                       {/* Knowledge Base button */}
                       <button
                         onClick={() => handleTabClick("knowledge")}
                         title="Knowledge Base"
                         className={cn(
-                          "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                          "flex items-center gap-1.5 rounded-lg px-2.5 py-2 sm:px-2 sm:py-1.5 text-xs font-medium transition-colors",
                           kbEnabled
                             ? "bg-emerald-600/20 text-emerald-400"
                             : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                         )}
                       >
-                        <BookOpen className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">{t("chatKnowledgeBase")}</span>
+                        <BookOpen className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                        <span className="text-[11px] sm:text-xs hidden sm:inline">{t("chatKnowledgeBase")}</span>
+                        <span className="text-[11px] sm:hidden">KB</span>
                       </button>
                       {/* Channels button with dropdown */}
                       <div className="relative" ref={channelsPanelRef}>
@@ -2641,7 +2667,7 @@ export default function ChatPage() {
                           )}
                         >
                           <Radio className="h-3.5 w-3.5" />
-                          <span className="hidden sm:inline">{t("chatChannels")}</span>
+                          <span className="text-[11px] sm:text-xs">{t("chatChannels")}</span>
                         </button>
                       </div>
                       {/* Web Search button */}
@@ -2649,14 +2675,14 @@ export default function ChatPage() {
                         onClick={() => handleTabClick("websearch")}
                         title="Web Search"
                         className={cn(
-                          "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                          "flex items-center gap-1.5 rounded-lg px-2.5 py-2 sm:px-2 sm:py-1.5 text-xs font-medium transition-colors",
                           webSearchEnabled
                             ? "bg-emerald-600/20 text-emerald-400"
                             : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                         )}
                       >
-                        <Globe className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">{t("chatWebSearch")}</span>
+                        <Globe className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                        <span className="text-[11px] sm:text-xs">{t("chatWebSearch")}</span>
                       </button>
                     </div>
                     <button
@@ -2712,18 +2738,43 @@ export default function ChatPage() {
                         : { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.15)", color: "#f1f5f9", boxShadow: "0 2px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)" }
                       }>
                       {msg.role === "user" && editingMsgId !== msg.id && (
-                        <button
-                          onClick={(e) => {
-                            const bubble = e.currentTarget.closest('[data-bubble]') as HTMLElement
-                            if (bubble) setEditingMsgWidth(bubble.offsetWidth)
-                            setEditingMsgId(msg.id)
-                            setEditingMsgContent(msg.content)
-                          }}
-                          className="absolute -top-2.5 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-background/90 backdrop-blur-sm border border-white/15 text-muted-foreground opacity-0 shadow-lg transition-all hover:scale-110 hover:text-emerald-400 hover:border-emerald-500/40 group-hover:opacity-100"
-                          title="Edit message"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </button>
+                        <div className="absolute -top-3 left-0 flex items-center gap-0.5 rounded-lg bg-background/90 backdrop-blur-sm border border-white/15 shadow-lg opacity-0 transition-all duration-150 group-hover:opacity-100 z-10">
+                          <button
+                            onClick={(e) => {
+                              const bubble = e.currentTarget.closest('[data-bubble]') as HTMLElement
+                              if (bubble) setEditingMsgWidth(bubble.offsetWidth)
+                              setEditingMsgId(msg.id)
+                              setEditingMsgContent(msg.content)
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-l-lg text-muted-foreground transition-all hover:text-emerald-400 hover:bg-emerald-500/10"
+                            title="Edit message"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </button>
+                          <div className="h-4 w-px bg-white/10" />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.content)
+                              setCopiedMsgId(msg.id)
+                              setTimeout(() => setCopiedMsgId(null), 2000)
+                            }}
+                            className="flex h-7 w-7 items-center justify-center text-muted-foreground transition-all hover:text-emerald-400 hover:bg-emerald-500/10"
+                            title="Copy message"
+                          >
+                            {copiedMsgId === msg.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                          </button>
+                          <div className="h-4 w-px bg-white/10" />
+                          <button
+                            onClick={() => {
+                              const url = `${window.location.origin}/chat?share=${encodeURIComponent(msg.content)}`
+                              setShareModal({ convId: "", title: "Shared Prompt", preview: msg.content.slice(0, 300), shareUrl: url })
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-r-lg text-muted-foreground transition-all hover:text-emerald-400 hover:bg-emerald-500/10"
+                            title="Share prompt"
+                          >
+                            <Share2 className="h-3 w-3" />
+                          </button>
+                        </div>
                       )}
                       {msg.role === "user" && editingMsgId === msg.id ? (
                         <div className="flex flex-col gap-2" style={editingMsgWidth ? { width: editingMsgWidth - 32 } : { width: '100%' }}>
@@ -2817,22 +2868,22 @@ export default function ChatPage() {
                             th: ({ children }) => <th className="px-3 py-2 text-left font-semibold text-white whitespace-nowrap">{children}</th>,
                             td: ({ children }) => <td className="px-3 py-2 text-slate-200 align-top">{children}</td>,
                             a: ({ href, children }) => {
-                              const text = String(children).trim()
-                              const citationMatch = text.match(/^(\d+)$/)
-                              if (citationMatch && href && /^https?:\/\//.test(href)) {
-                                const n = citationMatch[1]
-                                return (
-                                  <a
-                                    href={href}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="relative -top-1 ml-1 mr-0.5 inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-[4px] text-[9px] font-bold leading-none text-emerald-400 shadow-sm transition-colors hover:bg-emerald-500/30 hover:text-emerald-200"
-                                    style={{ textDecoration: "none" }}
-                                    title={`Open source ${n}`}
-                                  >
-                                    {n}
-                                  </a>
-                                )
+                              if (href?.startsWith("[")) {
+                                const match = href.match(/^\[(\d+)\]/)
+                                if (match) {
+                                  const idx = parseInt(match[1]) - 1
+                                  const sources = msg.sources || []
+                                  if (idx >= 0 && idx < sources.length) {
+                                    return (
+                                      <button
+                                        onClick={() => handleSourceClick(sources[idx])}
+                                        className="inline-flex items-center justify-center rounded bg-emerald-600/30 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 transition-colors hover:bg-emerald-600/50"
+                                      >
+                                        {match[1]}
+                                      </button>
+                                    )
+                                  }
+                                }
                               }
                               return (
                                 <a href={href} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline hover:text-emerald-300">
@@ -2845,9 +2896,33 @@ export default function ChatPage() {
                           {injectCitationLinks(msg.content, msg.sources)}
                         </ReactMarkdown>
                       ) : (
-                        msg.content.split('\n').filter(line => line.trim() !== '').map((line, i) => (
-                          <p key={i} className="mt-0.5">{line}</p>
-                        ))
+                        (() => {
+                          const isExpanded = expandedMsgIds.has(msg.id)
+                          const isLong = msg.content.length > 400
+                          const displayContent = isLong && !isExpanded ? msg.content.slice(0, 400) + "..." : msg.content
+                          return (
+                            <>
+                              <div className={cn(isLong && !isExpanded && "max-h-[200px] overflow-hidden")}>
+                                {displayContent.split('\n').filter(line => line.trim() !== '').map((line, i) => (
+                                  <p key={i} className="mt-0.5">{line}</p>
+                                ))}
+                              </div>
+                              {isLong && (
+                                <button
+                                  onClick={() => setExpandedMsgIds(prev => {
+                                    const next = new Set(prev)
+                                    if (next.has(msg.id)) next.delete(msg.id)
+                                    else next.add(msg.id)
+                                    return next
+                                  })}
+                                  className="mt-1 flex items-center gap-1 text-[11px] font-medium text-white/60 transition-colors hover:text-white"
+                                >
+                                  {isExpanded ? (<><ChevronUp className="h-3 w-3" /> Show less</>) : (<><ChevronDown className="h-3 w-3" /> Show more</>)}
+                                </button>
+                              )}
+                            </>
+                          )
+                        })()
                       )}
                     </div>
                     {/* Timestamp */}
@@ -3175,26 +3250,27 @@ export default function ChatPage() {
                       onClick={() => fileInputRef.current?.click()}
                       title="Upload document"
                       className={cn(
-                        "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                        "flex items-center gap-1.5 rounded-lg px-2.5 py-2 sm:px-2 sm:py-1.5 text-xs font-medium transition-colors",
                         inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                       )}
                     >
-                      <Paperclip className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{t("chatUpload")}</span>
+                      <Paperclip className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                      <span className="text-[11px] sm:text-xs">{t("chatUpload")}</span>
                     </button>
                     {/* Knowledge Base button */}
                     <button
                       onClick={() => handleTabClick("knowledge")}
                       title="Knowledge Base"
                       className={cn(
-                        "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                        "flex items-center gap-1.5 rounded-lg px-2.5 py-2 sm:px-2 sm:py-1.5 text-xs font-medium transition-colors",
                         kbEnabled
                           ? "bg-emerald-600/20 text-emerald-400"
                           : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                       )}
                     >
-                      <BookOpen className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{t("chatKnowledgeBase")}</span>
+                      <BookOpen className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                      <span className="text-[11px] sm:text-xs hidden sm:inline">{t("chatKnowledgeBase")}</span>
+                      <span className="text-[11px] sm:hidden">KB</span>
                     </button>
                     {/* Channels button with dropdown */}
                     <div className="relative" ref={channelsPanelRef}>
@@ -3240,8 +3316,8 @@ export default function ChatPage() {
                             : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                         )}
                       >
-                        <Radio className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">{t("chatChannels")}</span>
+                        <Radio className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                        <span className="text-[11px] sm:text-xs">{t("chatChannels")}</span>
                       </button>
                     </div>
                     {/* Web Search button */}
@@ -3249,14 +3325,14 @@ export default function ChatPage() {
                       onClick={() => handleTabClick("websearch")}
                       title="Web Search"
                       className={cn(
-                        "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                        "flex items-center gap-1.5 rounded-lg px-2.5 py-2 sm:px-2 sm:py-1.5 text-xs font-medium transition-colors",
                         webSearchEnabled
                           ? "bg-emerald-600/20 text-emerald-400"
                           : inputDark ? "text-slate-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                       )}
                     >
-                      <Globe className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{t("chatWebSearch")}</span>
+                      <Globe className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                      <span className="text-[11px] sm:text-xs">{t("chatWebSearch")}</span>
                     </button>
                   </div>
                   <button
@@ -3554,7 +3630,7 @@ export default function ChatPage() {
 
       {/* ── SHARE MODAL ── */}
       {shareModal && (() => {
-        const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/share/${shareModal.convId}`
+        const shareUrl = shareModal.shareUrl || `${typeof window !== "undefined" ? window.location.origin : ""}/share/${shareModal.convId}`
         return (
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" onClick={() => setShareModal(null)}>
             <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
@@ -3580,7 +3656,7 @@ export default function ChatPage() {
               {/* Title */}
               <div className="px-6 pb-4">
                 <h2 className="text-base font-semibold text-white leading-snug">{shareModal.title}</h2>
-                <p className="mt-0.5 text-xs text-emerald-400/70">Shareable conversation</p>
+                <p className="mt-0.5 text-xs text-emerald-400/70">{shareModal.shareUrl ? "Shareable prompt" : "Shareable conversation"}</p>
               </div>
 
               {/* Preview card */}
@@ -3588,7 +3664,7 @@ export default function ChatPage() {
                 <div className="mx-6 mb-4 rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)" }}>
                   <div className="flex items-center gap-2 border-b border-white/5 px-4 py-2.5">
                     <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    <span className="text-[11px] font-medium text-emerald-400/80">AI Response Preview</span>
+                    <span className="text-[11px] font-medium text-emerald-400/80">{shareModal.shareUrl ? "Prompt Preview" : "AI Response Preview"}</span>
                   </div>
                   <p className="px-4 py-3 text-[13px] text-white/60 leading-relaxed line-clamp-3">{shareModal.preview}</p>
                 </div>
