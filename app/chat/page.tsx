@@ -201,7 +201,6 @@ export default function ChatPage() {
   const [waActiveContact, setWaActiveContact] = useState<string | null>(null)
   const [waInboxLoading, setWaInboxLoading] = useState(false)
   const [waSending, setWaSending] = useState(false)
-  const [waCollapsed, setWaCollapsed] = useState(false)
 
   // Channels panel
   const [showChannelsPanel, setShowChannelsPanel] = useState(false)
@@ -2563,56 +2562,6 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {/* ── WHATSAPP INBOX ── */}
-                    {waSessions.length > 0 && (
-                      <div className="mt-3">
-                        <button
-                          onClick={() => setWaCollapsed(p => !p)}
-                          className="mb-1 flex w-full items-center gap-1.5 px-2 py-0.5 group"
-                        >
-                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-white transition-colors duration-150">WhatsApp</span>
-                          <ChevronDown className={cn("h-3 w-3 text-muted-foreground group-hover:text-white transition-transform duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]", waCollapsed && "-rotate-90")} />
-                        </button>
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateRows: waCollapsed ? "0fr" : "1fr",
-                            transition: "grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease",
-                            opacity: waCollapsed ? 0 : 1,
-                          }}
-                        >
-                          <div style={{ overflow: "hidden" }}>
-                            {waSessions.map(session => (
-                              <button
-                                key={session.id}
-                                onClick={() => handleSelectWaSession(session)}
-                                className={cn(
-                                  "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-all duration-150",
-                                  waActiveSession?.id === session.id ? "bg-emerald-600/10" : "hover:bg-muted/50"
-                                )}
-                              >
-                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#25D366]/15">
-                                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" style={{ color: "#25D366" }}>
-                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                                  </svg>
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className={cn("truncate text-sm font-medium", waActiveSession?.id === session.id ? "text-emerald-400" : "text-white")}>
-                                    {session.phone_number || "WhatsApp"}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {session.status === "connected" ? "Connected" : session.status === "connecting" ? "Connecting..." : "Disconnected"}
-                                  </div>
-                                </div>
-                                {session.status === "connected" && (
-                                  <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </>
                 )
               })()}
@@ -2622,8 +2571,7 @@ export default function ChatPage() {
 
         {/* ── MAIN WORKSPACE ── */}
         <main className="relative flex flex-1 flex-col overflow-hidden">
-          {waActiveSession ? (
-            /* ── WHATSAPP INBOX VIEW ── */
+          {false ? (
             <div className="flex flex-1 flex-col overflow-hidden">
               {/* WhatsApp header */}
               <div className="flex items-center gap-3 border-b border-white/5 px-4 py-3">
@@ -2639,7 +2587,7 @@ export default function ChatPage() {
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white">{waActiveSession.phone_number || "WhatsApp"}</p>
+                  <p className="text-sm font-semibold text-white">{waActiveSession?.phone_number || "WhatsApp"}</p>
                   <p className="text-[11px] text-emerald-400">Connected · {waContacts.length} contacts</p>
                 </div>
               </div>

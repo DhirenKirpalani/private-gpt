@@ -22,7 +22,7 @@ import { useAuth } from "@/app/auth-provider"
 import { WorkspaceSelector } from "@/components/workspace-selector"
 import { useI18n } from "@/lib/i18n"
 import { toast, Toaster } from "@/components/ui/toast"
-import { getProfile, upsertProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, markMessageAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramUserSession, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, getKanbanCardCols, setKanbanCardCol, createNotification, deleteEmailMessagesByIds } from "@/lib/supabase"
+import { getProfile, upsertProfile, getEmailConnections, getEmailMessages, getContacts, importContactsFromEmails, importContactsFromWhatsApp, importContactsFromTelegram, importContactsFromSlack, markEmailAsRead, markMessageAsRead, getCalendarConnections, getCalendarEvents, getWhatsAppConnections, getWhatsAppMessages, getTelegramUserSession, getTelegramMessages, getSlackConnections, getSlackMessages, subscribeToEmailMessages, subscribeToCalendarEvents, subscribeToContacts, subscribeToSlackMessages, subscribeToWhatsAppMessages, subscribeToTelegramMessages, unsubscribeChannel, getKanbanCols, upsertKanbanCols, getKanbanCardCols, setKanbanCardCol, createNotification, deleteEmailMessagesByIds, getEvolutionSessions, getEvolutionContacts, getEvolutionMessages } from "@/lib/supabase"
 import { formatTelegramSender } from "@/lib/telegram"
 
 /* ─── real data ─── */
@@ -760,18 +760,57 @@ export default function CRMPage() {
       }
 
       // Parallel fetch for core metadata (connections + contacts)
-      const [emailConnsRes, calConnsRes, waConnsRes, tgConnsRes, slConnsRes, contactsRes] = await Promise.allSettled([
+      const [emailConnsRes, calConnsRes, waConnsRes, tgConnsRes, slConnsRes, contactsRes, evolutionRes] = await Promise.allSettled([
         getEmailConnections(user.id),
         getCalendarConnections(user.id),
         getWhatsAppConnections(user.id),
         getTelegramUserSession(user.id),
         getSlackConnections(user.id),
         getContacts(user.id),
+        getEvolutionSessions(user.id),
       ])
 
       if (emailConnsRes.status === "fulfilled") setEmailConnections(emailConnsRes.value)
       if (calConnsRes.status === "fulfilled") setCalendarConnections(calConnsRes.value)
-      if (waConnsRes.status === "fulfilled") setWhatsAppConnections(waConnsRes.value)
+
+      // Merge Meta Cloud API + Evolution API WhatsApp connections
+      const metaConns = waConnsRes.status === "fulfilled" ? waConnsRes.value : []
+      const evolutionSessions = evolutionRes.status === "fulfilled" ? evolutionRes.value.filter((s: any) => s.status === "connected") : []
+      const evolutionAsConns = evolutionSessions.map((s: any) => ({ phone_number_id: `evolution_${s.id}`, phone_number: s.phone_number || s.instance_name, status: "connected", _provider: "evolution", _session: s }))
+      setWhatsAppConnections([...metaConns, ...evolutionAsConns])
+
+      // Load Evolution messages and merge into whatsappMessages
+      if (evolutionSessions.length > 0) {
+        try {
+          const allEvolutionMsgs: any[] = []
+          for (const session of evolutionSessions) {
+            const contacts = await getEvolutionContacts(user.id, session.id)
+            for (const contact of contacts) {
+              const msgs = await getEvolutionMessages(user.id, contact.contactNumber, session.id)
+              for (const msg of msgs) {
+                allEvolutionMsgs.push({
+                  id: msg.id,
+                  from_number: msg.from_number,
+                  to_number: msg.to_number,
+                  body: msg.body,
+                  direction: msg.direction,
+                  timestamp: msg.timestamp,
+                  read: msg.read,
+                  _provider: "evolution",
+                })
+              }
+            }
+          }
+          if (allEvolutionMsgs.length > 0) {
+            setWhatsAppMessages(prev => {
+              const existingIds = new Set(prev.map((m: any) => m.id))
+              const newMsgs = allEvolutionMsgs.filter(m => !existingIds.has(m.id))
+              return [...prev, ...newMsgs]
+            })
+            setWhatsAppFetched(true)
+          }
+        } catch (e) { console.error("[CRM] Failed to load Evolution messages:", e) }
+      }
       if (tgConnsRes.status === "fulfilled") setTelegramConnections(tgConnsRes.value ? [tgConnsRes.value] : [])
       if (slConnsRes.status === "fulfilled") setSlackConnections(slConnsRes.value)
       if (contactsRes.status === "fulfilled") {
