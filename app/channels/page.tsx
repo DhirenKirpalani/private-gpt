@@ -975,7 +975,7 @@ function ChannelsPageContent() {
                           )}
                         </div>
                         <p className="mt-0.5 text-sm text-muted-foreground">{t(ch.descKey as any)}</p>
-                        {waConn && (
+                        {isWhatsApp && waConn && (
                           <p className="mt-0.5 text-[10px] text-emerald-400">{waConn.phone_number || waConn.phone_number_id}</p>
                         )}
                         {tgConn && (
