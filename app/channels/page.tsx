@@ -903,7 +903,7 @@ function ChannelsPageContent() {
                     ? waEvolutionSessions.some(s => s.status === "connected")
                     : Object.keys(whatsappConnections).length > 0)
                   const waConn = WHATSAPP_PROVIDER === "evolution"
-                    ? waEvolutionSessions.find(s => s.status === "connected")
+                    ? (waEvolutionSessions.find(s => s.status === "connected") || waEvolutionSessions.find(s => s.status === "connecting"))
                     : waConnected ? Object.values(whatsappConnections)[0] : null
                   const tgConnected = isTelegram && !!tgUserSession
                   const tgConn = tgConnected ? tgUserSession : null
