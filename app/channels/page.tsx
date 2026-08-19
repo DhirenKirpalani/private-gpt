@@ -636,11 +636,6 @@ function ChannelsPageContent() {
           })
           if (waQrPollInterval) { clearInterval(waQrPollInterval); setWaQrPollInterval(null) }
           toast({ title: "Connected", description: `WhatsApp connected${data.phone ? `: ${data.phone}` : ""}`, variant: "success" })
-        } else if (data.status === "connecting") {
-          // Auto-refresh QR code from status response
-          if (data.qr) {
-            setWaQrCode(data.qr)
-          }
         }
       } catch {
         // ignore poll errors
@@ -1707,7 +1702,7 @@ function ChannelsPageContent() {
                       <span>Waiting for scan...</span>
                     </div>
                     <p className="text-[10px] text-muted-foreground/60">
-                      QR refreshes automatically in <span className="text-emerald-400 font-semibold">{waQrCountdown}s</span> — no need to retry
+                      QR expires in ~20s — scan quickly once it appears
                     </p>
                   </div>
                 </div>

@@ -40,21 +40,10 @@ async function _GET(req: NextRequest) {
       })
     }
 
-    // Still connecting — fetch fresh QR via /instance/connect
-    let qr: string | null = null
-    try {
-      const qrRes = await fetch(
-        `${EVOLUTION_URL}/instance/connect/${active.instance_name}`,
-        { headers: { apikey: EVOLUTION_KEY } }
-      )
-      const qrData = await qrRes.json()
-      qr = qrData?.base64 || null
-    } catch { /* ignore QR fetch error */ }
-
     return NextResponse.json({
       status: "connecting",
       session: active,
-      qr,
+      qr: null,
     })
   } catch (err: any) {
     console.error("[WHATSAPP STATUS]", err)
