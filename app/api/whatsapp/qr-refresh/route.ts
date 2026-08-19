@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     // Only refresh if instance is still in connecting state (not open)
     const stateRes = await fetch(
       `${EVOLUTION_URL}/instance/connectionState/${instanceName}`,
-      { headers: { apikey: EVOLUTION_KEY } }
+      { headers: { apikey: EVOLUTION_KEY }, cache: "no-store" }
     )
     const stateData = await stateRes.json()
     const state = stateData?.instance?.state

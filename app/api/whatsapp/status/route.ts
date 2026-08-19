@@ -19,7 +19,7 @@ async function _GET(req: NextRequest) {
     if (instanceName) {
       const stateRes = await fetch(
         `${EVOLUTION_URL}/instance/connectionState/${instanceName}`,
-        { headers: { apikey: EVOLUTION_KEY } }
+        { headers: { apikey: EVOLUTION_KEY }, cache: "no-store" }
       )
       const stateData = await stateRes.json()
       const state = stateData?.instance?.state
@@ -43,7 +43,7 @@ async function _GET(req: NextRequest) {
 
     const stateRes = await fetch(
       `${EVOLUTION_URL}/instance/connectionState/${active.instance_name}`,
-      { headers: { apikey: EVOLUTION_KEY } }
+      { headers: { apikey: EVOLUTION_KEY }, cache: "no-store" }
     )
     const stateData = await stateRes.json()
     const state = stateData?.instance?.state
