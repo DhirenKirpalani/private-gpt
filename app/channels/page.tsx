@@ -160,7 +160,27 @@ function ChannelsPageContent() {
     try {
       const { getEvolutionSessions } = await import("@/lib/supabase")
       const evoSessions = await getEvolutionSessions(user.id)
-      setWaEvolutionSessions(evoSessions)
+      // Verify actual VPS state for any session not definitively disconnected
+      if (evoSessions.some(s => s.status === "connected" || s.status === "connecting")) {
+        try {
+          const statusRes = await fetch(`/api/whatsapp/status?userId=${user.id}`)
+          const statusData = await statusRes.json()
+          if (statusData.status === "connected") {
+            setWaEvolutionSessions(evoSessions.map(s =>
+              s.id === statusData.session?.id ? { ...s, status: "connected" } : s
+            ))
+          } else {
+            // Not connected on VPS — show all sessions as connecting so no false Connected badge
+            setWaEvolutionSessions(evoSessions.map(s =>
+              s.status === "connected" ? { ...s, status: "connecting" } : s
+            ))
+          }
+        } catch {
+          setWaEvolutionSessions(evoSessions)
+        }
+      } else {
+        setWaEvolutionSessions(evoSessions)
+      }
     } catch { /* ignore */ }
     setConnectionsLoading(false)
   }, [user])

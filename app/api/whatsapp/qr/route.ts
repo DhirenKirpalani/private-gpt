@@ -20,32 +20,38 @@ async function _POST(req: NextRequest) {
 
     const admin = createAdminClient()
 
-    // Check for existing session
+    // Check for existing sessions — verify actual VPS state first
     const existing = await getEvolutionSessions(userId)
     const activeSession = existing.find(s => s.status === "connected" || s.status === "connecting")
 
     if (activeSession) {
-      // Fetch QR from existing instance
+      // Use connectionState (not /connect) to check real state without generating a new QR
+      try {
+        const stateRes = await fetch(
+          `${EVOLUTION_URL}/instance/connectionState/${activeSession.instance_name}`,
+          { headers: { apikey: EVOLUTION_KEY } }
+        )
+        const stateData = await stateRes.json()
+        if (stateData?.instance?.state === "open") {
+          if (activeSession.status !== "connected") {
+            await updateEvolutionSession(activeSession.id, { status: "connected" })
+          }
+          return NextResponse.json({ status: "connected", session: { ...activeSession, status: "connected" } })
+        }
+        // Instance exists but not open — reset status so UI doesn't show Connected
+        if (activeSession.status !== "connecting") {
+          await updateEvolutionSession(activeSession.id, { status: "connecting" })
+        }
+      } catch { /* ignore — will fall through to generate QR */ }
+
+      // Get QR from existing instance
       const qrRes = await fetch(
         `${EVOLUTION_URL}/instance/connect/${activeSession.instance_name}`,
-        {
-          headers: { apikey: EVOLUTION_KEY },
-        }
+        { headers: { apikey: EVOLUTION_KEY } }
       )
       const qrData = await qrRes.json()
-
-      if (qrData?.instance?.state === "open") {
-        await updateEvolutionSession(activeSession.id, { status: "connected" })
-        return NextResponse.json({ status: "connected", session: activeSession })
-      }
-
-      // Get QR code (v2.3.7 returns base64 at top level)
-      const qrCode = qrData?.base64 || qrData?.qrcode?.base64 || qrData?.base64?.image || null
-      return NextResponse.json({
-        status: "connecting",
-        qr: qrCode,
-        session: activeSession,
-      })
+      const qrCode = qrData?.base64 || qrData?.qrcode?.base64 || null
+      return NextResponse.json({ status: "connecting", qr: qrCode, session: { ...activeSession, status: "connecting" } })
     }
 
     // Create new instance
