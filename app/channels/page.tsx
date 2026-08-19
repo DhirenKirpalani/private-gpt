@@ -669,9 +669,12 @@ function ChannelsPageContent() {
       if (res.ok) {
         setWaEvolutionSessions(prev => prev.filter(s => s.id !== sessionId))
         toast({ title: "Disconnected", description: "WhatsApp has been disconnected.", variant: "success" })
+      } else {
+        const body = await res.json().catch(() => ({}))
+        toast({ title: "Error", description: body?.error || `Disconnect failed (${res.status})`, variant: "error" })
       }
-    } catch {
-      toast({ title: "Error", description: "Failed to disconnect WhatsApp.", variant: "error" })
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message || "Failed to disconnect WhatsApp.", variant: "error" })
     } finally {
       setDisconnecting(null)
     }

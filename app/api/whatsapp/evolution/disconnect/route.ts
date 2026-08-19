@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { withApiLogging } from "@/lib/with-api-logging"
-import { getEvolutionSessions, deleteEvolutionSession } from "@/lib/supabase"
+import { getEvolutionSessions, deleteEvolutionSession, createAdminClient } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
 
@@ -14,12 +14,18 @@ async function _POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing userId or sessionId" }, { status: 400 })
     }
 
-    const sessions = await getEvolutionSessions(userId)
-    const session = sessions.find(s => s.id === sessionId)
+    const admin = createAdminClient()
+    const { data: sessionData } = await admin
+      .from("whatsapp_sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .eq("user_id", userId)
+      .single()
 
-    if (!session) {
+    if (!sessionData) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
+    const session = sessionData
 
     // Logout from Evolution API
     try {
