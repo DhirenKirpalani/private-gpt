@@ -638,16 +638,34 @@ function ChannelsPageContent() {
 
   const startQrPolling = (instanceName: string | null) => {
     if (waQrPollInterval) clearInterval(waQrPollInterval)
-    setWaQrCountdown(20)
+    setWaQrCountdown(18)
     let pollCount = 0
     const interval = setInterval(async () => {
       if (!user) return
-      setWaQrCountdown(prev => prev > 1 ? prev - 1 : 20)
       pollCount++
+      // Countdown tick
+      setWaQrCountdown(prev => {
+        if (prev <= 1) {
+          // Time to refresh QR (every 18s)
+          if (instanceName) {
+            fetch("/api/whatsapp/qr-refresh", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ instanceName }),
+            }).then(r => r.json()).then(d => {
+              if (d.status === "connected") return // will be caught by status poll
+              if (d.qr) setWaQrCode(d.qr)
+            }).catch(() => {})
+          }
+          return 18
+        }
+        return prev - 1
+      })
+      // Check connected status every 3 seconds
       if (pollCount % 3 !== 0) return
       try {
         const url = instanceName
-          ? `/api/whatsapp/status?userId=${user.id}&instanceName=${instanceName}`
+          ? `/api/whatsapp/status?userId=${user.id}&instanceName=${encodeURIComponent(instanceName)}`
           : `/api/whatsapp/status?userId=${user.id}`
         const res = await fetch(url)
         const data = await res.json()
@@ -1735,7 +1753,7 @@ function ChannelsPageContent() {
                       <span>Waiting for scan...</span>
                     </div>
                     <p className="text-[10px] text-muted-foreground/60">
-                      QR expires in ~20s — scan quickly once it appears
+                      QR refreshes in <span className="text-emerald-400 font-semibold">{waQrCountdown}s</span> — scan quickly
                     </p>
                   </div>
                 </div>

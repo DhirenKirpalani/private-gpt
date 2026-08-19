@@ -47,6 +47,20 @@ async function _POST(req: NextRequest) {
       try { await fetch(`${EVOLUTION_URL}/instance/delete/${s.instance_name}`, { method: "DELETE", headers: { apikey: EVOLUTION_KEY } }) } catch {}
     }
 
+    // Clean up orphan VPS instances for this user (created but not tracked in Supabase)
+    const userPrefix = `exploro_${userId.slice(0, 8)}_`
+    try {
+      const allInstancesRes = await fetch(`${EVOLUTION_URL}/instance/fetchInstances`, { headers: { apikey: EVOLUTION_KEY } })
+      const allInstances = await allInstancesRes.json()
+      if (Array.isArray(allInstances)) {
+        for (const inst of allInstances) {
+          if (inst.name?.startsWith(userPrefix) && inst.connectionStatus !== "open") {
+            try { await fetch(`${EVOLUTION_URL}/instance/delete/${inst.name}`, { method: "DELETE", headers: { apikey: EVOLUTION_KEY } }) } catch {}
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
     // Create fresh instance — do NOT create Supabase session yet (only created after scan)
     const instanceName = `exploro_${userId.slice(0, 8)}_${Date.now()}`
 
