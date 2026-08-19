@@ -34,7 +34,7 @@ const EMAIL_PROVIDERS: EmailProvider[] = [
 ]
 
 const MESSAGING_CHANNELS = [
-  { id: "whatsapp", name: "WhatsApp Business", icon: <FaWhatsapp className="h-6 w-6" style={{ color: "#25D366" }} />, descKey: "channelDescWhatsapp", connectable: false },
+  { id: "whatsapp", name: "WhatsApp Business", icon: <FaWhatsapp className="h-6 w-6" style={{ color: "#25D366" }} />, descKey: "channelDescWhatsapp", connectable: true },
   { id: "telegram", name: "Telegram", icon: <FaTelegram className="h-6 w-6" style={{ color: "#26A5E4" }} />, descKey: "channelDescTelegram", connectable: true },
   { id: "webchat", name: "Website Chat", icon: <MessageSquare className="h-5 w-5 text-emerald-400" />, descKey: "channelDescWebchat", connectable: false },
   { id: "slack", name: "Slack", icon: <FaSlack className="h-6 w-6" style={{ color: "#4A154B" }} />, descKey: "channelDescSlack", connectable: true },
@@ -100,6 +100,16 @@ function ChannelsPageContent() {
   const [waForm, setWaForm] = useState({ phoneNumberId: "", accessToken: "", phoneNumber: "" })
   const [waSaving, setWaSaving] = useState(false)
 
+  // WhatsApp Evolution QR modal
+  const [waQrModalOpen, setWaQrModalOpen] = useState(false)
+  const [waQrCode, setWaQrCode] = useState<string | null>(null)
+  const [waQrLoading, setWaQrLoading] = useState(false)
+  const [waQrStatus, setWaQrStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle")
+  const [waQrSession, setWaQrSession] = useState<any>(null)
+  const [waQrPollInterval, setWaQrPollInterval] = useState<ReturnType<typeof setInterval> | null>(null)
+  const [waQrCountdown, setWaQrCountdown] = useState(18)
+  const [waEvolutionSessions, setWaEvolutionSessions] = useState<any[]>([])
+
   // Telegram connect modal
   const [tgModalOpen, setTgModalOpen] = useState(false)
   const [tgSaving, setTgSaving] = useState(false)
@@ -145,6 +155,11 @@ function ChannelsPageContent() {
       slConns.forEach(c => { slMap[c.id] = c })
       setSlackConnections(slMap)
     } catch { /* ignore */ }
+    try {
+      const { getEvolutionSessions } = await import("@/lib/supabase")
+      const evoSessions = await getEvolutionSessions(user.id)
+      setWaEvolutionSessions(evoSessions)
+    } catch { /* ignore */ }
   }, [user])
 
   useEffect(() => {
@@ -161,6 +176,13 @@ function ChannelsPageContent() {
     load()
     loadConnections()
   }, [user, loadConnections])
+
+  // Cleanup QR polling on unmount
+  useEffect(() => {
+    return () => {
+      if (waQrPollInterval) clearInterval(waQrPollInterval)
+    }
+  }, [waQrPollInterval])
 
   // Handle OAuth callback query params
   useEffect(() => {
@@ -550,6 +572,108 @@ function ChannelsPageContent() {
     }
   }
 
+  // ── Evolution API (QR-based WhatsApp) ──
+  const WHATSAPP_PROVIDER = process.env.NEXT_PUBLIC_WHATSAPP_PROVIDER || "evolution"
+
+  const handleWhatsAppQrConnect = async () => {
+    if (!user) return
+    setWaQrModalOpen(true)
+    setWaQrStatus("connecting")
+    setWaQrLoading(true)
+    setWaQrCode(null)
+    try {
+      const res = await fetch("/api/whatsapp/qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setWaQrStatus("error")
+        toast({ title: "Error", description: data.error || "Failed to get QR code", variant: "error" })
+        return
+      }
+      if (data.status === "connected") {
+        setWaQrStatus("connected")
+        setWaQrSession(data.session)
+      } else {
+        setWaQrCode(data.qr)
+        setWaQrSession(data.session)
+        setWaQrStatus("connecting")
+        // Start polling for connection status
+        startQrPolling()
+      }
+    } catch (e: any) {
+      setWaQrStatus("error")
+      toast({ title: "Error", description: e?.message || "Failed to connect", variant: "error" })
+    } finally {
+      setWaQrLoading(false)
+    }
+  }
+
+  const startQrPolling = () => {
+    if (waQrPollInterval) clearInterval(waQrPollInterval)
+    setWaQrCountdown(20)
+    let pollCount = 0
+    const interval = setInterval(async () => {
+      if (!user) return
+      setWaQrCountdown(prev => prev > 1 ? prev - 1 : 20)
+      pollCount++
+      // Only fetch from server every 3 seconds
+      if (pollCount % 3 !== 0) return
+      try {
+        const res = await fetch(`/api/whatsapp/status?userId=${user.id}`)
+        const data = await res.json()
+        if (data.status === "connected") {
+          setWaQrStatus("connected")
+          setWaQrSession(data.session)
+          setWaEvolutionSessions(prev => {
+            if (prev.some(s => s.id === data.session.id)) return prev
+            return [data.session, ...prev]
+          })
+          if (waQrPollInterval) { clearInterval(waQrPollInterval); setWaQrPollInterval(null) }
+          toast({ title: "Connected", description: `WhatsApp connected${data.phone ? `: ${data.phone}` : ""}`, variant: "success" })
+        } else if (data.status === "connecting") {
+          // Auto-refresh QR code from status response
+          if (data.qr) {
+            setWaQrCode(data.qr)
+          }
+        }
+      } catch {
+        // ignore poll errors
+      }
+    }, 1000)
+    setWaQrPollInterval(interval)
+  }
+
+  const handleCloseQrModal = () => {
+    if (waQrPollInterval) { clearInterval(waQrPollInterval); setWaQrPollInterval(null) }
+    setWaQrModalOpen(false)
+    setWaQrCode(null)
+    setWaQrStatus("idle")
+    setWaQrSession(null)
+  }
+
+  const handleDisconnectEvolution = async (sessionId: string) => {
+    if (!user) return
+    setDisconnecting(`wa_evo_${sessionId}`)
+    try {
+      const res = await fetch("/api/whatsapp/evolution/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, sessionId }),
+      })
+      if (res.ok) {
+        setWaEvolutionSessions(prev => prev.filter(s => s.id !== sessionId))
+        toast({ title: "Disconnected", description: "WhatsApp has been disconnected.", variant: "success" })
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to disconnect WhatsApp.", variant: "error" })
+    } finally {
+      setDisconnecting(null)
+    }
+  }
+
   const openCompose = (provider: EmailProvider) => {
     setComposeProvider(provider)
     setComposeForm({ to: "", subject: "", body: "" })
@@ -775,8 +899,12 @@ function ChannelsPageContent() {
                   const isWhatsApp = ch.id === "whatsapp"
                   const isTelegram = ch.id === "telegram"
                   const isSlack = ch.id === "slack"
-                  const waConnected = isWhatsApp && Object.keys(whatsappConnections).length > 0
-                  const waConn = waConnected ? Object.values(whatsappConnections)[0] : null
+                  const waConnected = isWhatsApp && (WHATSAPP_PROVIDER === "evolution"
+                    ? waEvolutionSessions.some(s => s.status === "connected")
+                    : Object.keys(whatsappConnections).length > 0)
+                  const waConn = WHATSAPP_PROVIDER === "evolution"
+                    ? waEvolutionSessions.find(s => s.status === "connected")
+                    : waConnected ? Object.values(whatsappConnections)[0] : null
                   const tgConnected = isTelegram && !!tgUserSession
                   const tgConn = tgConnected ? tgUserSession : null
                   const slConnected = isSlack && Object.keys(slackConnections).length > 0
@@ -805,26 +933,48 @@ function ChannelsPageContent() {
                           <p className="mt-0.5 text-[10px] text-emerald-400">{slConn.team_name || slConn.team_id}</p>
                         )}
                       </div>
-                      {isWhatsApp && ch.connectable ? (
-                        waConn ? (
-                          <button
-                            onClick={() => handleDisconnectWhatsApp(waConn.phone_number_id)}
-                            disabled={disconnecting === `wa_${waConn.phone_number_id}`}
-                            className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
-                          >
-                            {disconnecting === `wa_${waConn.phone_number_id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
-                          </button>
+                      {isWhatsApp ? (
+                        WHATSAPP_PROVIDER === "evolution" ? (
+                          waConn ? (
+                            <button
+                              onClick={() => handleDisconnectEvolution(waConn.id)}
+                              disabled={disconnecting === `wa_evo_${waConn.id}`}
+                              className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                              {disconnecting === `wa_evo_${waConn.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={handleWhatsAppQrConnect}
+                              disabled={connecting === "whatsapp"}
+                              className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                              {connecting === "whatsapp" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
+                            </button>
+                          )
+                        ) : ch.connectable ? (
+                          waConn ? (
+                            <button
+                              onClick={() => handleDisconnectWhatsApp(waConn.phone_number_id)}
+                              disabled={disconnecting === `wa_${waConn.phone_number_id}`}
+                              className="w-full sm:w-auto shrink-0 rounded-lg border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                              {disconnecting === `wa_${waConn.phone_number_id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                if (!user) return
+                                handleWhatsAppConnect()
+                              }}
+                              disabled={connecting === "whatsapp"}
+                              className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                              {connecting === "whatsapp" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
+                            </button>
+                          )
                         ) : (
-                          <button
-                            onClick={() => {
-                              if (!user) return
-                              handleWhatsAppConnect()
-                            }}
-                            disabled={connecting === "whatsapp"}
-                            className="w-full sm:w-auto shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                          >
-                            {connecting === "whatsapp" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
-                          </button>
+                          <span className="w-full sm:w-auto text-center shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs text-muted-foreground">Coming soon</span>
                         )
                       ) : isTelegram && ch.connectable ? (
                         tgConn ? (
@@ -1463,6 +1613,106 @@ function ChannelsPageContent() {
                 <button onClick={() => { setTgStep("personal"); setTgPersonalForm({ ...tgPersonalForm, code: "", password: "" }); setTgPersonalNeedPassword(false) }} className="w-full text-center text-xs text-muted-foreground hover:text-white transition-colors">
                   ← Change number
                 </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Evolution QR Modal */}
+      {waQrModalOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={handleCloseQrModal}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
+          <div
+            className="relative w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            style={{ background: "linear-gradient(160deg,#101828 0%,#0c1520 100%)", border: "1px solid rgba(255,255,255,0.08)" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-500/60 to-transparent" />
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#25D366]/15 border border-[#25D366]/20">
+                  <FaWhatsapp className="h-5 w-5" style={{ color: "#25D366" }} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-white">Connect WhatsApp</h2>
+                  <p className="text-[11px] text-muted-foreground">Scan QR to link your device</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseQrModal}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/6 text-muted-foreground hover:bg-white/12 hover:text-white transition-all"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* QR Content */}
+            <div className="px-6 pb-6 flex flex-col items-center">
+              {waQrLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-emerald-400/60" />
+                  <p className="text-xs text-muted-foreground">Generating QR code...</p>
+                </div>
+              ) : waQrStatus === "connected" ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/30">
+                    <Check className="h-8 w-8 text-emerald-400" />
+                  </div>
+                  <p className="text-sm font-semibold text-white">WhatsApp Connected!</p>
+                  <p className="text-xs text-muted-foreground">{waQrSession?.phone_number || "Your number is linked"}</p>
+                  <button
+                    onClick={handleCloseQrModal}
+                    className="mt-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : waQrStatus === "error" ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500/15 border border-red-500/30">
+                    <AlertCircle className="h-8 w-8 text-red-400" />
+                  </div>
+                  <p className="text-sm font-semibold text-white">Connection Failed</p>
+                  <button
+                    onClick={handleWhatsAppQrConnect}
+                    className="mt-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-5 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 transition-colors"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : waQrCode ? (
+                <div className="flex flex-col items-center gap-4">
+                  <div className="rounded-2xl bg-white p-3 shadow-lg">
+                    <img src={waQrCode} alt="WhatsApp QR Code" className="h-52 w-52" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Open WhatsApp on your phone → Settings → Linked Devices → Link a Device → Scan this QR
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2 text-[11px] text-emerald-400/70">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Waiting for scan...</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/60">
+                      QR refreshes automatically in <span className="text-emerald-400 font-semibold">{waQrCountdown}s</span> — no need to retry
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <p className="text-xs text-muted-foreground">No QR code available</p>
+                  <button
+                    onClick={handleWhatsAppQrConnect}
+                    className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-5 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/15 transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
               )}
             </div>
           </div>

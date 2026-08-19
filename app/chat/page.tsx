@@ -27,6 +27,7 @@ import {
   fetchDocumentContents, uploadDocument, updateDocumentText,
   getEmailConnections, getCalendarConnections, getWhatsAppConnections,
   getSlackConnections, getTelegramUserSession,
+  getEvolutionSessions, getEvolutionMessages, getEvolutionContacts, type EvolutionSession, type EvolutionMessage,
 } from "@/lib/supabase"
 import { useI18n } from "@/lib/i18n"
 import { ACCEPTED_MIME_TYPES, isAcceptedFile, isCountableDocument } from "@/lib/file-types"
@@ -192,6 +193,16 @@ export default function ChatPage() {
   const [driveChatUploading, setDriveChatUploading] = useState(false)
   const messageCountRef = useRef(0)
 
+  // WhatsApp Evolution inbox
+  const [waSessions, setWaSessions] = useState<EvolutionSession[]>([])
+  const [waMessages, setWaMessages] = useState<EvolutionMessage[]>([])
+  const [waActiveSession, setWaActiveSession] = useState<EvolutionSession | null>(null)
+  const [waContacts, setWaContacts] = useState<{ contactNumber: string; lastMessage: EvolutionMessage; unreadCount: number }[]>([])
+  const [waActiveContact, setWaActiveContact] = useState<string | null>(null)
+  const [waInboxLoading, setWaInboxLoading] = useState(false)
+  const [waSending, setWaSending] = useState(false)
+  const [waCollapsed, setWaCollapsed] = useState(false)
+
   // Channels panel
   const [showChannelsPanel, setShowChannelsPanel] = useState(false)
   const channelsPanelRef = useRef<HTMLDivElement>(null)
@@ -295,6 +306,7 @@ export default function ChatPage() {
     setCurrentConversationId(null)
     setMessages([])
     loadConversations()
+    loadWaSessions()
     if (kbEnabled) loadKbDocs()
   }, [currentWorkspace?.id])
 
@@ -1411,6 +1423,88 @@ export default function ChatPage() {
     }
   }
 
+  async function loadWaSessions() {
+    if (!user) return
+    try {
+      const sessions = await getEvolutionSessions(user.id)
+      setWaSessions(sessions)
+    } catch (e) { console.error("[WA] Failed to load sessions:", e) }
+  }
+
+  async function loadWaMessages(session: EvolutionSession) {
+    if (!user) return
+    setWaInboxLoading(true)
+    try {
+      const contacts = await getEvolutionContacts(user.id, session.id)
+      setWaContacts(contacts)
+      if (waActiveContact) {
+        const msgs = await getEvolutionMessages(user.id, waActiveContact, session.id)
+        setWaMessages(msgs.reverse())
+      } else {
+        setWaMessages([])
+      }
+    } catch (e) { console.error("[WA] Failed to load messages:", e) } finally {
+      setWaInboxLoading(false)
+    }
+  }
+
+  async function loadWaContactMessages(contactNumber: string) {
+    if (!user || !waActiveSession) return
+    setWaInboxLoading(true)
+    try {
+      const msgs = await getEvolutionMessages(user.id, contactNumber, waActiveSession.id)
+      setWaMessages(msgs.reverse())
+    } catch (e) { console.error("[WA] Failed to load contact messages:", e) } finally {
+      setWaInboxLoading(false)
+    }
+  }
+
+  function handleSelectWaSession(session: EvolutionSession) {
+    setWaActiveSession(session)
+    setWaActiveContact(null)
+    setMessages([])
+    setCurrentConversationId(null)
+    if (window.innerWidth < 768) setSidebarOpen(false)
+    loadWaMessages(session)
+  }
+
+  function handleSelectWaContact(contactNumber: string) {
+    setWaActiveContact(contactNumber)
+    loadWaContactMessages(contactNumber)
+  }
+
+  function handleExitWaInbox() {
+    setWaActiveSession(null)
+    setWaActiveContact(null)
+    setWaMessages([])
+    setWaContacts([])
+    setInput("")
+  }
+
+  async function handleSendWaMessage(to: string, body: string) {
+    if (!user || !waActiveSession) return
+    setWaSending(true)
+    try {
+      const res = await fetch("/api/whatsapp/evolution/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, to, body }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast({ title: "Send failed", description: data.error || "Failed to send WhatsApp message", variant: "error" })
+        return
+      }
+      // Reload messages to show the sent message
+      await loadWaMessages(waActiveSession)
+      setInput("")
+    } catch (e: any) {
+      toast({ title: "Send failed", description: e?.message || "Failed to send", variant: "error" })
+    } finally {
+      setWaSending(false)
+    }
+  }
+
   async function generateTitle(convId: string, userMsg: string, assistantMsg: string) {
     try {
       const res = await fetch("/api/chat/title", {
@@ -2468,6 +2562,57 @@ export default function ChatPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* ── WHATSAPP INBOX ── */}
+                    {waSessions.length > 0 && (
+                      <div className="mt-3">
+                        <button
+                          onClick={() => setWaCollapsed(p => !p)}
+                          className="mb-1 flex w-full items-center gap-1.5 px-2 py-0.5 group"
+                        >
+                          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-white transition-colors duration-150">WhatsApp</span>
+                          <ChevronDown className={cn("h-3 w-3 text-muted-foreground group-hover:text-white transition-transform duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]", waCollapsed && "-rotate-90")} />
+                        </button>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateRows: waCollapsed ? "0fr" : "1fr",
+                            transition: "grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease",
+                            opacity: waCollapsed ? 0 : 1,
+                          }}
+                        >
+                          <div style={{ overflow: "hidden" }}>
+                            {waSessions.map(session => (
+                              <button
+                                key={session.id}
+                                onClick={() => handleSelectWaSession(session)}
+                                className={cn(
+                                  "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-all duration-150",
+                                  waActiveSession?.id === session.id ? "bg-emerald-600/10" : "hover:bg-muted/50"
+                                )}
+                              >
+                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#25D366]/15">
+                                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" style={{ color: "#25D366" }}>
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                                  </svg>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className={cn("truncate text-sm font-medium", waActiveSession?.id === session.id ? "text-emerald-400" : "text-white")}>
+                                    {session.phone_number || "WhatsApp"}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {session.status === "connected" ? "Connected" : session.status === "connecting" ? "Connecting..." : "Disconnected"}
+                                  </div>
+                                </div>
+                                {session.status === "connected" && (
+                                  <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )
               })()}
@@ -2477,7 +2622,192 @@ export default function ChatPage() {
 
         {/* ── MAIN WORKSPACE ── */}
         <main className="relative flex flex-1 flex-col overflow-hidden">
-          {messages.length === 0 ? (
+          {waActiveSession ? (
+            /* ── WHATSAPP INBOX VIEW ── */
+            <div className="flex flex-1 flex-col overflow-hidden">
+              {/* WhatsApp header */}
+              <div className="flex items-center gap-3 border-b border-white/5 px-4 py-3">
+                <button
+                  onClick={handleExitWaInbox}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#25D366]/15">
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" style={{ color: "#25D366" }}>
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">{waActiveSession.phone_number || "WhatsApp"}</p>
+                  <p className="text-[11px] text-emerald-400">Connected · {waContacts.length} contacts</p>
+                </div>
+              </div>
+
+              {/* Contact list + Messages split view */}
+              <div className="flex flex-1 overflow-hidden">
+                {/* Contact list */}
+                <div className={cn("flex flex-col border-r border-white/5 overflow-y-auto", waActiveContact ? "hidden sm:flex w-64 shrink-0" : "flex-1")}>
+                  {waContacts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                      <p className="text-sm text-muted-foreground">No contacts yet.</p>
+                      <p className="text-xs text-muted-foreground/60 mt-1">Incoming WhatsApp messages will show contacts here.</p>
+                    </div>
+                  ) : (
+                    waContacts.map(contact => (
+                      <button
+                        key={contact.contactNumber}
+                        onClick={() => handleSelectWaContact(contact.contactNumber)}
+                        className={cn(
+                          "flex items-center gap-3 px-4 py-3 text-left border-b border-white/5 transition-colors",
+                          waActiveContact === contact.contactNumber ? "bg-emerald-600/10" : "hover:bg-muted/50"
+                        )}
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#25D366]/15">
+                          <span className="text-xs font-bold text-[#25D366]">{contact.contactNumber.slice(-2)}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={cn("truncate text-sm font-medium", waActiveContact === contact.contactNumber ? "text-emerald-400" : "text-white")}>
+                            {contact.contactNumber}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">{contact.lastMessage.body || `[${contact.lastMessage.media_type || "media"}]`}</p>
+                        </div>
+                        {contact.unreadCount > 0 && (
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#25D366] px-1.5 text-[10px] font-bold text-white">
+                            {contact.unreadCount}
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* Messages area */}
+                {waActiveContact ? (
+                  <div className="flex flex-1 flex-col overflow-hidden">
+                    <div className="flex items-center gap-2 border-b border-white/5 px-4 py-2.5">
+                      <button
+                        onClick={() => { setWaActiveContact(null); setWaMessages([]) }}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors sm:hidden"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <p className="text-sm font-semibold text-white">{waActiveContact}</p>
+                      <span className="ml-auto rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {waMessages.length} / 30
+                      </span>
+                    </div>
+
+                    <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 sm:p-6">
+                      {waInboxLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                          <Loader2 className="h-6 w-6 animate-spin text-emerald-400/60" />
+                        </div>
+                      ) : waMessages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-center">
+                          <p className="text-sm text-muted-foreground">No messages with this contact.</p>
+                        </div>
+                      ) : (
+                        waMessages.map((msg, index) => {
+                          const msgDate = new Date(msg.timestamp)
+                          const showSeparator = index === 0 || !isSameDay(msgDate, new Date(waMessages[index - 1].timestamp))
+                          return (
+                            <div key={msg.id}>
+                              {showSeparator && (
+                                <div className="flex items-center gap-3 my-4">
+                                  <div className="flex-1 h-px bg-white/5" />
+                                  <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider px-2">{formatDateSeparator(msgDate)}</span>
+                                  <div className="flex-1 h-px bg-white/5" />
+                                </div>
+                              )}
+                              <div className={cn("flex gap-3 mb-4", msg.direction === "sent" && "flex-row-reverse")}>
+                                <div className={cn(
+                                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                                  msg.direction === "sent" ? "bg-muted text-foreground" : "bg-[#25D366]/15 text-[#25D366]"
+                                )}>
+                                  {msg.direction === "sent" ? (userInitials || <User className="h-4 w-4" />) : (
+                                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                                    </svg>
+                                  )}
+                                </div>
+                                <div className={cn("max-w-[72%] min-w-0", msg.direction === "sent" && "flex flex-col items-end")}>
+                                  <div
+                                    className={cn(
+                                      "rounded-2xl px-4 py-3 text-sm leading-relaxed break-words",
+                                      msg.direction === "sent"
+                                        ? "rounded-tr-sm text-white"
+                                        : "rounded-tl-sm border border-white/15"
+                                    )}
+                                    style={msg.direction === "sent"
+                                      ? { backgroundColor: themePrimary, color: "#fff" }
+                                      : { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.15)", color: "#f1f5f9" }
+                                    }
+                                  >
+                                    {msg.media_type && msg.media_type !== "text" && (
+                                      <div className="mb-2 flex items-center gap-2 text-xs opacity-70">
+                                        <Paperclip className="h-3 w-3" />
+                                        <span className="capitalize">{msg.media_type}</span>
+                                      </div>
+                                    )}
+                                    <p className="whitespace-pre-wrap">{msg.body || `[${msg.media_type || "media"}]`}</p>
+                                    <div className="mt-1 flex items-center gap-1 text-[10px] opacity-50">
+                                      <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                                      {msg.direction === "sent" && <Check className="h-2.5 w-2.5" />}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+
+                    {/* WhatsApp send bar */}
+                    <div className="shrink-0 border-t border-white/5 p-3 sm:p-4">
+                      <div className="flex items-end gap-2">
+                        <textarea
+                          value={input}
+                          onChange={e => setInput(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault()
+                              if (input.trim() && !waSending && waActiveContact) {
+                                handleSendWaMessage(waActiveContact, input.trim())
+                              }
+                            }
+                          }}
+                          placeholder="Type a WhatsApp reply..."
+                          rows={1}
+                          className="flex-1 min-h-[44px] max-h-[120px] resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-emerald-500/30"
+                          style={{ color: "#f1f5f9" }}
+                        />
+                        <button
+                          onClick={() => {
+                            if (input.trim() && !waSending && waActiveContact) {
+                              handleSendWaMessage(waActiveContact, input.trim())
+                            }
+                          }}
+                          disabled={!input.trim() || waSending}
+                          className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#25D366] text-white transition-all hover:bg-[#20bd5a] disabled:opacity-40"
+                        >
+                          {waSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      <p className="mt-1.5 text-center text-[10px] text-muted-foreground/50">
+                        30 messages per contact · oldest deleted automatically
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="hidden sm:flex flex-1 items-center justify-center">
+                    <p className="text-sm text-muted-foreground">Select a contact to view messages</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
 
               {/* Logo & Greeting */}

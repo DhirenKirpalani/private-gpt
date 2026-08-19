@@ -1816,3 +1816,152 @@ export async function importContactsFromSlack(userId: string): Promise<number> {
   if (insertError) console.error("[SLACK IMPORT] Insert failed:", insertError.message)
   return rows.length
 }
+
+// ─── Evolution API (WhatsApp QR Gateway) ───
+
+export interface EvolutionSession {
+  id: string
+  user_id: string
+  instance_name: string
+  phone_number: string | null
+  status: "connecting" | "connected" | "disconnected"
+  provider: "evolution" | "meta"
+  created_at: string
+  updated_at: string
+}
+
+export interface EvolutionMessage {
+  id: string
+  user_id: string
+  session_id: string
+  direction: "sent" | "received"
+  from_number: string
+  to_number: string
+  wa_message_id: string | null
+  body: string
+  media_url: string | null
+  media_type: string | null
+  timestamp: string
+  read: boolean
+}
+
+const EVOLUTION_FIFO_LIMIT = 30
+
+export async function getEvolutionSessions(userId: string): Promise<EvolutionSession[]> {
+  const { data, error } = await supabase
+    .from("whatsapp_sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+  if (error) throw error
+  return (data || []) as EvolutionSession[]
+}
+
+export async function createEvolutionSession(userId: string, instanceName: string): Promise<EvolutionSession> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("whatsapp_sessions")
+    .insert({
+      user_id: userId,
+      instance_name: instanceName,
+      status: "connecting",
+      provider: "evolution",
+    })
+    .select("*")
+    .single()
+  if (error) throw error
+  return data as EvolutionSession
+}
+
+export async function updateEvolutionSession(sessionId: string, updates: Partial<EvolutionSession>): Promise<void> {
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from("whatsapp_sessions")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", sessionId)
+  if (error) throw error
+}
+
+export async function deleteEvolutionSession(userId: string, sessionId: string): Promise<void> {
+  const admin = createAdminClient()
+  await admin.from("whatsapp_messages").delete().eq("session_id", sessionId)
+  await admin.from("whatsapp_sessions").delete().eq("id", sessionId).eq("user_id", userId)
+}
+
+export async function getEvolutionContacts(userId: string, sessionId?: string): Promise<{ contactNumber: string; lastMessage: EvolutionMessage; unreadCount: number }[]> {
+  let query = supabase
+    .from("whatsapp_messages")
+    .select("*")
+    .eq("user_id", userId)
+    .order("timestamp", { ascending: false })
+  if (sessionId) query = query.eq("session_id", sessionId)
+  const { data, error } = await query
+  if (error) throw error
+  const allMsgs = (data || []) as EvolutionMessage[]
+
+  // Group by contact number (the remote number, not the user's own)
+  const contactMap = new Map<string, { lastMessage: EvolutionMessage; unreadCount: number }>()
+  for (const msg of allMsgs) {
+    const contactNumber = msg.direction === "received" ? msg.from_number : msg.to_number
+    if (!contactNumber) continue
+    if (!contactMap.has(contactNumber)) {
+      contactMap.set(contactNumber, {
+        lastMessage: msg,
+        unreadCount: 0,
+      })
+    }
+    const entry = contactMap.get(contactNumber)!
+    if (msg.direction === "received" && !msg.read) entry.unreadCount++
+  }
+
+  return Array.from(contactMap.entries()).map(([contactNumber, info]) => ({
+    contactNumber,
+    lastMessage: info.lastMessage,
+    unreadCount: info.unreadCount,
+  }))
+}
+
+export async function getEvolutionMessages(userId: string, contactNumber?: string, sessionId?: string): Promise<EvolutionMessage[]> {
+  let query = supabase
+    .from("whatsapp_messages")
+    .select("*")
+    .eq("user_id", userId)
+    .order("timestamp", { ascending: false })
+    .limit(EVOLUTION_FIFO_LIMIT)
+  if (sessionId) query = query.eq("session_id", sessionId)
+  if (contactNumber) {
+    query = query.or(`from_number.eq.${contactNumber},to_number.eq.${contactNumber}`)
+  }
+  const { data, error } = await query
+  if (error) throw error
+  return (data || []) as EvolutionMessage[]
+}
+
+export async function saveEvolutionMessage(msg: Omit<EvolutionMessage, "id">): Promise<void> {
+  const admin = createAdminClient()
+  const { error } = await admin.from("whatsapp_messages").insert(msg)
+  if (error) {
+    console.error("[WA MSG] Insert failed:", error.message)
+    return
+  }
+
+  // FIFO per contact: identify the contact number (the remote party)
+  const contactNumber = msg.direction === "received" ? msg.from_number : msg.to_number
+  if (!contactNumber) return
+
+  // Count messages for this user + contact and delete oldest beyond limit
+  const { data: countData, error: countError } = await admin
+    .from("whatsapp_messages")
+    .select("id")
+    .eq("user_id", msg.user_id)
+    .or(`from_number.eq.${contactNumber},to_number.eq.${contactNumber}`)
+    .order("timestamp", { ascending: false })
+  if (countError || !countData) return
+
+  if (countData.length > EVOLUTION_FIFO_LIMIT) {
+    const toDelete = countData.slice(EVOLUTION_FIFO_LIMIT).map((r: any) => r.id)
+    if (toDelete.length > 0) {
+      await admin.from("whatsapp_messages").delete().in("id", toDelete)
+    }
+  }
+}
