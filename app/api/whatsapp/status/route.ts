@@ -31,7 +31,7 @@ async function _GET(req: NextRequest) {
 
     if (state === "open") {
       if (active.status !== "connected") {
-        await updateEvolutionSession(active.id, { status: "connected" })
+        try { await updateEvolutionSession(active.id, { status: "connected" }) } catch (e) { console.warn("[WHATSAPP STATUS] DB update failed:", e) }
       }
       return NextResponse.json({
         status: "connected",
