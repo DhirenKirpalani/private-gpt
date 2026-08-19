@@ -94,6 +94,8 @@ function ChannelsPageContent() {
   const [inboxMessages, setInboxMessages] = useState<any[]>([])
   const [inboxLoading, setInboxLoading] = useState(false)
 
+  const [connectionsLoading, setConnectionsLoading] = useState(true)
+
   // WhatsApp connect modal
   const [waModalOpen, setWaModalOpen] = useState(false)
   const [waSetupOpen, setWaSetupOpen] = useState(false)
@@ -160,6 +162,7 @@ function ChannelsPageContent() {
       const evoSessions = await getEvolutionSessions(user.id)
       setWaEvolutionSessions(evoSessions)
     } catch { /* ignore */ }
+    setConnectionsLoading(false)
   }, [user])
 
   useEffect(() => {
@@ -909,7 +912,7 @@ function ChannelsPageContent() {
                   const tgConn = tgConnected ? tgUserSession : null
                   const slConnected = isSlack && Object.keys(slackConnections).length > 0
                   const slConn = slConnected ? Object.values(slackConnections)[0] : null
-                  const isConn = waConn || tgConn || slConn
+                  const isConn = (isWhatsApp && !!waConn) || (isTelegram && !!tgConn) || (isSlack && !!slConn)
                   return (
                     <div key={ch.id} className={cn("flex flex-col gap-3 rounded-xl border p-3 shadow-sm transition-all duration-200 sm:flex-row sm:items-center sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5 hover:sm:-translate-y-0.5", isConn ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
@@ -933,7 +936,9 @@ function ChannelsPageContent() {
                           <p className="mt-0.5 text-[10px] text-emerald-400">{slConn.team_name || slConn.team_id}</p>
                         )}
                       </div>
-                      {isWhatsApp ? (
+                      {connectionsLoading ? (
+                        <div className="w-20 h-9 rounded-lg bg-white/5 animate-pulse shrink-0" />
+                      ) : isWhatsApp ? (
                         WHATSAPP_PROVIDER === "evolution" ? (
                           waConn ? (
                             <button
