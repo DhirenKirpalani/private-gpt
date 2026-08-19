@@ -21,16 +21,13 @@ async function _GET(req: NextRequest) {
       return NextResponse.json({ status: "disconnected" })
     }
 
-    // Check instance state in Evolution API
+    // Use connectionState endpoint (not /connect) to check actual state
     const stateRes = await fetch(
-      `${EVOLUTION_URL}/instance/connect/${active.instance_name}`,
+      `${EVOLUTION_URL}/instance/connectionState/${active.instance_name}`,
       { headers: { apikey: EVOLUTION_KEY } }
     )
     const stateData = await stateRes.json()
-
-    // v2.3.7: check for open connection via base64 absence or instance state
     const state = stateData?.instance?.state
-    const hasQr = !!stateData?.base64
 
     if (state === "open") {
       if (active.status !== "connected") {
@@ -38,16 +35,26 @@ async function _GET(req: NextRequest) {
       }
       return NextResponse.json({
         status: "connected",
-        session: active,
-        phone: stateData?.instance?.wuid?.replace(/.*@/, "") || null,
+        session: { ...active, status: "connected" },
+        phone: active.phone_number || null,
       })
     }
 
-    // Return connecting with QR code for auto-refresh
+    // Still connecting — fetch fresh QR via /instance/connect
+    let qr: string | null = null
+    try {
+      const qrRes = await fetch(
+        `${EVOLUTION_URL}/instance/connect/${active.instance_name}`,
+        { headers: { apikey: EVOLUTION_KEY } }
+      )
+      const qrData = await qrRes.json()
+      qr = qrData?.base64 || null
+    } catch { /* ignore QR fetch error */ }
+
     return NextResponse.json({
       status: "connecting",
       session: active,
-      qr: stateData?.base64 || null,
+      qr,
     })
   } catch (err: any) {
     console.error("[WHATSAPP STATUS]", err)
