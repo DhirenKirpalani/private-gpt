@@ -94,6 +94,8 @@ function ChannelsPageContent() {
   const [inboxMessages, setInboxMessages] = useState<any[]>([])
   const [inboxLoading, setInboxLoading] = useState(false)
 
+  const [connectionsLoading, setConnectionsLoading] = useState(true)
+
   // WhatsApp connect modal
   const [waModalOpen, setWaModalOpen] = useState(false)
   const [waSetupOpen, setWaSetupOpen] = useState(false)
@@ -108,6 +110,7 @@ function ChannelsPageContent() {
   const [waQrSession, setWaQrSession] = useState<any>(null)
   const [waQrPollInterval, setWaQrPollInterval] = useState<ReturnType<typeof setInterval> | null>(null)
   const [waQrCountdown, setWaQrCountdown] = useState(18)
+  const [waQrInstanceName, setWaQrInstanceName] = useState<string | null>(null)
   const [waEvolutionSessions, setWaEvolutionSessions] = useState<any[]>([])
 
   // Telegram connect modal
@@ -158,8 +161,29 @@ function ChannelsPageContent() {
     try {
       const { getEvolutionSessions } = await import("@/lib/supabase")
       const evoSessions = await getEvolutionSessions(user.id)
-      setWaEvolutionSessions(evoSessions)
+      // Verify actual VPS state for any session not definitively disconnected
+      if (evoSessions.some(s => s.status === "connected" || s.status === "connecting")) {
+        try {
+          const statusRes = await fetch(`/api/whatsapp/status?userId=${user.id}`)
+          const statusData = await statusRes.json()
+          if (statusData.status === "connected") {
+            setWaEvolutionSessions(evoSessions.map(s =>
+              s.id === statusData.session?.id ? { ...s, status: "connected" } : s
+            ))
+          } else {
+            // Not connected on VPS — show all sessions as connecting so no false Connected badge
+            setWaEvolutionSessions(evoSessions.map(s =>
+              s.status === "connected" ? { ...s, status: "connecting" } : s
+            ))
+          }
+        } catch {
+          setWaEvolutionSessions(evoSessions)
+        }
+      } else {
+        setWaEvolutionSessions(evoSessions)
+      }
     } catch { /* ignore */ }
+    setConnectionsLoading(false)
   }, [user])
 
   useEffect(() => {
@@ -596,12 +620,13 @@ function ChannelsPageContent() {
       if (data.status === "connected") {
         setWaQrStatus("connected")
         setWaQrSession(data.session)
+        setWaEvolutionSessions(prev => prev.some(s => s.id === data.session.id) ? prev : [data.session, ...prev])
       } else {
         setWaQrCode(data.qr)
-        setWaQrSession(data.session)
+        setWaQrSession(null)
+        setWaQrInstanceName(data.instanceName || null)
         setWaQrStatus("connecting")
-        // Start polling for connection status
-        startQrPolling()
+        startQrPolling(data.instanceName || null)
       }
     } catch (e: any) {
       setWaQrStatus("error")
@@ -611,47 +636,71 @@ function ChannelsPageContent() {
     }
   }
 
-  const startQrPolling = () => {
+  const startQrPolling = (instanceName: string | null) => {
     if (waQrPollInterval) clearInterval(waQrPollInterval)
-    setWaQrCountdown(20)
+    setWaQrCountdown(18)
     let pollCount = 0
     const interval = setInterval(async () => {
       if (!user) return
-      setWaQrCountdown(prev => prev > 1 ? prev - 1 : 20)
       pollCount++
-      // Only fetch from server every 3 seconds
+      // Countdown tick
+      setWaQrCountdown(prev => {
+        if (prev <= 1) {
+          // Time to refresh QR (every 18s)
+          if (instanceName) {
+            fetch("/api/whatsapp/qr-refresh", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ instanceName }),
+            }).then(r => r.json()).then(d => {
+              if (d.status === "connected") return // will be caught by status poll
+              if (d.qr) setWaQrCode(d.qr)
+            }).catch(() => {})
+          }
+          return 18
+        }
+        return prev - 1
+      })
+      // Check connected status every 3 seconds
       if (pollCount % 3 !== 0) return
       try {
-        const res = await fetch(`/api/whatsapp/status?userId=${user.id}`)
+        const url = instanceName
+          ? `/api/whatsapp/status?userId=${user.id}&instanceName=${encodeURIComponent(instanceName)}`
+          : `/api/whatsapp/status?userId=${user.id}`
+        const res = await fetch(url)
         const data = await res.json()
         if (data.status === "connected") {
           setWaQrStatus("connected")
           setWaQrSession(data.session)
+          setWaQrInstanceName(null)
           setWaEvolutionSessions(prev => {
             if (prev.some(s => s.id === data.session.id)) return prev
             return [data.session, ...prev]
           })
-          if (waQrPollInterval) { clearInterval(waQrPollInterval); setWaQrPollInterval(null) }
+          clearInterval(interval)
+          setWaQrPollInterval(null)
           toast({ title: "Connected", description: `WhatsApp connected${data.phone ? `: ${data.phone}` : ""}`, variant: "success" })
-        } else if (data.status === "connecting") {
-          // Auto-refresh QR code from status response
-          if (data.qr) {
-            setWaQrCode(data.qr)
-          }
         }
-      } catch {
-        // ignore poll errors
-      }
+      } catch { /* ignore poll errors */ }
     }, 1000)
     setWaQrPollInterval(interval)
   }
 
   const handleCloseQrModal = () => {
     if (waQrPollInterval) { clearInterval(waQrPollInterval); setWaQrPollInterval(null) }
+    // Clean up VPS instance if modal closed without scanning
+    if (waQrInstanceName && waQrStatus !== "connected") {
+      fetch("/api/whatsapp/qr", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instanceName: waQrInstanceName }),
+      }).catch(() => {})
+    }
     setWaQrModalOpen(false)
     setWaQrCode(null)
     setWaQrStatus("idle")
     setWaQrSession(null)
+    setWaQrInstanceName(null)
   }
 
   const handleDisconnectEvolution = async (sessionId: string) => {
@@ -666,9 +715,12 @@ function ChannelsPageContent() {
       if (res.ok) {
         setWaEvolutionSessions(prev => prev.filter(s => s.id !== sessionId))
         toast({ title: "Disconnected", description: "WhatsApp has been disconnected.", variant: "success" })
+      } else {
+        const body = await res.json().catch(() => ({}))
+        toast({ title: "Error", description: body?.error || `Disconnect failed (${res.status})`, variant: "error" })
       }
-    } catch {
-      toast({ title: "Error", description: "Failed to disconnect WhatsApp.", variant: "error" })
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message || "Failed to disconnect WhatsApp.", variant: "error" })
     } finally {
       setDisconnecting(null)
     }
@@ -903,13 +955,13 @@ function ChannelsPageContent() {
                     ? waEvolutionSessions.some(s => s.status === "connected")
                     : Object.keys(whatsappConnections).length > 0)
                   const waConn = WHATSAPP_PROVIDER === "evolution"
-                    ? waEvolutionSessions.find(s => s.status === "connected")
+                    ? (waEvolutionSessions.find(s => s.status === "connected") || waEvolutionSessions.find(s => s.status === "connecting"))
                     : waConnected ? Object.values(whatsappConnections)[0] : null
                   const tgConnected = isTelegram && !!tgUserSession
                   const tgConn = tgConnected ? tgUserSession : null
                   const slConnected = isSlack && Object.keys(slackConnections).length > 0
                   const slConn = slConnected ? Object.values(slackConnections)[0] : null
-                  const isConn = waConn || tgConn || slConn
+                  const isConn = (isWhatsApp && !!waConn) || (isTelegram && !!tgConn) || (isSlack && !!slConn)
                   return (
                     <div key={ch.id} className={cn("flex flex-col gap-3 rounded-xl border p-3 shadow-sm transition-all duration-200 sm:flex-row sm:items-center sm:gap-4 sm:rounded-2xl sm:p-4 md:p-5 hover:sm:-translate-y-0.5", isConn ? "border-emerald-500/30 bg-[#2a3444]" : "border-white/5 bg-[#2a3444]")}>
                       <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center">{ch.icon}</div>
@@ -923,7 +975,7 @@ function ChannelsPageContent() {
                           )}
                         </div>
                         <p className="mt-0.5 text-sm text-muted-foreground">{t(ch.descKey as any)}</p>
-                        {waConn && (
+                        {isWhatsApp && waConn && (
                           <p className="mt-0.5 text-[10px] text-emerald-400">{waConn.phone_number || waConn.phone_number_id}</p>
                         )}
                         {tgConn && (
@@ -933,7 +985,9 @@ function ChannelsPageContent() {
                           <p className="mt-0.5 text-[10px] text-emerald-400">{slConn.team_name || slConn.team_id}</p>
                         )}
                       </div>
-                      {isWhatsApp ? (
+                      {connectionsLoading ? (
+                        <div className="w-20 h-9 rounded-lg bg-white/5 animate-pulse shrink-0" />
+                      ) : isWhatsApp ? (
                         WHATSAPP_PROVIDER === "evolution" ? (
                           waConn ? (
                             <button
@@ -1699,7 +1753,7 @@ function ChannelsPageContent() {
                       <span>Waiting for scan...</span>
                     </div>
                     <p className="text-[10px] text-muted-foreground/60">
-                      QR refreshes automatically in <span className="text-emerald-400 font-semibold">{waQrCountdown}s</span> — no need to retry
+                      QR refreshes in <span className="text-emerald-400 font-semibold">{waQrCountdown}s</span> — scan quickly
                     </p>
                   </div>
                 </div>

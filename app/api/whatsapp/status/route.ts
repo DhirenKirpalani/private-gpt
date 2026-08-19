@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { withApiLogging } from "@/lib/with-api-logging"
-import { getEvolutionSessions, updateEvolutionSession } from "@/lib/supabase"
+import { getEvolutionSessions, updateEvolutionSession, createEvolutionSession } from "@/lib/supabase"
 
 export const dynamic = "force-dynamic"
 
@@ -10,10 +10,39 @@ const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY || ""
 async function _GET(req: NextRequest) {
   try {
     const userId = req.nextUrl.searchParams.get("userId")
+    const instanceName = req.nextUrl.searchParams.get("instanceName") // present before session created
     if (!userId) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 })
     }
 
+    // Case 1: instanceName provided — no session yet, check VPS directly
+    if (instanceName) {
+      const stateRes = await fetch(
+        `${EVOLUTION_URL}/instance/connectionState/${instanceName}`,
+        { headers: { apikey: EVOLUTION_KEY }, cache: "no-store" }
+      )
+      const stateData = await stateRes.json()
+      const state = stateData?.instance?.state
+
+      if (state === "open") {
+        // Fetch phone number from instance details
+        let phoneNumber: string | null = null
+        try {
+          const instRes = await fetch(`${EVOLUTION_URL}/instance/fetchInstances`, { headers: { apikey: EVOLUTION_KEY }, cache: "no-store" })
+          const instances = await instRes.json()
+          const inst = Array.isArray(instances) ? instances.find((i: any) => i.name === instanceName) : null
+          phoneNumber = inst?.ownerJid?.replace(/@.+$/, "") || null
+        } catch {}
+
+        // Create the Supabase session now that QR was scanned
+        const session = await createEvolutionSession(userId, instanceName)
+        try { await updateEvolutionSession(session.id, { status: "connected", phone_number: phoneNumber } as any) } catch {}
+        return NextResponse.json({ status: "connected", session: { ...session, status: "connected", phone_number: phoneNumber } })
+      }
+      return NextResponse.json({ status: "connecting", qr: null })
+    }
+
+    // Case 2: existing session — check its VPS state
     const sessions = await getEvolutionSessions(userId)
     const active = sessions.find(s => s.status === "connected" || s.status === "connecting")
 
@@ -21,34 +50,25 @@ async function _GET(req: NextRequest) {
       return NextResponse.json({ status: "disconnected" })
     }
 
-    // Check instance state in Evolution API
     const stateRes = await fetch(
-      `${EVOLUTION_URL}/instance/connect/${active.instance_name}`,
-      { headers: { apikey: EVOLUTION_KEY } }
+      `${EVOLUTION_URL}/instance/connectionState/${active.instance_name}`,
+      { headers: { apikey: EVOLUTION_KEY }, cache: "no-store" }
     )
     const stateData = await stateRes.json()
-
-    // v2.3.7: check for open connection via base64 absence or instance state
     const state = stateData?.instance?.state
-    const hasQr = !!stateData?.base64
 
     if (state === "open") {
       if (active.status !== "connected") {
-        await updateEvolutionSession(active.id, { status: "connected" })
+        try { await updateEvolutionSession(active.id, { status: "connected" }) } catch {}
       }
       return NextResponse.json({
         status: "connected",
-        session: active,
-        phone: stateData?.instance?.wuid?.replace(/.*@/, "") || null,
+        session: { ...active, status: "connected" },
+        phone: active.phone_number || null,
       })
     }
 
-    // Return connecting with QR code for auto-refresh
-    return NextResponse.json({
-      status: "connecting",
-      session: active,
-      qr: stateData?.base64 || null,
-    })
+    return NextResponse.json({ status: "connecting", session: active, qr: null })
   } catch (err: any) {
     console.error("[WHATSAPP STATUS]", err)
     return NextResponse.json({ error: err?.message || "Status check failed" }, { status: 500 })
