@@ -110,6 +110,7 @@ function ChannelsPageContent() {
   const [waQrSession, setWaQrSession] = useState<any>(null)
   const [waQrPollInterval, setWaQrPollInterval] = useState<ReturnType<typeof setInterval> | null>(null)
   const [waQrCountdown, setWaQrCountdown] = useState(18)
+  const [waQrInstanceName, setWaQrInstanceName] = useState<string | null>(null)
   const [waEvolutionSessions, setWaEvolutionSessions] = useState<any[]>([])
 
   // Telegram connect modal
@@ -619,12 +620,13 @@ function ChannelsPageContent() {
       if (data.status === "connected") {
         setWaQrStatus("connected")
         setWaQrSession(data.session)
+        setWaEvolutionSessions(prev => prev.some(s => s.id === data.session.id) ? prev : [data.session, ...prev])
       } else {
         setWaQrCode(data.qr)
-        setWaQrSession(data.session)
+        setWaQrSession(null)
+        setWaQrInstanceName(data.instanceName || null)
         setWaQrStatus("connecting")
-        // Start polling for connection status
-        startQrPolling()
+        startQrPolling(data.instanceName || null)
       }
     } catch (e: any) {
       setWaQrStatus("error")
@@ -634,7 +636,7 @@ function ChannelsPageContent() {
     }
   }
 
-  const startQrPolling = () => {
+  const startQrPolling = (instanceName: string | null) => {
     if (waQrPollInterval) clearInterval(waQrPollInterval)
     setWaQrCountdown(20)
     let pollCount = 0
@@ -642,34 +644,45 @@ function ChannelsPageContent() {
       if (!user) return
       setWaQrCountdown(prev => prev > 1 ? prev - 1 : 20)
       pollCount++
-      // Only fetch from server every 3 seconds
       if (pollCount % 3 !== 0) return
       try {
-        const res = await fetch(`/api/whatsapp/status?userId=${user.id}`)
+        const url = instanceName
+          ? `/api/whatsapp/status?userId=${user.id}&instanceName=${instanceName}`
+          : `/api/whatsapp/status?userId=${user.id}`
+        const res = await fetch(url)
         const data = await res.json()
         if (data.status === "connected") {
           setWaQrStatus("connected")
           setWaQrSession(data.session)
+          setWaQrInstanceName(null)
           setWaEvolutionSessions(prev => {
             if (prev.some(s => s.id === data.session.id)) return prev
             return [data.session, ...prev]
           })
-          if (waQrPollInterval) { clearInterval(waQrPollInterval); setWaQrPollInterval(null) }
+          clearInterval(interval)
+          setWaQrPollInterval(null)
           toast({ title: "Connected", description: `WhatsApp connected${data.phone ? `: ${data.phone}` : ""}`, variant: "success" })
         }
-      } catch {
-        // ignore poll errors
-      }
+      } catch { /* ignore poll errors */ }
     }, 1000)
     setWaQrPollInterval(interval)
   }
 
   const handleCloseQrModal = () => {
     if (waQrPollInterval) { clearInterval(waQrPollInterval); setWaQrPollInterval(null) }
+    // Clean up VPS instance if modal closed without scanning
+    if (waQrInstanceName && waQrStatus !== "connected") {
+      fetch("/api/whatsapp/qr", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instanceName: waQrInstanceName }),
+      }).catch(() => {})
+    }
     setWaQrModalOpen(false)
     setWaQrCode(null)
     setWaQrStatus("idle")
     setWaQrSession(null)
+    setWaQrInstanceName(null)
   }
 
   const handleDisconnectEvolution = async (sessionId: string) => {
