@@ -25,10 +25,19 @@ async function _GET(req: NextRequest) {
       const state = stateData?.instance?.state
 
       if (state === "open") {
-        // QR was scanned — now create the Supabase session
+        // Fetch phone number from instance details
+        let phoneNumber: string | null = null
+        try {
+          const instRes = await fetch(`${EVOLUTION_URL}/instance/fetchInstances`, { headers: { apikey: EVOLUTION_KEY }, cache: "no-store" })
+          const instances = await instRes.json()
+          const inst = Array.isArray(instances) ? instances.find((i: any) => i.name === instanceName) : null
+          phoneNumber = inst?.ownerJid?.replace(/@.+$/, "") || null
+        } catch {}
+
+        // Create the Supabase session now that QR was scanned
         const session = await createEvolutionSession(userId, instanceName)
-        try { await updateEvolutionSession(session.id, { status: "connected" }) } catch {}
-        return NextResponse.json({ status: "connected", session: { ...session, status: "connected" } })
+        try { await updateEvolutionSession(session.id, { status: "connected", phone_number: phoneNumber } as any) } catch {}
+        return NextResponse.json({ status: "connected", session: { ...session, status: "connected", phone_number: phoneNumber } })
       }
       return NextResponse.json({ status: "connecting", qr: null })
     }
