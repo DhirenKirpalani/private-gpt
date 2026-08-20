@@ -3846,7 +3846,7 @@ export default function CRMPage() {
                               }}
                             />
                           )}
-                          {replySource === "telegram" && (
+                          {(replySource === "telegram" || replySource === "whatsapp") && (
                             <button
                               onClick={() => imageInputRef.current?.click()}
                               disabled={sendingWaReply}
@@ -3877,7 +3877,7 @@ export default function CRMPage() {
                                   const formData = new FormData()
                                   formData.append("file", pendingImage.file)
                                   formData.append("userId", user.id)
-                                  const uploadRes = await fetch("/api/telegram/user/upload-media", {
+                                  const uploadRes = await fetch("/api/upload-media", {
                                     method: "POST",
                                     body: formData,
                                   })
@@ -3890,7 +3890,7 @@ export default function CRMPage() {
                                   ? { userId: user.id, chatId: waReplyTo, body: waReplyBody, mediaUrl }
                                   : replySource === "slack"
                                   ? { userId: user.id, channelId: waReplyTo, text: waReplyBody }
-                                  : { userId: user.id, to: waReplyTo, body: waReplyBody }
+                                  : { userId: user.id, to: waReplyTo, body: waReplyBody, mediaUrl }
                                 const res = await fetch(endpoint, {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },

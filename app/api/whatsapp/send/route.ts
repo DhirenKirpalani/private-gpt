@@ -14,9 +14,9 @@ const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY || ""
 
 async function _POST(req: NextRequest) {
   try {
-    const { userId, to, body } = await req.json()
-    if (!userId || !to || !body) {
-      return NextResponse.json({ error: "Missing userId, to, or body" }, { status: 400 })
+    const { userId, to, body, mediaUrl } = await req.json()
+    if (!userId || !to || (!body && !mediaUrl)) {
+      return NextResponse.json({ error: "Missing userId, to, or body/mediaUrl" }, { status: 400 })
     }
 
     // Try Evolution API first (whatsapp_sessions table)
@@ -28,10 +28,29 @@ async function _POST(req: NextRequest) {
       .single()
 
     if (evoSession && !evoErr && EVOLUTION_URL && EVOLUTION_KEY) {
-      // Send via Evolution API
-      const evoRes = await fetch(
-        `${EVOLUTION_URL}/message/sendText/${evoSession.instance_name}`,
-        {
+      let evoRes: Response
+      let endpoint: string
+
+      if (mediaUrl) {
+        // Send media via Evolution API
+        endpoint = `${EVOLUTION_URL}/message/sendMedia/${evoSession.instance_name}`
+        evoRes = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: EVOLUTION_KEY,
+          },
+          body: JSON.stringify({
+            number: to,
+            media: mediaUrl,
+            mediatype: "image",
+            caption: body || "",
+          }),
+        })
+      } else {
+        // Send text via Evolution API
+        endpoint = `${EVOLUTION_URL}/message/sendText/${evoSession.instance_name}`
+        evoRes = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -41,8 +60,8 @@ async function _POST(req: NextRequest) {
             number: to,
             text: body,
           }),
-        }
-      )
+        })
+      }
 
       const evoData = await evoRes.json()
       if (!evoRes.ok) {
@@ -60,7 +79,9 @@ async function _POST(req: NextRequest) {
         from_number: evoSession.phone_number || "",
         to_number: to,
         wa_message_id: messageId,
-        body,
+        body: body || "",
+        media_url: mediaUrl || null,
+        media_type: mediaUrl ? "image" : null,
         timestamp: new Date().toISOString(),
         read: true,
       })
