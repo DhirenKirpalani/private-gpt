@@ -17,40 +17,56 @@ function isGroup(jid: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const tag = "[EVOLUTION SYNC]"
+  const t0 = Date.now()
   try {
     const { userId } = await req.json()
+    console.log(`${tag} ── START userId=${userId}`)
+
     if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 })
-    if (!EVOLUTION_URL || !EVOLUTION_KEY) return NextResponse.json({ error: "Evolution not configured" }, { status: 500 })
+    if (!EVOLUTION_URL || !EVOLUTION_KEY) {
+      console.error(`${tag} Evolution API not configured (EVOLUTION_API_URL or EVOLUTION_API_KEY missing)`)
+      return NextResponse.json({ error: "Evolution not configured" }, { status: 500 })
+    }
 
     const admin = createAdminClient()
 
     // Get connected session
-    const { data: session } = await admin
+    const { data: session, error: sessionErr } = await admin
       .from("whatsapp_sessions")
       .select("*")
       .eq("user_id", userId)
       .eq("status", "connected")
       .single()
 
-    if (!session) return NextResponse.json({ error: "No connected session" }, { status: 404 })
+    if (sessionErr) console.error(`${tag} Session DB error:`, sessionErr.message)
+    if (!session) {
+      console.warn(`${tag} No connected session found for userId=${userId}`)
+      return NextResponse.json({ error: "No connected session" }, { status: 404 })
+    }
 
     const instanceName = session.instance_name
     const myPhone = session.phone_number || ""
+    console.log(`${tag} Session found → id=${session.id} instance=${instanceName} phone=${myPhone}`)
 
-    // Fetch existing wa_message_ids to avoid duplicates (no unique constraint needed)
-    const { data: existing } = await admin
+    // Fetch existing wa_message_ids to avoid duplicates
+    const { data: existing, error: existingErr } = await admin
       .from("whatsapp_messages")
       .select("wa_message_id")
       .eq("session_id", session.id)
       .not("wa_message_id", "is", null)
+    if (existingErr) console.error(`${tag} Error fetching existing IDs:`, existingErr.message)
     const existingIds = new Set((existing || []).map((r: any) => r.wa_message_id))
+    console.log(`${tag} Existing messages in DB for this session: ${existingIds.size}`)
 
     let totalSynced = 0
+    let totalSkippedDup = 0
+    let totalSkippedGroup = 0
     let page = 1
     const limit = 50
 
-    // Fetch messages page by page (max 5 pages = 250 messages)
     while (page <= 5) {
+      console.log(`${tag} Fetching page ${page} (limit=${limit}) from VPS...`)
       const res = await fetch(
         `${EVOLUTION_URL}/chat/findMessages/${instanceName}`,
         {
@@ -60,72 +76,85 @@ export async function POST(req: NextRequest) {
           cache: "no-store",
         }
       )
-      if (!res.ok) break
+      if (!res.ok) {
+        console.error(`${tag} VPS /chat/findMessages returned ${res.status} on page ${page}`)
+        break
+      }
       const data = await res.json()
+      const totalVPS = data?.messages?.total ?? "?"
+      const totalPages = data?.messages?.pages ?? 1
       const records = data?.messages?.records || data?.records || (Array.isArray(data) ? data : [])
-      if (!records.length) break
+      console.log(`${tag} Page ${page}/${totalPages}: ${records.length} records (VPS total=${totalVPS})`)
 
-      const rows = records
-        .filter((msg: any) => {
-          const jid = msg.key?.remoteJid || ""
-          if (isGroup(jid)) return false
-          const msgId = msg.key?.id
-          if (msgId && existingIds.has(msgId)) return false // skip already saved
-          return true
-        })
-        .map((msg: any) => {
-          const fromMe = !!msg.key?.fromMe
-          const remoteJid = msg.key?.remoteJid || ""
-          const altJid = msg.key?.remoteJidAlt || ""
-          const contactPhone = extractPhone(remoteJid, altJid)
+      if (!records.length) { console.log(`${tag} No records on page ${page}, stopping.`); break }
 
-          const text =
-            msg.message?.conversation ||
-            msg.message?.extendedTextMessage?.text ||
-            msg.message?.imageMessage?.caption ||
-            msg.message?.videoMessage?.caption ||
-            msg.message?.documentMessage?.caption ||
-            ""
+      const rows: any[] = []
+      for (const msg of records) {
+        const jid = msg.key?.remoteJid || ""
+        if (isGroup(jid)) { totalSkippedGroup++; continue }
+        const msgId = msg.key?.id
+        if (msgId && existingIds.has(msgId)) { totalSkippedDup++; continue }
 
-          let mediaType: string | null = null
-          if (msg.message?.imageMessage) mediaType = "image"
-          else if (msg.message?.videoMessage) mediaType = "video"
-          else if (msg.message?.audioMessage) mediaType = "audio"
-          else if (msg.message?.documentMessage) mediaType = "document"
+        const fromMe = !!msg.key?.fromMe
+        const altJid = msg.key?.remoteJidAlt || ""
+        const contactPhone = extractPhone(jid, altJid)
+        const text =
+          msg.message?.conversation ||
+          msg.message?.extendedTextMessage?.text ||
+          msg.message?.imageMessage?.caption ||
+          msg.message?.videoMessage?.caption ||
+          msg.message?.documentMessage?.caption ||
+          ""
 
-          const ts = msg.messageTimestamp
-            ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
-            : (msg.createdAt || new Date().toISOString())
+        let mediaType: string | null = null
+        if (msg.message?.imageMessage) mediaType = "image"
+        else if (msg.message?.videoMessage) mediaType = "video"
+        else if (msg.message?.audioMessage) mediaType = "audio"
+        else if (msg.message?.documentMessage) mediaType = "document"
 
-          return {
-            user_id: userId,
-            session_id: session.id,
-            direction: fromMe ? "sent" : "received",
-            from_number: fromMe ? myPhone : contactPhone,
-            to_number: fromMe ? contactPhone : myPhone,
-            wa_message_id: msg.key?.id || null,
-            body: text,
-            media_url: null,
-            media_type: mediaType,
-            timestamp: ts,
-            read: fromMe ? true : false,
-          }
-        })
-        .filter((r: any) => r.from_number || r.to_number)
+        const ts = msg.messageTimestamp
+          ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
+          : (msg.createdAt || new Date().toISOString())
 
-      if (rows.length > 0) {
-        const { error } = await admin.from("whatsapp_messages").insert(rows)
-        if (!error) totalSynced += rows.length
-        else console.error("[EVOLUTION SYNC] Insert error:", error.message)
+        const row = {
+          user_id: userId,
+          session_id: session.id,
+          direction: fromMe ? "sent" : "received",
+          from_number: fromMe ? myPhone : contactPhone,
+          to_number: fromMe ? contactPhone : myPhone,
+          wa_message_id: msgId || null,
+          body: text,
+          media_url: null,
+          media_type: mediaType,
+          timestamp: ts,
+          read: fromMe,
+        }
+        console.log(`${tag}   → ${row.direction} from=${row.from_number} to=${row.to_number} type=${mediaType || "text"} body="${text.slice(0, 40)}"`)
+        if (row.from_number || row.to_number) rows.push(row)
+        else console.warn(`${tag}   ⚠ Skipped (no phone number) jid=${jid} altJid=${altJid}`)
       }
 
-      if (!data?.messages?.pages || page >= (data?.messages?.pages || 1)) break
+      console.log(`${tag} Page ${page}: ${rows.length} new rows to insert, ${totalSkippedDup} dup, ${totalSkippedGroup} group`)
+
+      if (rows.length > 0) {
+        const { error: insertErr } = await admin.from("whatsapp_messages").insert(rows)
+        if (insertErr) {
+          console.error(`${tag} ❌ Insert failed on page ${page}:`, insertErr.message, insertErr.code, insertErr.details)
+        } else {
+          totalSynced += rows.length
+          console.log(`${tag} ✓ Inserted ${rows.length} rows (total so far: ${totalSynced})`)
+        }
+      }
+
+      if (page >= totalPages) { console.log(`${tag} All ${totalPages} page(s) fetched.`); break }
       page++
     }
 
+    const elapsed = Date.now() - t0
+    console.log(`${tag} ── DONE synced=${totalSynced} skippedDup=${totalSkippedDup} skippedGroup=${totalSkippedGroup} elapsed=${elapsed}ms`)
     return NextResponse.json({ ok: true, synced: totalSynced })
   } catch (err: any) {
-    console.error("[EVOLUTION SYNC]", err)
+    console.error(`${tag} ❌ Unhandled error:`, err?.message, err?.stack)
     return NextResponse.json({ error: err?.message || "Sync failed" }, { status: 500 })
   }
 }
