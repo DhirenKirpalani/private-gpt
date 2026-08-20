@@ -151,8 +151,69 @@ export async function POST(req: NextRequest) {
     }
 
     const elapsed = Date.now() - t0
-    console.log(`${tag} ── DONE synced=${totalSynced} skippedDup=${totalSkippedDup} skippedGroup=${totalSkippedGroup} elapsed=${elapsed}ms`)
-    return NextResponse.json({ ok: true, synced: totalSynced })
+
+    // Sync contacts from VPS (pushName = display name)
+    let contactsSynced = 0
+    try {
+      console.log(`${tag} Syncing contacts from VPS...`)
+      const contactsRes = await fetch(
+        `${EVOLUTION_URL}/chat/findContacts/${instanceName}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
+          body: JSON.stringify({ where: {} }),
+          cache: "no-store",
+        }
+      )
+      if (contactsRes.ok) {
+        const contactsData = await contactsRes.json()
+        const vpsContacts = Array.isArray(contactsData) ? contactsData : []
+        console.log(`${tag} VPS contacts found: ${vpsContacts.length}`)
+
+        for (const vc of vpsContacts) {
+          const jid = vc.remoteJid || ""
+          if (isGroup(jid) || jid === "0@s.whatsapp.net" || jid === "status@broadcast") continue
+          const altJid = vc.remoteJidAlt || ""
+          const phone = extractPhone(jid, altJid)
+          if (!phone) continue
+
+          const pushName = vc.pushName || vc.name || ""
+          const existingContact = await admin
+            .from("contacts")
+            .select("id, name")
+            .eq("user_id", userId)
+            .eq("phone", phone)
+            .single()
+
+          if (existingContact.data) {
+            // Update name if we have a pushName and current name is just the phone number
+            if (pushName && (existingContact.data.name === phone || !existingContact.data.name)) {
+              await admin.from("contacts").update({ name: pushName }).eq("id", existingContact.data.id)
+              contactsSynced++
+            }
+          } else {
+            // Create new contact
+            await admin.from("contacts").insert({
+              user_id: userId,
+              name: pushName || phone,
+              phone,
+              tags: ["whatsapp"],
+              source: "whatsapp_sync",
+              last_contact: new Date().toISOString(),
+              deal_value: 0,
+              deal_stage: "",
+            })
+            contactsSynced++
+          }
+        }
+        console.log(`${tag} Contacts synced/updated: ${contactsSynced}`)
+      }
+    } catch (e: any) {
+      console.error(`${tag} Contact sync error:`, e?.message)
+    }
+
+    console.log(`${tag} ── DONE synced=${totalSynced} contactsSynced=${contactsSynced} skippedDup=${totalSkippedDup} skippedGroup=${totalSkippedGroup} elapsed=${elapsed}ms`)
+    return NextResponse.json({ ok: true, synced: totalSynced, contactsSynced })
   } catch (err: any) {
     console.error(`${tag} ❌ Unhandled error:`, err?.message, err?.stack)
     return NextResponse.json({ error: err?.message || "Sync failed" }, { status: 500 })
