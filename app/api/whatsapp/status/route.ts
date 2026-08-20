@@ -37,6 +37,24 @@ async function _GET(req: NextRequest) {
         // Create the Supabase session now that QR was scanned
         const session = await createEvolutionSession(userId, instanceName)
         try { await updateEvolutionSession(session.id, { status: "connected", phone_number: phoneNumber } as any) } catch {}
+
+        // Auto-configure webhook for real-time message delivery
+        try {
+          const webhookUrl = process.env.NEXT_PUBLIC_APP_URL || "https://exploro-os.com"
+          await fetch(`${EVOLUTION_URL}/webhook/set/${instanceName}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
+            body: JSON.stringify({
+              webhook: {
+                url: `${webhookUrl}/api/whatsapp/evolution/webhook`,
+                enabled: true,
+                events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+              },
+            }),
+          })
+          console.log(`[WA STATUS] Webhook configured for ${instanceName}`)
+        } catch (e) { console.error("[WA STATUS] Webhook setup failed:", e) }
+
         return NextResponse.json({ status: "connected", session: { ...session, status: "connected", phone_number: phoneNumber } })
       }
       return NextResponse.json({ status: "connecting", qr: null })

@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    // Handle connection event
-    if (event === "connection.update") {
+    // Handle connection event (both camelCase and UPPER_CASE)
+    if (event === "connection.update" || event === "CONNECTION_UPDATE") {
       const state = body.data?.state
       if (state === "open") {
         const phone = body.data?.number || null
@@ -41,8 +41,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    // Handle incoming message
-    if (event === "messages.upsert") {
+    // Handle incoming message (both camelCase and UPPER_CASE)
+    if (event === "messages.upsert" || event === "MESSAGES_UPSERT") {
       const messages = body.data?.messages || []
       for (const msg of messages) {
         if (msg.key?.fromMe) continue // Skip outgoing
@@ -69,11 +69,17 @@ export async function POST(req: NextRequest) {
           mediaType = "audio"
         }
 
+        const rawJid = msg.key?.remoteJid || ""
+        const altJid = msg.key?.remoteJidAlt || ""
+        const contactPhone = (altJid && altJid.includes("@s.whatsapp.net"))
+          ? altJid.replace(/@.+$/, "").replace(/[^0-9]/g, "")
+          : rawJid.replace(/@.+$/, "").replace(/[^0-9]/g, "")
+
         await saveEvolutionMessage({
           user_id: session.user_id,
           session_id: session.id,
           direction: "received",
-          from_number: msg.key?.remoteJid?.replace(/.*@/, "") || "",
+          from_number: contactPhone,
           to_number: session.phone_number || "",
           wa_message_id: msg.key?.id || null,
           body: text,
