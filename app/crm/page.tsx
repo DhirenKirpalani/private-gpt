@@ -782,29 +782,15 @@ export default function CRMPage() {
       // Load Evolution messages and merge into whatsappMessages
       if (evolutionSessions.length > 0) {
         try {
-          const allEvolutionMsgs: any[] = []
-          for (const session of evolutionSessions) {
-            const contacts = await getEvolutionContacts(user.id, session.id)
-            for (const contact of contacts) {
-              const msgs = await getEvolutionMessages(user.id, contact.contactNumber, session.id)
-              for (const msg of msgs) {
-                allEvolutionMsgs.push({
-                  id: msg.id,
-                  from_number: msg.from_number,
-                  to_number: msg.to_number,
-                  body: msg.body,
-                  direction: msg.direction,
-                  timestamp: msg.timestamp,
-                  read: msg.read,
-                  _provider: "evolution",
-                })
-              }
-            }
-          }
-          if (allEvolutionMsgs.length > 0) {
+          const waMsgs = await getWhatsAppMessages(user.id)
+          const evolutionMsgs = waMsgs.map((m: any) => ({
+            ...m,
+            _provider: "evolution",
+          }))
+          if (evolutionMsgs.length > 0) {
             setWhatsAppMessages(prev => {
               const existingIds = new Set(prev.map((m: any) => m.id))
-              const newMsgs = allEvolutionMsgs.filter(m => !existingIds.has(m.id))
+              const newMsgs = evolutionMsgs.filter(m => !existingIds.has(m.id))
               return [...prev, ...newMsgs]
             })
             setWhatsAppFetched(true)

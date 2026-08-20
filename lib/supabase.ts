@@ -1845,7 +1845,7 @@ export interface EvolutionMessage {
   read: boolean
 }
 
-const EVOLUTION_FIFO_LIMIT = 30
+const EVOLUTION_FIFO_LIMIT = 500
 
 export async function getEvolutionSessions(userId: string): Promise<EvolutionSession[]> {
   const { data, error } = await supabase
