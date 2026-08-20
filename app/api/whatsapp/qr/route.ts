@@ -34,8 +34,8 @@ async function _POST(req: NextRequest) {
         if (stateData?.instance?.state === "open") {
           return NextResponse.json({ status: "connected", session: connectedSession })
         }
-        // Stale connected session — clean it up
-        await deleteEvolutionSession(userId, connectedSession.id)
+        // Stale connected session — mark disconnected (keep messages), delete VPS instance
+        await updateEvolutionSession(connectedSession.id, { status: "disconnected" })
         try { await fetch(`${EVOLUTION_URL}/instance/delete/${connectedSession.instance_name}`, { method: "DELETE", headers: { apikey: EVOLUTION_KEY } }) } catch {}
       } catch {}
     }
