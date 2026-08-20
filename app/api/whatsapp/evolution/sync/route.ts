@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
       if (contactNum) contactsToTrim.add(contactNum)
     }
     let totalTrimmed = 0
-    for (const contactNum of contactsToTrim) {
+    for (const contactNum of Array.from(contactsToTrim)) {
       const { data: contactMsgs } = await admin
         .from("whatsapp_messages")
         .select("id")
