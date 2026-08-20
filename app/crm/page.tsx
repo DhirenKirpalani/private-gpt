@@ -1090,6 +1090,18 @@ export default function CRMPage() {
       } else if (payload.eventType === "DELETE") {
         const id = payload.old.id
         setWhatsAppMessages((prev) => prev.filter((m) => m.id !== id))
+        // Re-fetch from DB to ensure state matches DB after FIFO trim
+        if (user) {
+          getWhatsAppMessages(user.id).then(msgs => {
+            setWhatsAppMessages(prev => {
+              const dbIds = new Set(msgs.map((m: any) => m.id))
+              const kept = prev.filter(m => !m._provider || m._provider === "evolution" ? dbIds.has(m.id) : true)
+              const existingIds = new Set(kept.map((m: any) => m.id))
+              const newMsgs = msgs.filter((m: any) => !existingIds.has(m.id))
+              return [...kept, ...newMsgs]
+            })
+          }).catch(() => {})
+        }
       }
     })
 
@@ -3500,7 +3512,13 @@ export default function CRMPage() {
                           }).then(r => r.json()).then(() => getSlackMessages(user.id)),
                         ])
                         if (waMsgs.status === "fulfilled") {
-                          setWhatsAppMessages(waMsgs.value)
+                          setWhatsAppMessages(prev => {
+                            const existingIds = new Set(prev.map((m: any) => m.id))
+                            const newMsgs = (waMsgs.value as any[]).filter(m => !existingIds.has(m.id))
+                            const newIds = new Set((waMsgs.value as any[]).map(m => m.id))
+                            const kept = prev.filter(m => newIds.has(m.id) || m._provider !== "evolution")
+                            return [...kept, ...newMsgs]
+                          })
                           setWhatsAppFetched(true)
                         }
                         if (tgRes.status === "fulfilled") {
