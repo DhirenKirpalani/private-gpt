@@ -37,6 +37,14 @@ export async function POST(req: NextRequest) {
     const instanceName = session.instance_name
     const myPhone = session.phone_number || ""
 
+    // Fetch existing wa_message_ids to avoid duplicates (no unique constraint needed)
+    const { data: existing } = await admin
+      .from("whatsapp_messages")
+      .select("wa_message_id")
+      .eq("session_id", session.id)
+      .not("wa_message_id", "is", null)
+    const existingIds = new Set((existing || []).map((r: any) => r.wa_message_id))
+
     let totalSynced = 0
     let page = 1
     const limit = 50
@@ -60,7 +68,10 @@ export async function POST(req: NextRequest) {
       const rows = records
         .filter((msg: any) => {
           const jid = msg.key?.remoteJid || ""
-          return !isGroup(jid) // skip group messages for now
+          if (isGroup(jid)) return false
+          const msgId = msg.key?.id
+          if (msgId && existingIds.has(msgId)) return false // skip already saved
+          return true
         })
         .map((msg: any) => {
           const fromMe = !!msg.key?.fromMe
@@ -97,16 +108,15 @@ export async function POST(req: NextRequest) {
             media_url: null,
             media_type: mediaType,
             timestamp: ts,
-            read: fromMe ? true : !!msg.messageStubType,
+            read: fromMe ? true : false,
           }
         })
         .filter((r: any) => r.from_number || r.to_number)
 
       if (rows.length > 0) {
-        const { error } = await admin
-          .from("whatsapp_messages")
-          .upsert(rows, { onConflict: "wa_message_id", ignoreDuplicates: true })
+        const { error } = await admin.from("whatsapp_messages").insert(rows)
         if (!error) totalSynced += rows.length
+        else console.error("[EVOLUTION SYNC] Insert error:", error.message)
       }
 
       if (!data?.messages?.pages || page >= (data?.messages?.pages || 1)) break
