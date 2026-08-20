@@ -63,9 +63,11 @@ export async function POST(req: NextRequest) {
     let totalSkippedDup = 0
     let totalSkippedGroup = 0
     let page = 1
-    const limit = 50
+    const limit = 100
+    const FIFO_LIMIT = 30
+    const allInsertedRows: any[] = []
 
-    while (page <= 5) {
+    while (page <= 50) {
       console.log(`${tag} Fetching page ${page} (limit=${limit}) from VPS...`)
       const res = await fetch(
         `${EVOLUTION_URL}/chat/findMessages/${instanceName}`,
@@ -129,15 +131,17 @@ export async function POST(req: NextRequest) {
           timestamp: ts,
           read: fromMe,
         }
-        console.log(`${tag}   → ${row.direction} from=${row.from_number} to=${row.to_number} type=${mediaType || "text"} body="${text.slice(0, 40)}"`)
-        if (row.from_number || row.to_number) rows.push(row)
+        if (row.from_number || row.to_number) {
+          rows.push(row)
+          allInsertedRows.push({ ...row, contactPhone })
+        }
         else console.warn(`${tag}   ⚠ Skipped (no phone number) jid=${jid} altJid=${altJid}`)
       }
 
       console.log(`${tag} Page ${page}: ${rows.length} new rows to insert, ${totalSkippedDup} dup, ${totalSkippedGroup} group`)
 
       if (rows.length > 0) {
-        const { error: insertErr } = await admin.from("whatsapp_messages").insert(rows)
+        const { error: insertErr, data: insertedData } = await admin.from("whatsapp_messages").insert(rows).select("id, from_number, to_number, direction")
         if (insertErr) {
           console.error(`${tag} ❌ Insert failed on page ${page}:`, insertErr.message, insertErr.code, insertErr.details)
         } else {
@@ -149,6 +153,30 @@ export async function POST(req: NextRequest) {
       if (page >= totalPages) { console.log(`${tag} All ${totalPages} page(s) fetched.`); break }
       page++
     }
+
+    // FIFO trim: keep only 30 most recent messages per contact
+    const contactsToTrim = new Set<string>()
+    for (const r of allInsertedRows) {
+      const contactNum = r.direction === "received" ? r.from_number : r.to_number
+      if (contactNum) contactsToTrim.add(contactNum)
+    }
+    let totalTrimmed = 0
+    for (const contactNum of contactsToTrim) {
+      const { data: contactMsgs } = await admin
+        .from("whatsapp_messages")
+        .select("id")
+        .eq("user_id", userId)
+        .or(`from_number.eq.${contactNum},to_number.eq.${contactNum}`)
+        .order("timestamp", { ascending: false })
+      if (contactMsgs && contactMsgs.length > FIFO_LIMIT) {
+        const toDelete = contactMsgs.slice(FIFO_LIMIT).map((r: any) => r.id)
+        if (toDelete.length > 0) {
+          await admin.from("whatsapp_messages").delete().in("id", toDelete)
+          totalTrimmed += toDelete.length
+        }
+      }
+    }
+    if (totalTrimmed > 0) console.log(`${tag} FIFO trim: removed ${totalTrimmed} old messages (limit ${FIFO_LIMIT}/contact)`)
 
     const elapsed = Date.now() - t0
 
@@ -212,8 +240,8 @@ export async function POST(req: NextRequest) {
       console.error(`${tag} Contact sync error:`, e?.message)
     }
 
-    console.log(`${tag} ── DONE synced=${totalSynced} contactsSynced=${contactsSynced} skippedDup=${totalSkippedDup} skippedGroup=${totalSkippedGroup} elapsed=${elapsed}ms`)
-    return NextResponse.json({ ok: true, synced: totalSynced, contactsSynced })
+    console.log(`${tag} ── DONE synced=${totalSynced} contactsSynced=${contactsSynced} trimmed=${totalTrimmed} skippedDup=${totalSkippedDup} skippedGroup=${totalSkippedGroup} elapsed=${elapsed}ms`)
+    return NextResponse.json({ ok: true, synced: totalSynced, contactsSynced, trimmed: totalTrimmed })
   } catch (err: any) {
     console.error(`${tag} ❌ Unhandled error:`, err?.message, err?.stack)
     return NextResponse.json({ error: err?.message || "Sync failed" }, { status: 500 })
