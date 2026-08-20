@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     if (event === "messages.upsert" || event === "MESSAGES_UPSERT") {
       const messages = body.data?.messages || []
       for (const msg of messages) {
-        if (msg.key?.fromMe) continue // Skip outgoing
+        const fromMe = !!msg.key?.fromMe
 
         const text = msg.message?.conversation ||
                      msg.message?.extendedTextMessage?.text ||
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
                      msg.message?.videoMessage?.caption ||
                      ""
 
-        if (!text && !msg.message?.imageMessage && !msg.message?.documentMessage) continue
+        if (!text && !msg.message?.imageMessage && !msg.message?.documentMessage && !msg.message?.videoMessage && !msg.message?.audioMessage) continue
 
         let mediaUrl = null
         let mediaType = null
@@ -78,9 +78,9 @@ export async function POST(req: NextRequest) {
         await saveEvolutionMessage({
           user_id: session.user_id,
           session_id: session.id,
-          direction: "received",
-          from_number: contactPhone,
-          to_number: session.phone_number || "",
+          direction: fromMe ? "sent" : "received",
+          from_number: fromMe ? session.phone_number || "" : contactPhone,
+          to_number: fromMe ? contactPhone : session.phone_number || "",
           wa_message_id: msg.key?.id || null,
           body: text,
           media_url: mediaUrl,
