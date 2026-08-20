@@ -3491,6 +3491,15 @@ export default function CRMPage() {
                       setTelegramLoading(true)
                       setSlackLoading(true)
                       try {
+                        // Sync Evolution messages from VPS first (if Evolution session connected)
+                        try {
+                          await fetch("/api/whatsapp/evolution/sync", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ userId: user.id }),
+                          })
+                        } catch { /* ignore sync errors */ }
+
                         const [waMsgs, tgRes, slMsgs] = await Promise.allSettled([
                           getWhatsAppMessages(user.id),
                           tgFetchingRef.current ? Promise.resolve([]) : (tgFetchingRef.current = true, fetch("/api/telegram/user/fetch-chats", {
