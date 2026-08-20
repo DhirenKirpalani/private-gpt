@@ -782,29 +782,15 @@ export default function CRMPage() {
       // Load Evolution messages and merge into whatsappMessages
       if (evolutionSessions.length > 0) {
         try {
-          const allEvolutionMsgs: any[] = []
-          for (const session of evolutionSessions) {
-            const contacts = await getEvolutionContacts(user.id, session.id)
-            for (const contact of contacts) {
-              const msgs = await getEvolutionMessages(user.id, contact.contactNumber, session.id)
-              for (const msg of msgs) {
-                allEvolutionMsgs.push({
-                  id: msg.id,
-                  from_number: msg.from_number,
-                  to_number: msg.to_number,
-                  body: msg.body,
-                  direction: msg.direction,
-                  timestamp: msg.timestamp,
-                  read: msg.read,
-                  _provider: "evolution",
-                })
-              }
-            }
-          }
-          if (allEvolutionMsgs.length > 0) {
+          const waMsgs = await getWhatsAppMessages(user.id)
+          const evolutionMsgs = waMsgs.map((m: any) => ({
+            ...m,
+            _provider: "evolution",
+          }))
+          if (evolutionMsgs.length > 0) {
             setWhatsAppMessages(prev => {
               const existingIds = new Set(prev.map((m: any) => m.id))
-              const newMsgs = allEvolutionMsgs.filter(m => !existingIds.has(m.id))
+              const newMsgs = evolutionMsgs.filter(m => !existingIds.has(m.id))
               return [...prev, ...newMsgs]
             })
             setWhatsAppFetched(true)
@@ -1104,6 +1090,18 @@ export default function CRMPage() {
       } else if (payload.eventType === "DELETE") {
         const id = payload.old.id
         setWhatsAppMessages((prev) => prev.filter((m) => m.id !== id))
+        // Re-fetch from DB to ensure state matches DB after FIFO trim
+        if (user) {
+          getWhatsAppMessages(user.id).then(msgs => {
+            setWhatsAppMessages(prev => {
+              const dbIds = new Set(msgs.map((m: any) => m.id))
+              const kept = prev.filter(m => !m._provider || m._provider === "evolution" ? dbIds.has(m.id) : true)
+              const existingIds = new Set(kept.map((m: any) => m.id))
+              const newMsgs = msgs.filter((m: any) => !existingIds.has(m.id))
+              return [...kept, ...newMsgs]
+            })
+          }).catch(() => {})
+        }
       }
     })
 
@@ -3514,7 +3512,13 @@ export default function CRMPage() {
                           }).then(r => r.json()).then(() => getSlackMessages(user.id)),
                         ])
                         if (waMsgs.status === "fulfilled") {
-                          setWhatsAppMessages(waMsgs.value)
+                          setWhatsAppMessages(prev => {
+                            const existingIds = new Set(prev.map((m: any) => m.id))
+                            const newMsgs = (waMsgs.value as any[]).filter(m => !existingIds.has(m.id))
+                            const newIds = new Set((waMsgs.value as any[]).map(m => m.id))
+                            const kept = prev.filter(m => newIds.has(m.id) || m._provider !== "evolution")
+                            return [...kept, ...newMsgs]
+                          })
                           setWhatsAppFetched(true)
                         }
                         if (tgRes.status === "fulfilled") {
@@ -3860,7 +3864,7 @@ export default function CRMPage() {
                               }}
                             />
                           )}
-                          {replySource === "telegram" && (
+                          {(replySource === "telegram" || replySource === "whatsapp") && (
                             <button
                               onClick={() => imageInputRef.current?.click()}
                               disabled={sendingWaReply}
@@ -3891,7 +3895,7 @@ export default function CRMPage() {
                                   const formData = new FormData()
                                   formData.append("file", pendingImage.file)
                                   formData.append("userId", user.id)
-                                  const uploadRes = await fetch("/api/telegram/user/upload-media", {
+                                  const uploadRes = await fetch("/api/upload-media", {
                                     method: "POST",
                                     body: formData,
                                   })
@@ -3904,7 +3908,7 @@ export default function CRMPage() {
                                   ? { userId: user.id, chatId: waReplyTo, body: waReplyBody, mediaUrl }
                                   : replySource === "slack"
                                   ? { userId: user.id, channelId: waReplyTo, text: waReplyBody }
-                                  : { userId: user.id, to: waReplyTo, body: waReplyBody }
+                                  : { userId: user.id, to: waReplyTo, body: waReplyBody, mediaUrl }
                                 const res = await fetch(endpoint, {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },

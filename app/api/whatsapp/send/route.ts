@@ -9,14 +9,87 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const EVOLUTION_URL = process.env.EVOLUTION_API_URL || ""
+const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY || ""
+
 async function _POST(req: NextRequest) {
   try {
-    const { userId, to, body } = await req.json()
-    if (!userId || !to || !body) {
-      return NextResponse.json({ error: "Missing userId, to, or body" }, { status: 400 })
+    const { userId, to, body, mediaUrl } = await req.json()
+    if (!userId || !to || (!body && !mediaUrl)) {
+      return NextResponse.json({ error: "Missing userId, to, or body/mediaUrl" }, { status: 400 })
     }
 
-    // Get the WhatsApp connection
+    // Try Evolution API first (whatsapp_sessions table)
+    const { data: evoSession, error: evoErr } = await supabase
+      .from("whatsapp_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "connected")
+      .single()
+
+    if (evoSession && !evoErr && EVOLUTION_URL && EVOLUTION_KEY) {
+      let evoRes: Response
+      let endpoint: string
+
+      if (mediaUrl) {
+        // Send media via Evolution API
+        endpoint = `${EVOLUTION_URL}/message/sendMedia/${evoSession.instance_name}`
+        evoRes = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: EVOLUTION_KEY,
+          },
+          body: JSON.stringify({
+            number: to,
+            media: mediaUrl,
+            mediatype: "image",
+            caption: body || "",
+          }),
+        })
+      } else {
+        // Send text via Evolution API
+        endpoint = `${EVOLUTION_URL}/message/sendText/${evoSession.instance_name}`
+        evoRes = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: EVOLUTION_KEY,
+          },
+          body: JSON.stringify({
+            number: to,
+            text: body,
+          }),
+        })
+      }
+
+      const evoData = await evoRes.json()
+      if (!evoRes.ok) {
+        console.error("[WA SEND] Evolution error:", evoData)
+        return NextResponse.json({ error: evoData?.message || evoData?.error || "Evolution send failed" }, { status: 500 })
+      }
+
+      const messageId = evoData?.key?.id || evoData?.messageId || null
+
+      // Store sent message
+      await supabase.from("whatsapp_messages").insert({
+        user_id: userId,
+        session_id: evoSession.id,
+        direction: "sent",
+        from_number: evoSession.phone_number || "",
+        to_number: to,
+        wa_message_id: messageId,
+        body: body || "",
+        media_url: mediaUrl || null,
+        media_type: mediaUrl ? "image" : null,
+        timestamp: new Date().toISOString(),
+        read: true,
+      })
+
+      return NextResponse.json({ success: true, messageId })
+    }
+
+    // Fall back to Meta Cloud API (whatsapp_connections table)
     const { data: conn, error } = await supabase
       .from("whatsapp_connections")
       .select("*")
@@ -25,7 +98,7 @@ async function _POST(req: NextRequest) {
       .single()
 
     if (error || !conn) {
-      return NextResponse.json({ error: "WhatsApp connection not found" }, { status: 404 })
+      return NextResponse.json({ error: "No connected WhatsApp account found" }, { status: 404 })
     }
 
     // Send via WhatsApp Cloud API

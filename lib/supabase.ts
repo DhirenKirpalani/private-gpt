@@ -981,23 +981,68 @@ export async function importContactsFromWhatsApp(userId: string): Promise<number
 
   console.log("[WA IMPORT] Unique WhatsApp senders:", uniqueSenders.size)
 
+  // Try to fetch pushNames from VPS
+  const EVOLUTION_URL = process.env.EVOLUTION_API_URL || ""
+  const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY || ""
+  const pushNameMap = new Map<string, string>()
+  if (EVOLUTION_URL && EVOLUTION_KEY) {
+    try {
+      const { data: session } = await createAdminClient()
+        .from("whatsapp_sessions")
+        .select("instance_name")
+        .eq("user_id", userId)
+        .eq("status", "connected")
+        .single()
+      if (session?.instance_name) {
+        const res = await fetch(`${EVOLUTION_URL}/chat/findContacts/${session.instance_name}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
+          body: JSON.stringify({ where: {} }),
+        })
+        if (res.ok) {
+          const contacts = await res.json()
+          if (Array.isArray(contacts)) {
+            for (const c of contacts) {
+              const jid = c.remoteJid || ""
+              const altJid = c.remoteJidAlt || ""
+              const raw = (altJid && altJid.includes("@s.whatsapp.net")) ? altJid : jid
+              const phone = raw.replace(/@.+$/, "").replace(/[^0-9]/g, "")
+              if (phone && c.pushName) {
+                pushNameMap.set(phone, c.pushName)
+              }
+            }
+          }
+        }
+      }
+    } catch (e) { console.error("[WA IMPORT] VPS contact fetch failed:", e) }
+  }
+
   // Check which contacts already exist by phone
   const phones = Array.from(uniqueSenders.keys())
   const { data: existingContacts } = await supabase
     .from("contacts")
-    .select("phone")
+    .select("phone, name")
     .eq("user_id", userId)
     .in("phone", phones)
 
-  const existingPhones = new Set((existingContacts || []).map((c: any) => c.phone))
+  const existingPhones = new Map<string, string>((existingContacts || []).map((c: any) => [c.phone, c.name]))
   console.log("[WA IMPORT] Existing phone contacts:", existingPhones.size)
 
   let imported = 0
   for (const [phone, info] of Array.from(uniqueSenders.entries())) {
-    if (existingPhones.has(phone)) continue
+    const pushName = pushNameMap.get(phone) || ""
+    const existingName = existingPhones.get(phone)
 
-    // Format phone as name (e.g. "+1234567890")
-    const displayName = phone
+    if (existingName !== undefined) {
+      // Update name if we have a pushName and current name is just the phone number
+      if (pushName && (existingName === phone || !existingName)) {
+        await supabase.from("contacts").update({ name: pushName }).eq("user_id", userId).eq("phone", phone)
+      }
+      continue
+    }
+
+    // Create new contact with pushName if available
+    const displayName = pushName || phone
 
     const { error: insertError } = await supabase.from("contacts").insert({
       user_id: userId,
