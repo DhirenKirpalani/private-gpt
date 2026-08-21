@@ -283,6 +283,50 @@ export default function CRMPage() {
     }
   }, [activeTab, user])
 
+  // Auto-sync WhatsApp when Messages tab becomes active + poll every 2 minutes
+  useEffect(() => {
+    if (activeTab !== "Messages" || !user) return
+
+    const runWaSync = async () => {
+      if (waFetchingRef.current) return
+      waFetchingRef.current = true
+      setWhatsAppLoading(true)
+      try {
+        // Load from DB immediately (instant display)
+        const cached = await getWhatsAppMessages(user.id)
+        if (cached.length > 0) {
+          setWhatsAppMessages(prev => {
+            const existingIds = new Set(prev.map((m: any) => m.id))
+            const newMsgs = cached.filter((m: any) => !existingIds.has(m.id))
+            return [...prev, ...newMsgs]
+          })
+          setWhatsAppFetched(true)
+        }
+        // Sync from VPS in background
+        await fetch("/api/whatsapp/evolution/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id }),
+        })
+        // Merge fresh messages from DB
+        const fresh = await getWhatsAppMessages(user.id)
+        setWhatsAppMessages(prev => {
+          const existingIds = new Set(prev.map((m: any) => m.id))
+          const newMsgs = fresh.filter((m: any) => !existingIds.has(m.id))
+          return [...prev, ...newMsgs]
+        })
+        if (fresh.length > 0) setWhatsAppFetched(true)
+      } catch { /* ignore */ } finally {
+        waFetchingRef.current = false
+        setWhatsAppLoading(false)
+      }
+    }
+
+    runWaSync()
+    const interval = setInterval(runWaSync, 2 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [activeTab, user])
+
   // Reset table pages when filters/search/channel change
   useEffect(() => { setEmailTablePage(0) }, [emailSearch, emailFilter, contactEmailFilter, keywordFilter, activeChannel])
   useEffect(() => { setMsgTablePage(0) }, [activeChannel])
@@ -325,6 +369,7 @@ export default function CRMPage() {
   const emailFetchingRef = useRef(false)
   const [silentFetching, setSilentFetching] = useState(false)
   const tgFetchingRef = useRef(false)
+  const waFetchingRef = useRef(false)
 
   // Table status dropdown state
   const [emailStatusOpen, setEmailStatusOpen] = useState<string | null>(null)
