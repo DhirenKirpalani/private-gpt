@@ -35,6 +35,24 @@ export async function POST(req: NextRequest) {
           status: "connected",
           phone_number: phone,
         })
+
+        // Auto-sync all messages and contacts from VPS on connect/reconnect
+        try {
+          console.log(`[EVOLUTION WEBHOOK] Connection open for instance=${instance}, triggering full sync...`)
+          const syncRes = await fetch(
+            `${process.env.NEXT_PUBLIC_APP_URL || "https://exploro-os.com"}/api/whatsapp/evolution/sync`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: session.user_id }),
+              cache: "no-store",
+            }
+          )
+          const syncData = await syncRes.json()
+          console.log(`[EVOLUTION WEBHOOK] Auto-sync result:`, JSON.stringify(syncData))
+        } catch (syncErr: any) {
+          console.error(`[EVOLUTION WEBHOOK] Auto-sync failed:`, syncErr?.message)
+        }
       } else if (state === "close") {
         await updateEvolutionSession(session.id, { status: "disconnected" })
       }
