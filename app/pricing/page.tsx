@@ -50,7 +50,7 @@ function usePricingData() {
       features: t("pricingFeaturesEnterprise").split(","),
       cta: t("pricingCTAEnterprise"),
       ctaStyle: "outline" as const,
-      href: "https://calendly.com/urbanseed-ai/ai-bureau-services",
+      href: "https://calendly.com/secretes-corp/ai-bureau-services",
     },
   ]
 

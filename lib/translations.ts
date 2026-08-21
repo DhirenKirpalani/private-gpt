@@ -301,7 +301,7 @@ export const translations = {
     pillarBrandSubtitle: "Your Logo. Your Voice. Your Name.",
     pillarBrandDesc: "Your Private GPT carries your name. Your business logo. Your tone. Your templates. The client never sees 'Exploro.' They see your brand, your intelligence, your customized AI agent.",
     aboutUsP2: "The objective of Exploro OS Private is to create an operating system where trust is demonstrated — basing its structure, logic, and reasoning within a reliable perimeter, built on these pillars and everyday experiences.",
-    aboutUsByline: "Exploro OS – A Product of Secretes Corp DBA Urbanseed",
+    aboutUsByline: "Exploro OS – A Product of Secretes Corp",
 
     // FAQ
     faqTitle: "FAQ - Exploro OS Private",
@@ -1010,7 +1010,7 @@ export const translations = {
     supportCheckingAccess: "Checking access...",
 
     // Product tagline & CTAs
-    productTagline: "A Product of Secretes Corp DBA Urbanseed",
+    productTagline: "A Product of Secretes Corp",
     goToChat: "Go to Chat",
 
     // Placeholder pages
@@ -1322,7 +1322,7 @@ export const translations = {
     pillarBrandSubtitle: "Tu Logotipo. Tu Voz. Tu Nombre.",
     pillarBrandDesc: "Tu GPT Privado lleva tu nombre. El logotipo de tu negocio. Tu tono. Tus plantillas. El cliente nunca ve 'Exploro.' Ven tu marca, tu inteligencia, tu agente personalizado de IA.",
     aboutUsP2: "El objetivo de Exploro OS Privado es crear un sistema operativo, donde la confianza se demuestra, basando su estructura, lógica y razonamiento dentro de un contorno confiable, construido sobre estos pilares y experiencias cotidianas.",
-    aboutUsByline: "Exploro OS – Un Producto de Secretes Corp DBA Urbanseed",
+    aboutUsByline: "Exploro OS – Un Producto de Secretes Corp",
 
     // FAQ
     faqTitle: "FAQ - Exploro OS Private",
@@ -2031,7 +2031,7 @@ export const translations = {
     supportCheckingAccess: "Verificando acceso...",
 
     // Product tagline & CTAs
-    productTagline: "Un Producto de Secretes Corp DBA Urbanseed",
+    productTagline: "Un Producto de Secretes Corp",
     goToChat: "Ir al Chat",
 
     // Placeholder pages
