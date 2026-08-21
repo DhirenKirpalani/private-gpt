@@ -861,7 +861,11 @@ export default function CRMPage() {
           : (() => { setCalendarEvents([]); setCalendarFetched(false); return Promise.resolve() })(),
         waConnsRes.status === "fulfilled" && waConnsRes.value.length > 0
           ? getWhatsAppMessages(user.id).then((msgs: any[]) => {
-              setWhatsAppMessages(msgs)
+              setWhatsAppMessages(prev => {
+                const existingIds = new Set(prev.map((m: any) => m.id))
+                const newMsgs = msgs.filter((m: any) => !existingIds.has(m.id))
+                return [...prev, ...newMsgs]
+              })
               if (msgs.length > 0) setWhatsAppFetched(true)
             }).catch(() => {})
           : (() => { setWhatsAppMessages([]); setWhatsAppFetched(false); return Promise.resolve() })(),
@@ -3917,7 +3921,11 @@ export default function CRMPage() {
                                   setSlackMessages(slMsgs)
                                 } else {
                                   const msgs = await getWhatsAppMessages(user.id)
-                                  setWhatsAppMessages(msgs)
+                                  setWhatsAppMessages(prev => {
+                                    const existingIds = new Set(prev.map((m: any) => m.id))
+                                    const newMsgs = msgs.filter((m: any) => !existingIds.has(m.id))
+                                    return [...prev, ...newMsgs]
+                                  })
                                 }
                                 setWaReplyBody("")
                                 setPendingImage(null)
