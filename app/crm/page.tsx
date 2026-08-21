@@ -290,9 +290,8 @@ export default function CRMPage() {
     const runWaSync = async () => {
       if (waFetchingRef.current) return
       waFetchingRef.current = true
-      setWhatsAppLoading(true)
       try {
-        // Load from DB immediately (instant display)
+        // Load from DB immediately (instant display, no loading spinner)
         const cached = await getWhatsAppMessages(user.id)
         if (cached.length > 0) {
           setWhatsAppMessages(prev => {
@@ -302,7 +301,7 @@ export default function CRMPage() {
           })
           setWhatsAppFetched(true)
         }
-        // Sync from VPS in background
+        // Silent VPS sync — no button spinner
         await fetch("/api/whatsapp/evolution/sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -318,7 +317,6 @@ export default function CRMPage() {
         if (fresh.length > 0) setWhatsAppFetched(true)
       } catch { /* ignore */ } finally {
         waFetchingRef.current = false
-        setWhatsAppLoading(false)
       }
     }
 
