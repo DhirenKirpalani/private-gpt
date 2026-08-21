@@ -861,7 +861,11 @@ export default function CRMPage() {
           : (() => { setCalendarEvents([]); setCalendarFetched(false); return Promise.resolve() })(),
         waConnsRes.status === "fulfilled" && waConnsRes.value.length > 0
           ? getWhatsAppMessages(user.id).then((msgs: any[]) => {
-              setWhatsAppMessages(msgs)
+              setWhatsAppMessages(prev => {
+                const existingIds = new Set(prev.map((m: any) => m.id))
+                const newMsgs = msgs.filter((m: any) => !existingIds.has(m.id))
+                return [...prev, ...newMsgs]
+              })
               if (msgs.length > 0) setWhatsAppFetched(true)
             }).catch(() => {})
           : (() => { setWhatsAppMessages([]); setWhatsAppFetched(false); return Promise.resolve() })(),
@@ -3574,13 +3578,6 @@ export default function CRMPage() {
                                   onDragStart={e => { dragMsgId.current = lastMsg.id; e.dataTransfer.effectAllowed = "move" }}
                                   onClick={() => {
                                     setActiveThread(tid); setWaReplyTo(msgReplyTarget(lastMsg)); setReplySource(lastMsg._source); setWaReplyBody(""); setSendingWaReply(false)
-                                    if (!lastMsg.read && lastMsg.direction === "received" && lastMsg._source && user) {
-                                      const src = lastMsg._source as "whatsapp" | "telegram" | "slack"
-                                      markMessageAsRead(src, lastMsg.id).catch(() => {})
-                                      if (src === "whatsapp") setWhatsAppMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
-                                      if (src === "telegram") setTelegramMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
-                                      if (src === "slack") setSlackMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
-                                    }
                                   }}
                                   className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md hover:border-emerald-500/30 transition-all cursor-pointer active:cursor-grabbing active:opacity-60 active:scale-95"
                                 >
@@ -3640,13 +3637,6 @@ export default function CRMPage() {
                             key={tid}
                             onClick={() => {
                               setActiveThread(tid); setWaReplyTo(msgReplyTarget(lastMsg)); setReplySource(lastMsg._source); setWaReplyBody(""); setSendingWaReply(false)
-                              if (!lastMsg.read && lastMsg.direction === "received" && lastMsg._source && user) {
-                                const src = lastMsg._source as "whatsapp" | "telegram" | "slack"
-                                markMessageAsRead(src, lastMsg.id).catch(() => {})
-                                if (src === "whatsapp") setWhatsAppMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
-                                if (src === "telegram") setTelegramMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
-                                if (src === "slack") setSlackMessages(prev => prev.map(m => m.id === lastMsg.id ? { ...m, read: true } : m))
-                              }
                             }}
                             className={cn("border-b last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors", lastMsg.direction === "received" && !lastMsg.read && "bg-emerald-500/5")}
                           >
@@ -3760,9 +3750,28 @@ export default function CRMPage() {
                             </div>
                           </div>
                         </div>
-                        <button onClick={close} className="rounded-lg p-2 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors shrink-0">
-                          <X className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {threadMsgs.some((m: any) => !m.read && m.direction === "received") && (
+                            <button
+                              onClick={() => {
+                                const unreadMsgs = threadMsgs.filter((m: any) => !m.read && m.direction === "received")
+                                unreadMsgs.forEach((m: any) => {
+                                  const src = replySource as "whatsapp" | "telegram" | "slack"
+                                  markMessageAsRead(src, m.id).catch(() => {})
+                                })
+                                if (replySource === "whatsapp") setWhatsAppMessages(prev => prev.map(m => unreadMsgs.some((u: any) => u.id === m.id) ? { ...m, read: true } : m))
+                                if (replySource === "telegram") setTelegramMessages(prev => prev.map(m => unreadMsgs.some((u: any) => u.id === m.id) ? { ...m, read: true } : m))
+                                if (replySource === "slack") setSlackMessages(prev => prev.map(m => unreadMsgs.some((u: any) => u.id === m.id) ? { ...m, read: true } : m))
+                              }}
+                              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 transition-colors"
+                            >
+                              Mark as Read
+                            </button>
+                          )}
+                          <button onClick={close} className="rounded-lg p-2 text-muted-foreground hover:bg-white/5 hover:text-white transition-colors">
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Thread messages — scrollable area */}
@@ -3912,7 +3921,11 @@ export default function CRMPage() {
                                   setSlackMessages(slMsgs)
                                 } else {
                                   const msgs = await getWhatsAppMessages(user.id)
-                                  setWhatsAppMessages(msgs)
+                                  setWhatsAppMessages(prev => {
+                                    const existingIds = new Set(prev.map((m: any) => m.id))
+                                    const newMsgs = msgs.filter((m: any) => !existingIds.has(m.id))
+                                    return [...prev, ...newMsgs]
+                                  })
                                 }
                                 setWaReplyBody("")
                                 setPendingImage(null)

@@ -64,8 +64,6 @@ export async function POST(req: NextRequest) {
     let totalSkippedGroup = 0
     let page = 1
     const limit = 100
-    const FIFO_LIMIT = 30
-    const allInsertedRows: any[] = []
 
     while (page <= 50) {
       console.log(`${tag} Fetching page ${page} (limit=${limit}) from VPS...`)
@@ -133,7 +131,6 @@ export async function POST(req: NextRequest) {
         }
         if (row.from_number || row.to_number) {
           rows.push(row)
-          allInsertedRows.push({ ...row, contactPhone })
         }
         else console.warn(`${tag}   ⚠ Skipped (no phone number) jid=${jid} altJid=${altJid}`)
       }
@@ -141,7 +138,7 @@ export async function POST(req: NextRequest) {
       console.log(`${tag} Page ${page}: ${rows.length} new rows to insert, ${totalSkippedDup} dup, ${totalSkippedGroup} group`)
 
       if (rows.length > 0) {
-        const { error: insertErr, data: insertedData } = await admin.from("whatsapp_messages").insert(rows).select("id, from_number, to_number, direction")
+        const { error: insertErr } = await admin.from("whatsapp_messages").insert(rows)
         if (insertErr) {
           console.error(`${tag} ❌ Insert failed on page ${page}:`, insertErr.message, insertErr.code, insertErr.details)
         } else {
@@ -154,33 +151,12 @@ export async function POST(req: NextRequest) {
       page++
     }
 
-    // FIFO trim: keep only 30 most recent messages per contact
-    const contactsToTrim = new Set<string>()
-    for (const r of allInsertedRows) {
-      const contactNum = r.direction === "received" ? r.from_number : r.to_number
-      if (contactNum) contactsToTrim.add(contactNum)
-    }
-    let totalTrimmed = 0
-    for (const contactNum of Array.from(contactsToTrim)) {
-      const { data: contactMsgs } = await admin
-        .from("whatsapp_messages")
-        .select("id")
-        .eq("user_id", userId)
-        .or(`from_number.eq.${contactNum},to_number.eq.${contactNum}`)
-        .order("timestamp", { ascending: false })
-      if (contactMsgs && contactMsgs.length > FIFO_LIMIT) {
-        const toDelete = contactMsgs.slice(FIFO_LIMIT).map((r: any) => r.id)
-        if (toDelete.length > 0) {
-          await admin.from("whatsapp_messages").delete().in("id", toDelete)
-          totalTrimmed += toDelete.length
-        }
-      }
-    }
-    if (totalTrimmed > 0) console.log(`${tag} FIFO trim: removed ${totalTrimmed} old messages (limit ${FIFO_LIMIT}/contact)`)
-
+    // No FIFO trim during sync — synced messages are kept permanently.
+    // FIFO trim only runs on real-time webhook messages (saveEvolutionMessage).
+    const totalTrimmed = 0
     const elapsed = Date.now() - t0
 
-    // Sync contacts from VPS (pushName = display name)
+    // Sync contacts from VPS (pushName = display name) — batch upsert
     let contactsSynced = 0
     try {
       console.log(`${tag} Syncing contacts from VPS...`)
@@ -198,43 +174,82 @@ export async function POST(req: NextRequest) {
         const vpsContacts = Array.isArray(contactsData) ? contactsData : []
         console.log(`${tag} VPS contacts found: ${vpsContacts.length}`)
 
+        // Build phone→pushName map from VPS
+        const vpsMap = new Map<string, string>()
         for (const vc of vpsContacts) {
           const jid = vc.remoteJid || ""
           if (isGroup(jid) || jid === "0@s.whatsapp.net" || jid === "status@broadcast") continue
           const altJid = vc.remoteJidAlt || ""
           const phone = extractPhone(jid, altJid)
           if (!phone) continue
-
           const pushName = vc.pushName || vc.name || ""
-          const existingContact = await admin
-            .from("contacts")
-            .select("id, name")
-            .eq("user_id", userId)
-            .eq("phone", phone)
-            .single()
+          if (pushName) vpsMap.set(phone, pushName)
+        }
 
-          if (existingContact.data) {
-            // Update name if we have a pushName and current name is just the phone number
-            if (pushName && (existingContact.data.name === phone || !existingContact.data.name)) {
-              await admin.from("contacts").update({ name: pushName }).eq("id", existingContact.data.id)
-              contactsSynced++
+        const allPhones = Array.from(vpsMap.keys())
+        console.log(`${tag} Unique VPS contacts with names: ${allPhones.length}`)
+
+        // Fetch all existing contacts for this user in one query
+        const BATCH = 500
+        const existingMap = new Map<string, { id: string; name: string }>()
+        for (let i = 0; i < allPhones.length; i += BATCH) {
+          const batch = allPhones.slice(i, i + BATCH)
+          const { data: existing } = await admin
+            .from("contacts")
+            .select("id, name, phone")
+            .eq("user_id", userId)
+            .in("phone", batch)
+          if (existing) {
+            for (const c of existing) existingMap.set(c.phone, { id: c.id, name: c.name })
+          }
+        }
+
+        // Separate into inserts and updates
+        const toInsert: any[] = []
+        const toUpdate: Array<{ id: string; name: string }> = []
+        const now = new Date().toISOString()
+
+        for (const [phone, pushName] of Array.from(vpsMap.entries())) {
+          const existing = existingMap.get(phone)
+          if (existing) {
+            if (pushName && (existing.name === phone || !existing.name || existing.name === "")) {
+              toUpdate.push({ id: existing.id, name: pushName })
             }
           } else {
-            // Create new contact
-            await admin.from("contacts").insert({
+            toInsert.push({
               user_id: userId,
               name: pushName || phone,
               phone,
               tags: ["whatsapp"],
               source: "whatsapp_sync",
-              last_contact: new Date().toISOString(),
+              last_contact: now,
               deal_value: 0,
               deal_stage: "",
             })
-            contactsSynced++
           }
         }
-        console.log(`${tag} Contacts synced/updated: ${contactsSynced}`)
+
+        // Batch insert new contacts
+        if (toInsert.length > 0) {
+          for (let i = 0; i < toInsert.length; i += BATCH) {
+            const batch = toInsert.slice(i, i + BATCH)
+            const { error: insErr } = await admin.from("contacts").insert(batch)
+            if (insErr) console.error(`${tag} Contact insert error:`, insErr.message)
+            else contactsSynced += batch.length
+          }
+        }
+
+        // Batch updates (each needs id, do in parallel chunks)
+        if (toUpdate.length > 0) {
+          const updateChunks: Array<Array<{ id: string; name: string }>> = []
+          for (let i = 0; i < toUpdate.length; i += 50) updateChunks.push(toUpdate.slice(i, i + 50))
+          await Promise.all(updateChunks.map(chunk =>
+            Promise.all(chunk.map(u => admin.from("contacts").update({ name: u.name }).eq("id", u.id)))
+          ))
+          contactsSynced += toUpdate.length
+        }
+
+        console.log(`${tag} Contacts synced: ${toInsert.length} new, ${toUpdate.length} updated`)
       }
     } catch (e: any) {
       console.error(`${tag} Contact sync error:`, e?.message)
