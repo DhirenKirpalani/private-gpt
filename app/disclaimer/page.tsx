@@ -50,12 +50,12 @@ export default function DisclaimerPage() {
         <section>
           <h2 className="mb-2 text-lg font-semibold">{es ? "Responsabilidad" : "Liability"}</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            {es ? "Exploro y Secretes Corp DBA Urbanseed no son responsables de las decisiones tomadas en base al contenido generado por IA. Los usuarios asumen total responsabilidad de cómo se utilizan, comparten o aplican los resultados dentro de su organización." : "Exploro and Secretes Corp DBA Urbanseed are not liable for decisions made based on AI-generated content. Users assume full responsibility for how outputs are used, shared, or acted upon within their organization."}
+            {es ? "Exploro y Secretes Corp no son responsables de las decisiones tomadas en base al contenido generado por IA. Los usuarios asumen total responsabilidad de cómo se utilizan, comparten o aplican los resultados dentro de su organización." : "Exploro and Secretes Corp are not liable for decisions made based on AI-generated content. Users assume full responsibility for how outputs are used, shared, or acted upon within their organization."}
           </p>
         </section>
 
         <div className="mt-6 border-t border-white/10 pt-6 text-center text-xs text-muted-foreground">
-          {es ? "Última actualización: junio 2026 · Exploro OS – Un Producto de Secretes Corp DBA Urbanseed" : "Last updated: June 2026 · Exploro OS – A Product of Secretes Corp DBA Urbanseed"}
+          {es ? "Última actualización: junio 2026 · Exploro OS – Un Producto de Secretes Corp" : "Last updated: June 2026 · Exploro OS – A Product of Secretes Corp"}
         </div>
       </div>
     </div>
