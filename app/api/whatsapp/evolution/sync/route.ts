@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
     let totalSkippedGroup = 0
     let page = 1
     const limit = 100
+    const contactPhonesWithChats = new Set<string>() // only contacts that have messages
 
     while (page <= 50) {
       console.log(`${tag} Fetching page ${page} (limit=${limit}) from VPS...`)
@@ -131,6 +132,7 @@ export async function POST(req: NextRequest) {
         }
         if (row.from_number || row.to_number) {
           rows.push(row)
+          if (contactPhone) contactPhonesWithChats.add(contactPhone)
         }
         else console.warn(`${tag}   ⚠ Skipped (no phone number) jid=${jid} altJid=${altJid}`)
       }
@@ -174,20 +176,25 @@ export async function POST(req: NextRequest) {
         const vpsContacts = Array.isArray(contactsData) ? contactsData : []
         console.log(`${tag} VPS contacts found: ${vpsContacts.length}`)
 
-        // Build phone→pushName map from VPS
+        // Build phone→pushName map from VPS — only for contacts that have messages
         const vpsMap = new Map<string, string>()
         for (const vc of vpsContacts) {
           const jid = vc.remoteJid || ""
           if (isGroup(jid) || jid === "0@s.whatsapp.net" || jid === "status@broadcast") continue
           const altJid = vc.remoteJidAlt || ""
           const phone = extractPhone(jid, altJid)
-          if (!phone) continue
-          const pushName = vc.pushName || vc.name || ""
-          if (pushName) vpsMap.set(phone, pushName)
+          if (!phone || !contactPhonesWithChats.has(phone)) continue
+          const pushName = vc.pushName || vc.name || phone
+          vpsMap.set(phone, pushName)
+        }
+
+        // Also include any chat contacts not found in VPS contacts list (use phone as name)
+        for (const phone of Array.from(contactPhonesWithChats)) {
+          if (!vpsMap.has(phone)) vpsMap.set(phone, phone)
         }
 
         const allPhones = Array.from(vpsMap.keys())
-        console.log(`${tag} Unique VPS contacts with names: ${allPhones.length}`)
+        console.log(`${tag} Contacts with chats: ${allPhones.length} (of ${vpsContacts.length} VPS contacts)`)
 
         // Fetch all existing contacts for this user in one query
         const BATCH = 500
