@@ -40,8 +40,11 @@ async function _POST(req: NextRequest) {
       // Instance may already be gone
     }
 
-    // Delete from Supabase
+    // Delete from Supabase (messages + session)
     await deleteEvolutionSession(userId, sessionId)
+
+    // Remove WhatsApp-synced contacts (source=whatsapp_sync only — keeps manually added contacts)
+    await admin.from("contacts").delete().eq("user_id", userId).eq("source", "whatsapp_sync")
 
     return NextResponse.json({ success: true })
   } catch (err: any) {
