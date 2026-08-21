@@ -392,6 +392,7 @@ export default function CRMPage() {
   const [whatsappFetched, setWhatsAppFetched] = useState(() => loadStored("whatsappFetched", false))
   const [waReplyBody, setWaReplyBody] = useState("")
   const [waReplyTo, setWaReplyTo] = useState<string | null>(null)
+  const [waContactName, setWaContactName] = useState<string>("")
   const [sendingWaReply, setSendingWaReply] = useState(false)
   const [replySource, setReplySource] = useState<"whatsapp" | "telegram" | "slack">("whatsapp")
   const [pendingImage, setPendingImage] = useState<{ url: string; file: File } | null>(null)
@@ -1880,10 +1881,20 @@ export default function CRMPage() {
               </div>
               <button
                 onClick={() => {
-                  if (activeCh.type === "email" && contact?.email) {
+                  if (activeCh.type === "whatsapp" && contact?.phone) {
+                    const tid = `wa_${contact.phone}`
+                    setActiveThread(tid)
+                    setWaReplyTo(contact.phone)
+                    setWaContactName(contact.name || contact.phone)
+                    setReplySource("whatsapp")
+                    setWaReplyBody("")
+                    setSendingWaReply(false)
+                  } else if (activeCh.type === "email" && contact?.email) {
                     setComposeTo(contact.email)
+                    setComposerOpen(true)
+                  } else {
+                    setComposerOpen(true)
                   }
-                  setComposerOpen(true)
                 }}
                 className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
               >
@@ -1931,10 +1942,20 @@ export default function CRMPage() {
             </div>
             <button
               onClick={() => {
-                if (activeCh.type === "email" && contact?.email) {
+                if (activeCh.type === "whatsapp" && contact?.phone) {
+                  const tid = `wa_${contact.phone}`
+                  setActiveThread(tid)
+                  setWaReplyTo(contact.phone)
+                  setWaContactName(contact.name || contact.phone)
+                  setReplySource("whatsapp")
+                  setWaReplyBody("")
+                  setSendingWaReply(false)
+                } else if (activeCh.type === "email" && contact?.email) {
                   setComposeTo(contact.email)
+                  setComposerOpen(true)
+                } else {
+                  setComposerOpen(true)
                 }
-                setComposerOpen(true)
               }}
               className="flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white"
             >
@@ -3770,7 +3791,7 @@ export default function CRMPage() {
                   const sourceLabel = replySource === "telegram" ? "Telegram" : replySource === "slack" ? "Slack" : "WhatsApp"
                   const sourceColor = replySource === "telegram" ? "text-sky-400 bg-sky-500/15" : replySource === "slack" ? "text-purple-400 bg-purple-500/15" : "text-emerald-400 bg-emerald-500/15"
                   const SourceIcon = replySource === "telegram" ? Send : replySource === "slack" ? MessageSquare : Phone
-                  const displayName = firstMsg ? msgDisplayName(firstMsg) : "Unknown"
+                  const displayName = firstMsg ? msgDisplayName(firstMsg) : (waContactName || waReplyTo || "Unknown")
                   const initials = getInitials(displayName.replace(/^To:\s*/i, ""))
                   const close = () => { setActiveThread(null); setWaReplyTo(null); setWaReplyBody(""); setPendingImage(null); if (imageInputRef.current) imageInputRef.current.value = "" }
                   return createPortal(
