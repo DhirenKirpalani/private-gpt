@@ -104,6 +104,7 @@ function ChannelsPageContent() {
 
   // WhatsApp Evolution QR modal
   const [waQrModalOpen, setWaQrModalOpen] = useState(false)
+  const [waDisclaimerOpen, setWaDisclaimerOpen] = useState(false)
   const [waQrCode, setWaQrCode] = useState<string | null>(null)
   const [waQrLoading, setWaQrLoading] = useState(false)
   const [waQrStatus, setWaQrStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle")
@@ -601,6 +602,12 @@ function ChannelsPageContent() {
 
   const handleWhatsAppQrConnect = async () => {
     if (!user) return
+    setWaDisclaimerOpen(true)
+  }
+
+  const handleWhatsAppQrConnectProceed = async () => {
+    if (!user) return
+    setWaDisclaimerOpen(false)
     setWaQrModalOpen(true)
     setWaQrStatus("connecting")
     setWaQrLoading(true)
@@ -1677,6 +1684,89 @@ function ChannelsPageContent() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Disclaimer Modal */}
+      {waDisclaimerOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={() => setWaDisclaimerOpen(false)}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" />
+          <div
+            className="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1a1f2e] p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <button onClick={() => setWaDisclaimerOpen(false)} className="absolute right-3 top-3 text-muted-foreground hover:text-white transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+
+            {lang === "es" ? (
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold text-white">Una Mejor Forma de Compartir Documentos</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  WhatsApp está disponible en Exploro para lo que hace mejor: comunicación rápida y en tiempo real con sus clientes y contactos 1:1. Evite mensajes masivos, envíos en bloque o campañas para prevenir la creación de spam.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Para documentos e información empresarial sensible, sin embargo, recomendamos usar Telegram o Correo Electrónico cuando sea práctico.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  ¿Por qué? Exploro sigue una arquitectura de datos centrada en la privacidad: los canales de comunicación deben usarse para comunicarse, mientras que los documentos sensibles deben permanecer dentro de entornos privados y controlados siempre que sea posible.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Los Chats Secretos de Telegram admiten intercambio de archivos cifrado de extremo a extremo, mientras que el correo electrónico puede admitir estándares de cifrado empresarial establecidos como S/MIME y PGP.
+                </p>
+                <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-xs font-semibold text-emerald-400 mb-2">Nuestra recomendación:</p>
+                  <ul className="space-y-1.5 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2"><span className="text-emerald-400 mt-0.5">•</span> Use WhatsApp para conversaciones y respuestas inmediatas.</li>
+                    <li className="flex items-start gap-2"><span className="text-emerald-400 mt-0.5">•</span> Use Telegram o Correo Electrónico para el intercambio de documentos cuando sea apropiado.</li>
+                  </ul>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Revise nuestro protocolo de privacidad para más información.
+                </p>
+                <p className="text-center text-sm font-semibold text-white pt-2">Sus datos. Su espacio de trabajo. Su control.</p>
+                <button
+                  onClick={handleWhatsAppQrConnectProceed}
+                  className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+                >
+                  Continuar
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold text-white">A Better Way to Share Documents</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  WhatsApp is available in Exploro for what it does best: fast, real-time communication with your clients and contacts 1:1. Avoid mass text, blast text, or campaigns to prevent creating spam.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  For documents and sensitive business information, however, we recommend using Telegram or Email whenever practical.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Why? Exploro follows a privacy-first data architecture: communication channels should be used to communicate, while sensitive documents should remain within controlled, private environments whenever possible.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Telegram Secret Chats support end-to-end encrypted file sharing, while email can support established enterprise encryption standards such as S/MIME and PGP.
+                </p>
+                <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-xs font-semibold text-emerald-400 mb-2">Our recommendation:</p>
+                  <ul className="space-y-1.5 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2"><span className="text-emerald-400 mt-0.5">•</span> Use WhatsApp for conversations and immediate responses.</li>
+                    <li className="flex items-start gap-2"><span className="text-emerald-400 mt-0.5">•</span> Use Telegram or Email for document exchange when appropriate.</li>
+                  </ul>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Review our privacy protocol for further information.
+                </p>
+                <p className="text-center text-sm font-semibold text-white pt-2">Your data. Your workspace. Your control.</p>
+                <button
+                  onClick={handleWhatsAppQrConnectProceed}
+                  className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
