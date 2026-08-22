@@ -951,6 +951,7 @@ function ChannelsPageContent() {
                   const isWhatsApp = ch.id === "whatsapp"
                   const isTelegram = ch.id === "telegram"
                   const isSlack = ch.id === "slack"
+                  const canUseWhatsApp = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
                   const waConnected = isWhatsApp && (WHATSAPP_PROVIDER === "evolution"
                     ? waEvolutionSessions.some(s => s.status === "connected")
                     : Object.keys(whatsappConnections).length > 0)
@@ -988,7 +989,14 @@ function ChannelsPageContent() {
                       {connectionsLoading ? (
                         <div className="w-20 h-9 rounded-lg bg-white/5 animate-pulse shrink-0" />
                       ) : isWhatsApp ? (
-                        WHATSAPP_PROVIDER === "evolution" ? (
+                        !canUseWhatsApp && !waConn ? (
+                          <Link
+                            href="/pricing"
+                            className="w-full sm:w-auto shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-400 hover:bg-amber-500/15 hover:border-amber-500/40 transition-colors flex items-center justify-center gap-2"
+                          >
+                            Upgrade
+                          </Link>
+                        ) : WHATSAPP_PROVIDER === "evolution" ? (
                           waConn ? (
                             <button
                               onClick={() => handleDisconnectEvolution(waConn.id)}
