@@ -284,8 +284,11 @@ export default function CRMPage() {
   }, [activeTab, user])
 
   // Auto-sync WhatsApp when Messages tab becomes active + poll every 2 minutes
+  // Only for team/enterprise plans or super_admin
   useEffect(() => {
     if (activeTab !== "Messages" || !user) return
+    const canUseWhatsApp = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
+    if (!canUseWhatsApp) return
 
     const runWaSync = async () => {
       if (waFetchingRef.current) return
@@ -1881,7 +1884,9 @@ export default function CRMPage() {
               </div>
               <button
                 onClick={() => {
+                  const canUseWhatsApp = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
                   if (activeCh.type === "whatsapp" && contact?.phone) {
+                    if (!canUseWhatsApp) { toast({ title: "Upgrade required", description: "WhatsApp is available on Team and Enterprise plans.", variant: "error" }); return }
                     const tid = `wa_${contact.phone}`
                     setActiveThread(tid)
                     setWaReplyTo(contact.phone)
@@ -1942,7 +1947,9 @@ export default function CRMPage() {
             </div>
             <button
               onClick={() => {
+                const canUseWhatsApp = subscription?.plan === "team" || subscription?.plan === "enterprise" || role === "super_admin"
                 if (activeCh.type === "whatsapp" && contact?.phone) {
+                  if (!canUseWhatsApp) { toast({ title: "Upgrade required", description: "WhatsApp is available on Team and Enterprise plans.", variant: "error" }); return }
                   const tid = `wa_${contact.phone}`
                   setActiveThread(tid)
                   setWaReplyTo(contact.phone)
