@@ -31,6 +31,9 @@ async function _POST(req: NextRequest) {
       let evoRes: Response
       let endpoint: string
 
+      // Evolution API expects numbers without '+' prefix, digits only
+      const evoNumber = to.replace(/^\+/, "").replace(/\D/g, "")
+
       if (mediaUrl) {
         // Send media via Evolution API
         endpoint = `${EVOLUTION_URL}/message/sendMedia/${evoSession.instance_name}`
@@ -41,7 +44,7 @@ async function _POST(req: NextRequest) {
             apikey: EVOLUTION_KEY,
           },
           body: JSON.stringify({
-            number: to,
+            number: evoNumber,
             media: mediaUrl,
             mediatype: "image",
             caption: body || "",
@@ -57,16 +60,16 @@ async function _POST(req: NextRequest) {
             apikey: EVOLUTION_KEY,
           },
           body: JSON.stringify({
-            number: to,
+            number: evoNumber,
             text: body,
           }),
         })
       }
 
-      const evoData = await evoRes.json()
+      const evoData = await evoRes.json().catch(() => ({}))
       if (!evoRes.ok) {
-        console.error("[WA SEND] Evolution error:", evoData)
-        return NextResponse.json({ error: evoData?.message || evoData?.error || "Evolution send failed" }, { status: 500 })
+        console.error(`[WA SEND] Evolution error — status=${evoRes.status} number=${evoNumber} instance=${evoSession.instance_name}:`, JSON.stringify(evoData))
+        return NextResponse.json({ error: evoData?.message || evoData?.error || `Evolution send failed (${evoRes.status})` }, { status: 500 })
       }
 
       const messageId = evoData?.key?.id || evoData?.messageId || null
