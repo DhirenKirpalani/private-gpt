@@ -1523,31 +1523,39 @@ export default function ChatPage() {
 
   // Detect AI action blocks (<!--ACTION:{...}-->) and return stripped content + up to two action objects
   function extractAiAction(content: string, userMessage?: string): { content: string; action?: { type: string; [key: string]: any }; action2?: { type: string; [key: string]: any } } {
-    // Find ALL strict action blocks
-    const allStrict = Array.from(content.matchAll(/<!--ACTION:({[\s\S]+?})-->/g))
+    // Find ALL action blocks — accept { or ( as opener (AI sometimes uses wrong bracket)
+    const allStrict = Array.from(content.matchAll(/<!--ACTION:([({][\s\S]+?)-->/g))
     let action: { type: string; [key: string]: any } | undefined
     let action2: { type: string; [key: string]: any } | undefined
     let strippedContent = content
 
-    if (allStrict[0]) {
-      try {
-        action = JSON.parse(allStrict[0][1])
-        console.log("[AI ACTION] Extracted action:", action!.type)
-      } catch (e: any) {
-        console.error("[AI ACTION] Failed to parse action JSON:", e?.message)
-      }
-    }
-    if (allStrict[1]) {
-      try {
-        action2 = JSON.parse(allStrict[1][1])
-        console.log("[AI ACTION] Extracted action2:", action2!.type)
-      } catch (e: any) {
-        console.error("[AI ACTION] Failed to parse action2 JSON:", e?.message)
-      }
+    function tryParseActionJson(raw: string): any {
+      // Fix common AI mistakes: leading ( instead of {, trailing ) instead of }
+      let fixed = raw.trim()
+      if (fixed.startsWith("(")) fixed = "{" + fixed.slice(1)
+      if (fixed.endsWith(")")) fixed = fixed.slice(0, -1) + "}"
+      // Fix "key"-"value" (dash instead of colon)
+      fixed = fixed.replace(/"(\w+)"-"/g, '"$1":"')
+      try { return JSON.parse(fixed) } catch {}
+      return null
     }
 
-    // Strip all ACTION blocks from content
-    strippedContent = strippedContent.replace(/<!--ACTION:[\s\S]*?-->/g, "").trim()
+    if (allStrict[0]) {
+      const parsed = tryParseActionJson(allStrict[0][1])
+      if (parsed) { action = parsed; console.log("[AI ACTION] Extracted action:", action!.type) }
+      else console.error("[AI ACTION] Failed to parse action JSON:", allStrict[0][1].slice(0, 100))
+    }
+    if (allStrict[1]) {
+      const parsed = tryParseActionJson(allStrict[1][1])
+      if (parsed) { action2 = parsed; console.log("[AI ACTION] Extracted action2:", action2!.type) }
+      else console.error("[AI ACTION] Failed to parse action2 JSON:", allStrict[1][1].slice(0, 100))
+    }
+
+    // Strip all ACTION blocks — both complete and unterminated (at end of string)
+    strippedContent = strippedContent
+      .replace(/<!--ACTION:[\s\S]*?-->/g, "")
+      .replace(/<!--ACTION:[\s\S]*$/g, "")
+      .trim()
 
     // If the AI only output ACTION block(s) with no human text, provide a friendly fallback
     if ((action || action2) && !strippedContent) {
