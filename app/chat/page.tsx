@@ -2086,12 +2086,13 @@ export default function ChatPage() {
     if (!user) return
     setChannelsLoading(true)
     try {
-      const [emailConns, calConns, waConns, slackConns, tgConns] = await Promise.all([
+      const [emailConns, calConns, waConns, slackConns, tgConns, evoSessions] = await Promise.all([
         getEmailConnections(user.id),
         getCalendarConnections(user.id),
         getWhatsAppConnections(user.id),
         getSlackConnections(user.id),
         getTelegramUserSession(user.id),
+        getEvolutionSessions(user.id),
       ])
       const channels: typeof connectedChannels = []
       const connectedEmails = emailConns.filter((c: any) => c.status === "connected")
@@ -2148,13 +2149,19 @@ export default function ChatPage() {
         connected: !!calendlyConn,
         detail: calendlyConn ? (calendlyConn.calendar_email || "Connected") : "Not connected",
       })
-      const waConnected = waConns.length > 0
+      const evoConnected = (evoSessions as EvolutionSession[])?.some(s => s.status === "connected")
+      const waConnected = waConns.length > 0 || evoConnected
+      const waDetail = waConns.length > 0
+        ? (waConns[0]?.phone_number || waConns[0]?.phone_number_id || "Connected")
+        : evoConnected
+          ? ((evoSessions as EvolutionSession[]).find(s => s.status === "connected")?.phone_number || "Connected")
+          : "Not connected"
       channels.push({
         id: "whatsapp",
         name: "WhatsApp",
         icon: <Phone className="h-3.5 w-3.5" />,
         connected: waConnected,
-        detail: waConnected ? (waConns[0]?.phone_number || waConns[0]?.phone_number_id || "Connected") : "Not connected",
+        detail: waDetail,
       })
       const tgConnected = !!tgConns
       channels.push({
