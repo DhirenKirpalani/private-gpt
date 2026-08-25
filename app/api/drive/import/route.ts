@@ -3,6 +3,10 @@ import { createClient } from "@supabase/supabase-js"
 import { withApiLogging } from "@/lib/with-api-logging"
 
 export const dynamic = "force-dynamic"
+export const maxDuration = 30
+
+// Increase body size limit for base64 file content (up to ~20MB JSON payload)
+export const runtime = "nodejs"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
