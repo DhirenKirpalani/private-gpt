@@ -74,7 +74,11 @@ async function _POST(req: NextRequest) {
         daysToUse = globalSetting ? parseInt(globalSetting.value, 10) || 15 : 15
       }
       const start = new Date(sub.current_period_start)
-      const newEnd = new Date(start.getTime() + daysToUse * 24 * 60 * 60 * 1000)
+      let newEnd = new Date(start.getTime() + daysToUse * 24 * 60 * 60 * 1000)
+      // If the calculated end date is already in the past, extend from now instead
+      if (newEnd <= new Date()) {
+        newEnd = new Date(Date.now() + daysToUse * 24 * 60 * 60 * 1000)
+      }
       await supabase
         .from("subscriptions")
         .update({ current_period_end: newEnd.toISOString(), updated_at: new Date().toISOString() })
