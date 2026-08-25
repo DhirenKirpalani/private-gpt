@@ -250,7 +250,12 @@ export default function KnowledgePage() {
     const invalid = files.filter(f => !isAcceptedFile(f))
     if (invalid.length > 0) {
       const first = invalid[0]
-      toast({ title: "Invalid file type", description: t("knowledgeFileTypeError", { type: `${first.type || "unknown"} (${first.name})` }), variant: "error" })
+      const ext = first.name.split(".").pop()?.toLowerCase()
+      const isGdocShortcut = ext === "gdoc" || ext === "gsheet" || ext === "gslides"
+      const desc = isGdocShortcut
+        ? `".${ext}" files are local Google shortcuts. Open the file in Google Docs/Sheets, then use File → Download → PDF or DOCX to export it, then upload that file.`
+        : t("knowledgeFileTypeError", { type: `${first.type || "unknown"} (${first.name})` })
+      toast({ title: "Invalid file type", description: desc, variant: "error" })
       if (fileInputRef.current) fileInputRef.current.value = ""
       return
     }
@@ -365,6 +370,11 @@ export default function KnowledgePage() {
             }
 
             const blob = await fileRes.blob()
+            // Check size before encoding — Next.js body limit is ~4MB JSON; base64 adds 33% overhead
+            const MAX_IMPORT_BYTES = 12 * 1024 * 1024 // 12MB blob → ~16MB base64 → reject early
+            if (blob.size > MAX_IMPORT_BYTES) {
+              throw new Error(`File is too large to import (${(blob.size / 1024 / 1024).toFixed(1)} MB). Please download it locally, compress it, or split it into smaller parts.`)
+            }
             // Convert to base64
             const base64 = await new Promise<string>((resolve, reject) => {
               const reader = new FileReader()
@@ -389,11 +399,19 @@ export default function KnowledgePage() {
                 workspaceId: currentWorkspace?.id,
               }),
             })
-            const data = await res.json()
+            const data = await res.json().catch(() => ({ error: res.status === 413 ? "File is too large to import. Try a smaller or compressed file." : "Import failed (server error)" }))
             if (!res.ok) throw new Error(data.error || "Import failed")
             toast({ title: "Imported from Drive", description: data.name, variant: "success" })
           } catch (err: any) {
-            toast({ title: "Import failed", description: err?.message || `Could not import ${file.name}`, variant: "error" })
+            const msg = err?.message || `Could not import ${file.name}`
+            const isPermErr = msg.includes("not granted") || msg.includes("access to the file")
+            const isSizeErr = msg.includes("too large to be exported") || msg.includes("too large to import")
+            const description = isPermErr
+              ? "This file is in a Shared Drive or was shared with you by someone else. Only files from your own Google Drive can be imported. Download the file first, then upload it directly."
+              : isSizeErr
+              ? "The file is too large for direct import. Download it locally as a PDF or compressed format, then upload it using 'Click here to upload'."
+              : msg
+            toast({ title: "Import failed", description, variant: "error" })
           } finally {
             setDriveImporting(null)
           }
