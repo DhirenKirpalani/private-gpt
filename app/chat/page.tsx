@@ -2467,6 +2467,22 @@ export default function ChatPage() {
                     ) : (
                       <button
                         onClick={() => handleSelectConversation(conv.id)}
+                        onMouseEnter={e => {
+                          const title = e.currentTarget.querySelector<HTMLElement>(".conv-title")
+                          const clip = e.currentTarget.querySelector<HTMLElement>(".conv-title-clip")
+                          if (!title || !clip) return
+                          const overflow = clip.scrollWidth - clip.offsetWidth
+                          if (overflow > 0) {
+                            title.style.setProperty("--marquee-offset", `${overflow}px`)
+                            title.style.animation = "marquee-exact 0.8s linear forwards"
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          const title = e.currentTarget.querySelector<HTMLElement>(".conv-title")
+                          if (!title) return
+                          title.style.animation = ""
+                          title.style.transform = ""
+                        }}
                         className={cn(
                           "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-all duration-150 pr-14",
                           currentConversationId === conv.id ? "bg-emerald-600/10" : "hover:bg-muted/50"
@@ -2477,8 +2493,13 @@ export default function ChatPage() {
                           : <MessageSquare className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", currentConversationId === conv.id ? "text-emerald-400" : "text-muted-foreground")} />
                         }
                         <div className="min-w-0 flex-1">
-                          <div className={cn("truncate text-sm font-medium", currentConversationId === conv.id ? "text-emerald-400" : "text-white")}>
-                            {conv.title || "New conversation"}
+                          <div className="conv-title-clip overflow-hidden">
+                            <div className={cn(
+                              "conv-title text-sm font-medium whitespace-nowrap inline-block",
+                              currentConversationId === conv.id ? "text-emerald-400" : "text-white"
+                            )}>
+                              {conv.title || "New conversation"}
+                            </div>
                           </div>
                           <div className="text-xs text-muted-foreground">{timeAgo(conv.created_at)}</div>
                         </div>
