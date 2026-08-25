@@ -623,7 +623,8 @@ export default function CRMPage() {
   const msgReplyTarget = (msg: any) => {
     if (msg._source === "slack") return msg.channel_id
     if (msg._source === "telegram") return msg.chat_id
-    return msg.from_number
+    // For sent messages, reply to the recipient (to_number); for received, reply to sender (from_number)
+    return msg.direction === "sent" ? msg.to_number : msg.from_number
   }
 
   // Helper: thread ID for grouping messages by conversation
