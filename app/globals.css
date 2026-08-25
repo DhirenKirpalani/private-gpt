@@ -364,3 +364,10 @@
 .stagger-children > *:nth-child(6)  { animation-delay: 150ms; }
 .stagger-children > *:nth-child(7)  { animation-delay: 180ms; }
 .stagger-children > *:nth-child(8)  { animation-delay: 210ms; }
+
+@keyframes marquee-exact {
+  0%   { transform: translateX(0); }
+  15%  { transform: translateX(0); }
+  85%  { transform: translateX(calc(-1 * var(--marquee-offset, 0px))); }
+  100% { transform: translateX(calc(-1 * var(--marquee-offset, 0px))); }
+}
