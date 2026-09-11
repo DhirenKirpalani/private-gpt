@@ -25,6 +25,7 @@ function polarHeaders() {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${POLAR_ACCESS_TOKEN}`,
+    "Polar-Version": "2026-04",
   }
 }
 
