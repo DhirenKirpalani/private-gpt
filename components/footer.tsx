@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
-import { FaLinkedin, FaFacebook } from "react-icons/fa"
+import { FaLinkedin, FaFacebook, FaInstagram } from "react-icons/fa"
 import { useI18n } from "@/lib/i18n"
 import { useAuth } from "@/app/auth-provider"
 import { cn } from "@/lib/utils"
@@ -54,6 +54,15 @@ export function Footer() {
                 aria-label="Facebook"
               >
                 <FaFacebook className="h-8 w-8" style={{ color: "#1877F2" }} />
+              </a>
+              <a
+                href="https://www.instagram.com/exploroos888"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center transition-colors hover:opacity-80"
+                aria-label="Instagram"
+              >
+                <FaInstagram className="h-8 w-8" style={{ color: "#E4405F" }} />
               </a>
             </div>
             <p className="mt-2 text-sm font-medium text-emerald-400">{t("productTagline")}</p>
