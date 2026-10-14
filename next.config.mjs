@@ -2,7 +2,18 @@
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
-    serverComponentsExternalPackages: ["pdf-parse"],
+    serverComponentsExternalPackages: ["pdf-parse", "nodemailer", "imap", "imap-simple", "mailparser"],
+  },
+  webpack: (config, { webpack, nextRuntime }) => {
+    if (nextRuntime === "edge") {
+      config.plugins.push(
+        new webpack.DefinePlugin({
+          __dirname: JSON.stringify("/"),
+          __filename: JSON.stringify("/index.js"),
+        })
+      );
+    }
+    return config;
   },
   images: {
     remotePatterns: [
